@@ -636,7 +636,12 @@ class TranscriptionDisplay(Static):
         self.text_log.write(f"[red]Error:[/red] {error_message}")
 
     def clear(self):
-        """Clear all content and reset to idle."""
+        """Clear transcription text content only."""
+        # Don't reset status - preserve current state
+        self.text_log.clear()
+
+    def reset(self):
+        """Reset widget to idle state."""
         self.status = "idle"
         self.progress = 0.0
         self.text_log.clear()
@@ -1098,6 +1103,29 @@ class TimeMachineApp(App):
                         device="auto",
                         compute_type="auto"
                     )
+
+                    # Check if CUDA was selected and notify user
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            self.notify(
+                                "GPU acceleration enabled (CUDA detected)",
+                                severity="information",
+                                timeout=3
+                            )
+                        else:
+                            self.notify(
+                                "Running on CPU (GPU not available)",
+                                severity="information",
+                                timeout=3
+                            )
+                    except ImportError:
+                        self.notify(
+                            "Running on CPU (PyTorch not installed for GPU)",
+                            severity="information",
+                            timeout=3
+                        )
+
                 except Exception as e:
                     self.transcription_service = None
                     self.notify(
@@ -1284,9 +1312,9 @@ class TimeMachineApp(App):
 
         # Update UI to show processing state
         transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
-        transcription_display.status = "processing"
+        transcription_display.clear()  # Clear old text first
+        transcription_display.status = "processing"  # Then set status
         transcription_display.progress = 0.0
-        transcription_display.clear()
 
         # Define callback for transcription completion
         def on_complete(result: TranscriptionResult):

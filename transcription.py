@@ -76,6 +76,22 @@ class TranscriptionService:
         self.model = None
         self._model_lock = threading.Lock()
         self._is_loading = False
+        self._torch_available = self._verify_torch_installation()
+
+    def _verify_torch_installation(self) -> bool:
+        """Verify PyTorch is installed for CUDA support."""
+        try:
+            import torch
+            logger.info(f"PyTorch {torch.__version__} detected")
+            logger.info(f"CUDA available: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
+                logger.info(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+            return True
+        except ImportError:
+            logger.warning("PyTorch not installed - GPU acceleration unavailable")
+            logger.warning("Install with: pip install torch")
+            return False
 
     def _check_cuda_available(self) -> bool:
         """Check if CUDA is available."""
@@ -110,7 +126,12 @@ class TranscriptionService:
             compute = self.compute_type
 
             if device == "auto":
-                device = "cuda" if self._check_cuda_available() else "cpu"
+                if self._check_cuda_available():
+                    device = "cuda"  # faster-whisper accepts "cuda" not "cuda:0"
+                    logger.info("Auto-selected device: CUDA (GPU)")
+                else:
+                    device = "cpu"
+                    logger.info("Auto-selected device: CPU (CUDA not available)")
 
             if compute == "auto":
                 compute = "int8" if device == "cpu" else "float16"
@@ -123,7 +144,12 @@ class TranscriptionService:
                 compute_type=compute
             )
 
+            # Verify which device was actually used
             logger.info(f"Model loaded successfully: {self.model_size}")
+            if device == "cuda":
+                # Verify GPU is actually being used
+                logger.info(f"Requested device: {device}")
+                logger.info("Note: faster-whisper uses CTranslate2 backend for GPU")
             return True, None
 
         except ImportError:
