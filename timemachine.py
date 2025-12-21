@@ -12,7 +12,7 @@ import jack
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, Horizontal
-from textual.widgets import Header, Footer, Static, ProgressBar, Label, Button, OptionList
+from textual.widgets import Header, Footer, Static, ProgressBar, Label, Button, OptionList, DirectoryTree
 from textual.screen import ModalScreen
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -47,10 +47,18 @@ class ConfigManager:
                     return config
             else:
                 # No config file, return empty defaults
-                return {"version": 1, "input_ports": None}
+                return {
+                    "version": 1, 
+                    "input_ports": None,
+                    "save_path": str(Path.cwd())
+                }
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Failed to load config: {e}")
-            return {"version": 1, "input_ports": None}
+            return {
+                "version": 1, 
+                "input_ports": None,
+                "save_path": str(Path.cwd())
+            }
 
     def save_config(self, config: dict) -> bool:
         """Save configuration to disk. Returns True on success."""
@@ -72,6 +80,20 @@ class ConfigManager:
     def set_input_ports(self, ports: list[str]):
         """Save input port configuration."""
         self.config["input_ports"] = ports
+        self.save_config(self.config)
+
+    def get_save_path(self) -> Path:
+        """Get saved path for recordings. Defaults to CWD."""
+        path_str = self.config.get("save_path")
+        if path_str:
+            path = Path(path_str)
+            if path.exists() and path.is_dir():
+                return path
+        return Path.cwd()
+
+    def set_save_path(self, path: str | Path):
+        """Save the recording directory path."""
+        self.config["save_path"] = str(path)
         self.save_config(self.config)
 
     def validate_ports_exist(self, client: jack.Client) -> tuple[bool, list[str]]:
@@ -128,6 +150,11 @@ class AudioEngine:
 
         # Connection tracking
         self.connected_sources = [None] * self.channels
+
+        # Recording Path
+        self.save_path = Path.cwd()
+        if self.config_manager:
+            self.save_path = self.config_manager.get_save_path()
 
         # Register callback
         self.client.set_process_callback(self.process)
@@ -202,10 +229,11 @@ class AudioEngine:
         # We subtract buffer duration to match the C code's logic (time recording 'started')
         start_time = datetime.datetime.now() - datetime.timedelta(seconds=self.buffer_duration)
         filename = start_time.strftime("tm-%Y-%m-%dT%H-%M-%S.wav")
+        full_path = self.save_path / filename
         
         self.writer_thread = threading.Thread(
             target=self._file_writer,
-            args=(filename, past_data)
+            args=(str(full_path), past_data)
         )
         self.writer_thread.start()
         return filename
@@ -520,6 +548,97 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
         elif event.button.id == "stereo-btn":
             self._switch_to_port_selection("Stereo")
 
+class DirectorySelectionScreen(ModalScreen[Path | None]):
+    """Modal screen for selecting a directory to save recordings."""
+    
+    CSS = """
+    DirectorySelectionScreen {
+        align: center middle;
+    }
+
+    #directory-dialog {
+        width: 80;
+        height: 30;
+        border: thick $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #directory-dialog #title {
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    #directory-dialog #help {
+        text-align: center;
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    #directory-tree {
+        height: 18;
+        border: solid $primary;
+        margin: 1 0;
+    }
+
+    #button-row {
+        height: 3;
+        align: center middle;
+        margin-top: 1;
+    }
+
+    #button-row Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("enter", "confirm", "Select Directory"),
+    ]
+
+    def __init__(self, initial_path: Path):
+        super().__init__()
+        self.initial_path = initial_path
+        self.selected_path = initial_path
+
+    def compose(self) -> ComposeResult:
+        with Container(id="directory-dialog"):
+            yield Label("Select Save Directory", id="title")
+            yield Static(f"Current selection: {self.initial_path}", id="help")
+            
+            yield DirectoryTree(str(self.initial_path.anchor), id="directory-tree")
+
+            with Horizontal(id="button-row"):
+                yield Button("Cancel", variant="error", id="cancel-btn")
+                yield Button("Select Current", variant="primary", id="confirm-btn")
+
+    def on_mount(self):
+        # Focus the tree and try to expand to the initial path if possible
+        tree = self.query_one("#directory-tree", DirectoryTree)
+        tree.focus()
+
+    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected):
+        """Update the help text when a directory is selected in the tree."""
+        self.selected_path = Path(event.path)
+        self.query_one("#help", Static).update(f"Current selection: {self.selected_path}")
+
+    def action_confirm(self):
+        """Confirm the current selection."""
+        self.dismiss(self.selected_path)
+
+    def action_cancel(self):
+        """Cancel and close."""
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "cancel-btn":
+            self.action_cancel()
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
+
 class TimeMachineApp(App):
     CSS = """
     Screen {
@@ -585,6 +704,7 @@ class TimeMachineApp(App):
     BINDINGS = [
         Binding("space", "toggle_record", "Record/Stop", priority=True),
         Binding("i", "open_input_selector", "Select Inputs"),
+        Binding("p", "open_directory_selector", "Set Save Path"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -595,6 +715,7 @@ class TimeMachineApp(App):
             yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
 
             yield Static("Inputs: Loading...", id="connection-status")
+            yield Static("Save Path: Loading...", id="path-status")
 
             yield Static("\nBuffers filled: ", id="buffer-info")
 
@@ -605,7 +726,7 @@ class TimeMachineApp(App):
                 yield Label("Channel 2", id="label-2")
                 yield VUMeter(id="meter-2")
 
-            yield Static("\n[dim]Press SPACE to Capture | Press I for Inputs[/dim]", classes="help-text")
+            yield Static("\n[dim]SPACE to Capture | I Inputs | P Save Path[/dim]", classes="help-text")
         yield Footer()
 
     def on_mount(self):
@@ -620,6 +741,7 @@ class TimeMachineApp(App):
 
             # Attempt to load and connect saved configuration
             self._load_and_connect_saved_inputs()
+            self._update_path_status()
             self._update_meter_visibility()
 
             self.set_interval(0.05, self.update_meters) # Update UI at 20FPS
@@ -700,6 +822,15 @@ class TimeMachineApp(App):
             
         self.query_one("#connection-status").update(status_text)
 
+    def _update_path_status(self):
+        """Update the save path display in the UI."""
+        path = self.engine.save_path
+        # Truncate if too long for display
+        path_str = str(path)
+        if len(path_str) > 50:
+            path_str = f"...{path_str[-47:]}"
+        self.query_one("#path-status").update(f"Save Path: [cyan]{path_str}[/cyan]")
+
     def action_toggle_record(self):
         status_bar = self.query_one("#status-bar")
 
@@ -779,6 +910,24 @@ class TimeMachineApp(App):
 
         except Exception as e:
             self.notify(f"Error opening input selector: {e}", severity="error")
+
+    def action_open_directory_selector(self):
+        """Open the directory selection modal screen."""
+        if self.engine.is_recording:
+            self.notify("Cannot change save path while recording", severity="warning")
+            return
+
+        def handle_path_selection(result: Path | None):
+            if result:
+                self.engine.save_path = result
+                self.config_manager.set_save_path(result)
+                self._update_path_status()
+                self.notify(f"Save path updated: {result.name}", severity="success")
+
+        self.push_screen(
+            DirectorySelectionScreen(self.engine.save_path),
+            handle_path_selection
+        )
 
 if __name__ == "__main__":
     app = TimeMachineApp()
