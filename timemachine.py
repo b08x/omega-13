@@ -124,6 +124,7 @@ class AudioEngine:
 
         # Metering
         self.peaks = [0.0] * self.channels
+        self.dbs = [-100.0] * self.channels
 
         # Connection tracking
         self.connected_sources = [None] * self.channels
@@ -147,8 +148,9 @@ class AudioEngine:
             input_arrays = [port.get_array() for port in self.input_ports]
             data = np.stack(input_arrays, axis=-1)
             
-            # 2. Update Meters (Peak decay logic could go here, keeping it simple for now)
+            # 2. Update Meters
             self.peaks = np.max(np.abs(data), axis=0).tolist()
+            self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
             
             # 3. Write to Ring Buffer (Memory)
             # Handle wrap-around writing
@@ -315,8 +317,12 @@ class AudioEngine:
 class VUMeter(Static):
     """A vertical bar displaying audio level."""
     level = reactive(0.0)
+    db_level = reactive(-100.0)
     
     def watch_level(self, level: float):
+        self.update_bar()
+
+    def watch_db_level(self, db_level: float):
         self.update_bar()
 
     def update_bar(self):
@@ -330,7 +336,8 @@ class VUMeter(Static):
         if pct > 90: color = "red"
         
         bar_str = "|" * (pct // 2)
-        self.update(f"[{color}]{bar_str}[/]")
+        db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
+        self.update(f"[{color}]{bar_str:50s}[/] [bold]{db_str}[/]")
 
 class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     """Modal screen for selecting two JACK input ports."""
@@ -641,8 +648,10 @@ class TimeMachineApp(App):
         
         # Update VU Meters
         self.query_one("#meter-1", VUMeter).level = peaks[0]
+        self.query_one("#meter-1", VUMeter).db_level = self.engine.dbs[0]
         if len(peaks) > 1 and self.engine.channels > 1:
             self.query_one("#meter-2", VUMeter).level = peaks[1]
+            self.query_one("#meter-2", VUMeter).db_level = self.engine.dbs[1]
 
         # Update Buffer Info
         if not self.engine.is_recording:
