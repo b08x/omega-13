@@ -2,3 +2,6 @@ textual>=0.70.0
 JACK-Client>=0.5.4
 numpy>=1.24.0
 soundfile>=0.12.1
+
+# Transcription (optional for audio-to-text feature)
+faster-whisper>=1.1.0

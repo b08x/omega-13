@@ -3,7 +3,7 @@ import queue
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import jack
 import numpy as np
@@ -21,8 +21,19 @@ from textual.widgets import (
     Header,
     Label,
     OptionList,
+    RichLog,
     Static,
 )
+
+# --- Transcription Module (optional dependency) ---
+try:
+    from transcription import TranscriptionService, TranscriptionStatus, TranscriptionResult
+    TRANSCRIPTION_AVAILABLE = True
+except ImportError:
+    TRANSCRIPTION_AVAILABLE = False
+    TranscriptionService = None
+    TranscriptionStatus = None
+    TranscriptionResult = None
 
 # --- Type Aliases ---
 PortName = str
@@ -57,20 +68,42 @@ class ConfigManager:
             if self.config_path.exists():
                 with open(self.config_path, 'r') as f:
                     config = json.load(f)
+                    # Ensure transcription config exists (for backward compatibility)
+                    if "transcription" not in config:
+                        config["transcription"] = {
+                            "enabled": True,
+                            "auto_transcribe": True,
+                            "model_size": "large-v3-turbo",
+                            "save_to_file": True
+                        }
+                    if "version" not in config or config["version"] < 2:
+                        config["version"] = 2
                     return config
             else:
-                # No config file, return empty defaults
+                # No config file, return defaults with transcription
                 return {
-                    "version": 1, 
+                    "version": 2,
                     "input_ports": None,
-                    "save_path": str(Path.cwd())
+                    "save_path": str(Path.cwd()),
+                    "transcription": {
+                        "enabled": True,
+                        "auto_transcribe": True,
+                        "model_size": "large-v3-turbo",
+                        "save_to_file": True
+                    }
                 }
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Failed to load config: {e}")
             return {
-                "version": 1, 
+                "version": 2,
                 "input_ports": None,
-                "save_path": str(Path.cwd())
+                "save_path": str(Path.cwd()),
+                "transcription": {
+                    "enabled": True,
+                    "auto_transcribe": True,
+                    "model_size": "large-v3-turbo",
+                    "save_to_file": True
+                }
             }
 
     def save_config(self, config: ConfigDict) -> bool:
@@ -146,6 +179,44 @@ class ConfigManager:
                 missing.append(port)
 
         return len(missing) == 0, missing
+
+    def get_transcription_enabled(self) -> bool:
+        """Check if transcription feature is enabled."""
+        return self.config.get("transcription", {}).get("enabled", True)
+
+    def get_auto_transcribe(self) -> bool:
+        """Check if auto-transcription after recording is enabled."""
+        return self.config.get("transcription", {}).get("auto_transcribe", True)
+
+    def get_transcription_model(self) -> str:
+        """Get configured Whisper model size."""
+        return self.config.get("transcription", {}).get("model_size", "large-v3-turbo")
+
+    def get_save_transcription_to_file(self) -> bool:
+        """Check if transcriptions should be saved to .txt files."""
+        return self.config.get("transcription", {}).get("save_to_file", True)
+
+    def set_transcription_config(
+        self,
+        enabled: Optional[bool] = None,
+        auto_transcribe: Optional[bool] = None,
+        model_size: Optional[str] = None,
+        save_to_file: Optional[bool] = None
+    ):
+        """Update transcription configuration."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+
+        if enabled is not None:
+            self.config["transcription"]["enabled"] = enabled
+        if auto_transcribe is not None:
+            self.config["transcription"]["auto_transcribe"] = auto_transcribe
+        if model_size is not None:
+            self.config["transcription"]["model_size"] = model_size
+        if save_to_file is not None:
+            self.config["transcription"]["save_to_file"] = save_to_file
+
+        self.save_config(self.config)
 
 class AudioEngine:
     """Handles JACK client, ring buffer, and file writing logic."""
@@ -482,6 +553,95 @@ class VUMeter(Static):
 
         self.update(f"[{color}]{level_bar_display:50s}[/] [bold]{db_str}[/]")
 
+
+class TranscriptionDisplay(Static):
+    """
+    Widget for displaying transcription status and results.
+
+    Shows loading states, progress, errors, and final transcription text
+    in a scrollable RichLog widget with status indicators.
+    """
+
+    # Reactive properties for UI updates
+    status = reactive("idle")
+    progress = reactive(0.0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.text_log = None
+        self.status_label = None
+
+    def compose(self) -> ComposeResult:
+        """Build widget structure."""
+        with Vertical():
+            yield Label("Transcription", classes="transcription-title")
+            yield Static("Ready", id="transcription-status", classes="status-idle")
+            yield RichLog(id="transcription-log", wrap=True, highlight=True)
+
+    def on_mount(self):
+        """Cache widget references on mount."""
+        self.text_log = self.query_one("#transcription-log", RichLog)
+        self.status_label = self.query_one("#transcription-status", Static)
+
+        # Set max lines to prevent memory issues with long transcriptions
+        self.text_log.max_lines = 1000
+
+    def watch_status(self, new_status: str) -> None:
+        """React to status changes."""
+        status_messages = {
+            "idle": ("Ready", "status-idle"),
+            "loading_model": ("Loading model...", "status-loading"),
+            "processing": ("Transcribing...", "status-processing"),
+            "completed": ("Complete", "status-complete"),
+            "error": ("Error", "status-error")
+        }
+
+        message, css_class = status_messages.get(
+            new_status,
+            ("Unknown", "status-idle")
+        )
+
+        # Update status label
+        self.status_label.update(message)
+
+        # Update CSS classes
+        self.status_label.remove_class(
+            "status-idle", "status-loading", "status-processing",
+            "status-complete", "status-error"
+        )
+        self.status_label.add_class(css_class)
+
+    def watch_progress(self, new_progress: float):
+        """React to progress updates."""
+        if self.status == "processing":
+            pct = int(new_progress * 100)
+            self.status_label.update(f"Transcribing... {pct}%")
+
+    def update_text(self, text: str):
+        """Update transcription text (thread-safe via Textual's message queue)."""
+        self.text_log.clear()
+        self.text_log.write(text)
+
+    def append_segment(self, segment_text: str, timestamp: str = ""):
+        """Append a single segment (for streaming updates)."""
+        if timestamp:
+            self.text_log.write(f"[dim]{timestamp}[/dim] {segment_text}")
+        else:
+            self.text_log.write(segment_text)
+
+    def show_error(self, error_message: str):
+        """Display error message."""
+        self.status = "error"
+        self.text_log.clear()
+        self.text_log.write(f"[red]Error:[/red] {error_message}")
+
+    def clear(self):
+        """Clear all content and reset to idle."""
+        self.status = "idle"
+        self.progress = 0.0
+        self.text_log.clear()
+
+
 class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     """Modal screen for selecting two JACK input ports."""
 
@@ -762,13 +922,28 @@ class TimeMachineApp(App):
         align: center middle;
         background: $surface;
     }
-    
-    #main-container {
-        width: 80%;
-        height: auto;
+
+    /* Two-Pane Layout */
+    #app-layout {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Left Pane: Audio Controls */
+    #audio-pane {
+        width: 50%;
         border: solid $accent;
         padding: 1 2;
         background: $surface-lighten-1;
+    }
+
+    /* Right Pane: Transcription */
+    #transcription-pane {
+        width: 50%;
+        border: solid $accent;
+        padding: 1 2;
+        background: $surface-lighten-1;
+        margin-left: 1;
     }
 
     .title {
@@ -784,7 +959,7 @@ class TimeMachineApp(App):
         text-align: center;
         text-style: bold;
     }
-    
+
     .status-recording {
         color: $text;
         background: $error;
@@ -806,15 +981,57 @@ class TimeMachineApp(App):
         margin-top: 1;
         border: heavy $primary;
     }
-    
+
     .help-text {
         text-align: center;
         width: 100%;
         margin-top: 1;
     }
-    
+
     Label {
         width: 100%;
+    }
+
+    /* Transcription Widget Styles */
+    .transcription-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        color: $accent;
+    }
+
+    #transcription-status {
+        text-align: center;
+        padding: 1;
+        margin-bottom: 1;
+        border: solid $primary;
+    }
+
+    .status-loading {
+        color: $text;
+        background: $warning;
+    }
+
+    .status-processing {
+        color: $text;
+        background: $warning;
+    }
+
+    .status-complete {
+        color: $text;
+        background: $success;
+    }
+
+    .status-error {
+        color: $text;
+        background: $error;
+    }
+
+    #transcription-log {
+        height: 100%;
+        border: solid $primary;
+        background: $surface-darken-1;
+        padding: 1;
     }
     """
 
@@ -822,28 +1039,39 @@ class TimeMachineApp(App):
         Binding("space", "toggle_record", "Record/Stop", priority=True),
         Binding("i", "open_input_selector", "Select Inputs"),
         Binding("p", "open_directory_selector", "Set Save Path"),
+        Binding("t", "manual_transcribe", "Transcribe"),
         Binding("q", "quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Container(id="main-container"):
-            yield Label("TIME MACHINE", classes="title")
-            yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
 
-            yield Static("Inputs: Loading...", id="connection-status")
-            yield Static("Save Path: Loading...", id="path-status")
+        # Main horizontal container for two-pane layout
+        with Horizontal(id="app-layout"):
 
-            yield Static("\nBuffers filled: ", id="buffer-info")
+            # LEFT PANE: Audio Controls (existing UI)
+            with Container(id="audio-pane", classes="left-pane"):
+                yield Label("TIME MACHINE", classes="title")
+                yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
+                yield Static("Inputs: Loading...", id="connection-status")
+                yield Static("Save Path: Loading...", id="path-status")
+                yield Static("\nBuffers filled: ", id="buffer-info")
 
-            with Vertical(id="meters"):
-                # Meters will be created dynamically or hidden/shown
-                yield Label("Channel 1", id="label-1")
-                yield VUMeter(id="meter-1")
-                yield Label("Channel 2", id="label-2")
-                yield VUMeter(id="meter-2")
+                with Vertical(id="meters"):
+                    yield Label("Channel 1", id="label-1")
+                    yield VUMeter(id="meter-1")
+                    yield Label("Channel 2", id="label-2")
+                    yield VUMeter(id="meter-2")
 
-            yield Static("\n[dim]SPACE to Capture | I Inputs | P Save Path[/dim]", classes="help-text")
+                yield Static(
+                    "\n[dim]SPACE to Capture | I Inputs | P Save Path | T Transcribe[/dim]",
+                    classes="help-text"
+                )
+
+            # RIGHT PANE: Transcription Display (new feature)
+            with Container(id="transcription-pane", classes="right-pane"):
+                yield TranscriptionDisplay(id="transcription-display")
+
         yield Footer()
 
     def on_mount(self):
@@ -852,7 +1080,7 @@ class TimeMachineApp(App):
             self.config_manager = ConfigManager()
             saved_ports = self.config_manager.get_input_ports()
             num_channels = len(saved_ports) if saved_ports else DEFAULT_CHANNELS
-            
+
             self.engine = AudioEngine(config_manager=self.config_manager, num_channels=num_channels)
             self.engine.start()
 
@@ -860,6 +1088,30 @@ class TimeMachineApp(App):
             self._load_and_connect_saved_inputs()
             self._update_path_status()
             self._update_meter_visibility()
+
+            # Initialize Transcription Service (if available)
+            if TRANSCRIPTION_AVAILABLE:
+                try:
+                    model_size = self.config_manager.get_transcription_model()
+                    self.transcription_service = TranscriptionService(
+                        model_size=model_size,
+                        device="auto",
+                        compute_type="auto"
+                    )
+                except Exception as e:
+                    self.transcription_service = None
+                    self.notify(
+                        f"Transcription initialization failed: {e}",
+                        severity="warning",
+                        timeout=5
+                    )
+            else:
+                self.transcription_service = None
+                self.notify(
+                    "Transcription not available. Install faster-whisper for this feature.",
+                    severity="information",
+                    timeout=5
+                )
 
             self.set_interval(0.05, self.update_meters) # Update UI at 20FPS
         except Exception as e:
@@ -880,6 +1132,9 @@ class TimeMachineApp(App):
         if hasattr(self, 'engine'):
             self.engine.stop_recording()
             self.engine.stop()
+
+        if hasattr(self, 'transcription_service') and self.transcription_service is not None:
+            self.transcription_service.cleanup()
 
     def update_meters(self):
         """Poll audio engine for levels."""
@@ -952,20 +1207,29 @@ class TimeMachineApp(App):
         self.query_one("#path-status").update(f"Save Path: [cyan]{path_str}[/cyan]")
 
     def action_toggle_record(self):
+        """Toggle recording with automatic transcription trigger."""
         status_bar = self.query_one("#status-bar")
 
         if self.engine.is_recording:
-            # STOP
+            # STOP RECORDING
             self.engine.stop_recording()
             status_bar.update("IDLE - Saved.")
             status_bar.remove_class("status-recording")
             status_bar.add_class("status-idle")
+
+            # TRIGGER AUTO-TRANSCRIPTION (if enabled)
+            if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
+                last_file = self._get_last_recording_path()
+                if last_file and last_file.exists():
+                    self._start_transcription(last_file)
         else:
-            # START
+            # START RECORDING
             fname = self.engine.start_recording()
-            status_bar.update(f"RECORDING... \nFile: {fname}")
-            status_bar.remove_class("status-idle")
-            status_bar.add_class("status-recording")
+            if fname:
+                self._current_recording_filename = fname  # Track for transcription
+                status_bar.update(f"RECORDING... \nFile: {fname}")
+                status_bar.remove_class("status-idle")
+                status_bar.add_class("status-recording")
 
     def _restart_engine_with_channels(self, num_channels: int) -> None:
         """
@@ -1002,6 +1266,98 @@ class TimeMachineApp(App):
             self.notify("Input connections updated", severity="success")
         else:
             raise Exception("Connection returned False")
+
+    def _get_last_recording_path(self) -> Optional[Path]:
+        """Get path to the most recently saved recording."""
+        if hasattr(self, '_current_recording_filename'):
+            return self.engine.save_path / self._current_recording_filename
+        return None
+
+    def _start_transcription(self, audio_file: Path):
+        """Start async transcription of audio file."""
+        if not TRANSCRIPTION_AVAILABLE:
+            return
+
+        if not hasattr(self, 'transcription_service') or self.transcription_service is None:
+            self.notify("Transcription service not initialized", severity="warning")
+            return
+
+        # Update UI to show processing state
+        transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
+        transcription_display.status = "processing"
+        transcription_display.progress = 0.0
+        transcription_display.clear()
+
+        # Define callback for transcription completion
+        def on_complete(result: TranscriptionResult):
+            """Handle transcription result (called from worker thread)."""
+            # Use call_from_thread to safely update UI from background thread
+            self.call_from_thread(self._handle_transcription_result, result, audio_file)
+
+        def on_progress(progress: float):
+            """Handle progress updates (called from worker thread)."""
+            self.call_from_thread(self._update_transcription_progress, progress)
+
+        # Start async transcription
+        self.transcription_service.transcribe_async(
+            audio_file,
+            callback=on_complete,
+            progress_callback=on_progress
+        )
+
+    def _update_transcription_progress(self, progress: float):
+        """Update transcription progress (thread-safe UI update)."""
+        transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
+        transcription_display.progress = progress
+
+    def _handle_transcription_result(self, result: TranscriptionResult, audio_file: Path):
+        """Handle completed transcription (thread-safe UI update)."""
+        transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
+
+        if result.status == TranscriptionStatus.COMPLETED:
+            transcription_display.update_text(result.text)
+            transcription_display.status = "completed"
+
+            # Save to file if enabled
+            if self.config_manager.get_save_transcription_to_file():
+                self._save_transcription_file(result.text, audio_file)
+
+            self.notify(
+                f"Transcription complete ({result.language})",
+                severity="information"
+            )
+        else:
+            transcription_display.show_error(result.error or "Unknown error")
+            self.notify(
+                "Transcription failed",
+                severity="error"
+            )
+
+    def _save_transcription_file(self, text: str, audio_file: Path):
+        """Save transcription text to .txt file alongside WAV."""
+        try:
+            # Create .txt filename with same timestamp as WAV
+            txt_file = audio_file.with_suffix('.txt')
+
+            with open(txt_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+
+            self.notify(f"Transcription saved: {txt_file.name}", severity="information")
+        except IOError as e:
+            self.notify(f"Failed to save transcription: {e}", severity="error")
+
+    def action_manual_transcribe(self):
+        """Manual transcription trigger (bound to 'T' key)."""
+        if not TRANSCRIPTION_AVAILABLE:
+            self.notify("Transcription not available. Install faster-whisper.", severity="warning")
+            return
+
+        last_file = self._get_last_recording_path()
+        if not last_file or not last_file.exists():
+            self.notify("No recording to transcribe", severity="warning")
+            return
+
+        self._start_transcription(last_file)
 
     def action_open_input_selector(self):
         """Open the input selection modal screen."""
