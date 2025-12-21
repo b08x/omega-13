@@ -25,7 +25,7 @@ from textual.widgets import (
     Static,
 )
 
-# --- Transcription Module (optional dependency) ---
+# --- Transcription Module (uses podman containers) ---
 try:
     from transcription import TranscriptionService, TranscriptionStatus, TranscriptionResult
     TRANSCRIPTION_AVAILABLE = True
@@ -1094,37 +1094,20 @@ class TimeMachineApp(App):
             self._update_path_status()
             self._update_meter_visibility()
 
-            # Initialize Transcription Service (if available)
+            # Initialize Transcription Service (HTTP API to whisper-server)
             if TRANSCRIPTION_AVAILABLE:
                 try:
-                    model_size = self.config_manager.get_transcription_model()
                     self.transcription_service = TranscriptionService(
-                        model_size=model_size,
-                        device="auto",
-                        compute_type="auto"
+                        server_url="http://localhost:8080",
+                        inference_path="/inference",
+                        timeout=600  # 10 minutes
                     )
 
-                    # Check if CUDA was selected and notify user
-                    try:
-                        import torch
-                        if torch.cuda.is_available():
-                            self.notify(
-                                "GPU acceleration enabled (CUDA detected)",
-                                severity="information",
-                                timeout=3
-                            )
-                        else:
-                            self.notify(
-                                "Running on CPU (GPU not available)",
-                                severity="information",
-                                timeout=3
-                            )
-                    except ImportError:
-                        self.notify(
-                            "Running on CPU (PyTorch not installed for GPU)",
-                            severity="information",
-                            timeout=3
-                        )
+                    self.notify(
+                        "Transcription ready (whisper-server API)",
+                        severity="information",
+                        timeout=3
+                    )
 
                 except Exception as e:
                     self.transcription_service = None
@@ -1136,7 +1119,7 @@ class TimeMachineApp(App):
             else:
                 self.transcription_service = None
                 self.notify(
-                    "Transcription not available. Install faster-whisper for this feature.",
+                    "Transcription module not found. Check transcription.py is present.",
                     severity="information",
                     timeout=5
                 )
@@ -1377,7 +1360,7 @@ class TimeMachineApp(App):
     def action_manual_transcribe(self):
         """Manual transcription trigger (bound to 'T' key)."""
         if not TRANSCRIPTION_AVAILABLE:
-            self.notify("Transcription not available. Install faster-whisper.", severity="warning")
+            self.notify("Transcription module not found. Check transcription.py is present.", severity="warning")
             return
 
         last_file = self._get_last_recording_path()

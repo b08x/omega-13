@@ -1,9 +1,12 @@
 """
-Audio transcription module using faster-whisper.
+Audio transcription module using whisper-server HTTP API.
 
 Provides thread-safe, asynchronous transcription of audio files with
 progress callbacks and error handling. Designed for integration with
 Textual TUI applications.
+
+Uses persistent whisper-server container accessed via HTTP API,
+eliminating model loading overhead for each transcription request.
 """
 
 from pathlib import Path
@@ -12,6 +15,8 @@ from dataclasses import dataclass
 from enum import Enum
 import threading
 import logging
+import requests
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +43,16 @@ class TranscriptionResult:
 
 class TranscriptionService:
     """
-    Thread-safe audio transcription service using faster-whisper.
+    Thread-safe audio transcription service using whisper-server HTTP API.
 
-    Handles model loading, caching, and asynchronous transcription with
-    progress callbacks. Designed for integration with Textual TUI apps.
+    Connects to a persistent whisper-server container via HTTP requests.
+    The server keeps the model loaded in memory for fast transcription.
+    Designed for integration with Textual TUI apps.
 
     Example:
-        service = TranscriptionService(model_size="base")
+        service = TranscriptionService(
+            server_url="http://localhost:8080"
+        )
 
         def on_complete(result):
             print(f"Transcription: {result.text}")
@@ -58,112 +66,93 @@ class TranscriptionService:
 
     def __init__(
         self,
-        model_size: str = "base",
-        device: str = "auto",
-        compute_type: str = "auto"
+        server_url: str = "http://localhost:8080",
+        inference_path: str = "/inference",
+        timeout: int = 600  # 10 minutes default timeout
     ):
         """
         Initialize transcription service.
 
         Args:
-            model_size: Whisper model size (tiny, base, small, medium, large, large-v3-turbo)
-            device: Target device ("cpu", "cuda", "auto")
-            compute_type: Precision ("int8", "float16", "float32", "auto")
+            server_url: Base URL of whisper-server (e.g., http://localhost:8080)
+            inference_path: API endpoint path for transcription
+            timeout: Request timeout in seconds
         """
-        self.model_size = model_size
-        self.device = device
-        self.compute_type = compute_type
-        self.model = None
-        self._model_lock = threading.Lock()
-        self._is_loading = False
-        self._torch_available = self._verify_torch_installation()
+        self.server_url = server_url.rstrip('/')
+        self.inference_path = inference_path
+        self.timeout = timeout
+        self.endpoint = f"{self.server_url}{self.inference_path}"
 
-    def _verify_torch_installation(self) -> bool:
-        """Verify PyTorch is installed for CUDA support."""
-        try:
-            import torch
-            logger.info(f"PyTorch {torch.__version__} detected")
-            logger.info(f"CUDA available: {torch.cuda.is_available()}")
-            if torch.cuda.is_available():
-                logger.info(f"CUDA device: {torch.cuda.get_device_name(0)}")
-                logger.info(f"CUDA memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-            return True
-        except ImportError:
-            logger.warning("PyTorch not installed - GPU acceleration unavailable")
-            logger.warning("Install with: pip install torch")
-            return False
-
-    def _check_cuda_available(self) -> bool:
-        """Check if CUDA is available."""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
-
-    def load_model(self) -> tuple[bool, Optional[str]]:
+    def _check_server_health(self) -> tuple[bool, Optional[str]]:
         """
-        Load Whisper model into memory (thread-safe).
+        Check if whisper-server is reachable and healthy.
 
         Returns:
-            (success: bool, error_message: Optional[str])
+            (is_healthy: bool, error_message: Optional[str])
         """
-        with self._model_lock:
-            if self.model is not None:
-                return True, None
-
-            if self._is_loading:
-                return False, "Model already loading"
-
-            self._is_loading = True
-
         try:
-            # Check if faster-whisper is available
-            from faster_whisper import WhisperModel
+            response = requests.get(self.server_url, timeout=5)
+            return True, None
+        except requests.ConnectionError:
+            return False, f"Cannot connect to whisper-server at {self.server_url}"
+        except requests.Timeout:
+            return False, f"Timeout connecting to whisper-server at {self.server_url}"
+        except Exception as e:
+            return False, f"Server health check failed: {str(e)}"
 
-            # Auto-detect device if requested
-            device = self.device
-            compute = self.compute_type
+    def _transcribe_file(self, audio_path: Path) -> tuple[str, Optional[str]]:
+        """
+        Send audio file to whisper-server for transcription.
 
-            if device == "auto":
-                if self._check_cuda_available():
-                    device = "cuda"  # faster-whisper accepts "cuda" not "cuda:0"
-                    logger.info("Auto-selected device: CUDA (GPU)")
-                else:
-                    device = "cpu"
-                    logger.info("Auto-selected device: CPU (CUDA not available)")
+        Args:
+            audio_path: Path to audio file
 
-            if compute == "auto":
-                compute = "int8" if device == "cpu" else "float16"
+        Returns:
+            (transcribed_text: str, detected_language: Optional[str])
 
-            # Load model with error handling
-            logger.info(f"Loading Whisper model: {self.model_size} on {device} with {compute}")
-            self.model = WhisperModel(
-                self.model_size,
-                device=device,
-                compute_type=compute
+        Raises:
+            requests.RequestException: If HTTP request fails
+            RuntimeError: If server returns error or invalid response
+        """
+        logger.info(f"Sending transcription request to {self.endpoint}")
+
+        # Prepare multipart file upload
+        with open(audio_path, 'rb') as audio_file:
+            files = {'file': (audio_path.name, audio_file, 'audio/wav')}
+
+            # Optional: Add request parameters
+            data = {
+                'response_format': 'json',  # Request JSON response
+                'temperature': '0.0'  # Deterministic output
+            }
+
+            # Send POST request
+            response = requests.post(
+                self.endpoint,
+                files=files,
+                data=data,
+                timeout=self.timeout
             )
 
-            # Verify which device was actually used
-            logger.info(f"Model loaded successfully: {self.model_size}")
-            if device == "cuda":
-                # Verify GPU is actually being used
-                logger.info(f"Requested device: {device}")
-                logger.info("Note: faster-whisper uses CTranslate2 backend for GPU")
-            return True, None
+        # Check for HTTP errors
+        response.raise_for_status()
 
-        except ImportError:
-            error = "faster-whisper not installed. Install with: pip install faster-whisper"
-            logger.error(error)
-            return False, error
+        # Parse JSON response
+        try:
+            result = response.json()
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON response from server: {e}")
 
-        except Exception as e:
-            error = f"Failed to load model: {str(e)}"
-            logger.error(error)
-            return False, error
+        # Extract transcription text
+        if 'text' in result:
+            transcribed_text = result['text'].strip()
+        else:
+            raise RuntimeError(f"Server response missing 'text' field: {result}")
 
-        finally:
-            self._is_loading = False
+        # Extract detected language (if available)
+        detected_language = result.get('language')
+
+        return transcribed_text, detected_language
 
     def transcribe_async(
         self,
@@ -196,25 +185,11 @@ class TranscriptionService:
         callback: Callable[[TranscriptionResult], None],
         progress_callback: Optional[Callable[[float], None]]
     ):
-        """Internal worker function for transcription thread."""
+        """Internal worker function for transcription thread using HTTP API."""
         try:
-            # Ensure model is loaded
-            if self.model is None:
-                if progress_callback:
-                    progress_callback(0.0)
-
-                success, error = self.load_model()
-                if not success:
-                    callback(TranscriptionResult(
-                        text="",
-                        status=TranscriptionStatus.ERROR,
-                        error=error
-                    ))
-                    return
-
-            # Update progress: model loaded
+            # Initial progress
             if progress_callback:
-                progress_callback(0.1)
+                progress_callback(0.0)
 
             # Validate audio file
             if not audio_path.exists():
@@ -223,44 +198,52 @@ class TranscriptionService:
             if audio_path.stat().st_size == 0:
                 raise ValueError("Audio file is empty")
 
-            # Perform transcription with segments for progress tracking
-            logger.info(f"Starting transcription of {audio_path}")
-            segments, info = self.model.transcribe(
-                str(audio_path),
-                beam_size=5,
-                word_timestamps=False
-            )
+            # Debug logging
+            logger.info("=" * 60)
+            logger.info("TRANSCRIPTION DEBUG INFO")
+            logger.info("=" * 60)
+            logger.info(f"Audio file: {audio_path}")
+            logger.info(f"Audio size: {audio_path.stat().st_size:,} bytes")
+            logger.info(f"Server endpoint: {self.endpoint}")
+            logger.info(f"Request timeout: {self.timeout}s")
+            logger.info("=" * 60)
 
-            # Build full text and track progress
-            full_text = []
-            segment_list = []
-            total_duration = info.duration if hasattr(info, 'duration') else None
+            # Check server health
+            logger.info("Checking whisper-server health...")
+            healthy, error = self._check_server_health()
+            if not healthy:
+                raise ConnectionError(error)
 
-            for i, segment in enumerate(segments):
-                full_text.append(segment.text)
-                segment_list.append({
-                    'start': segment.start,
-                    'end': segment.end,
-                    'text': segment.text
-                })
+            if progress_callback:
+                progress_callback(0.1)
 
-                # Update progress based on time coverage
-                if progress_callback and total_duration:
-                    progress = 0.1 + (segment.end / total_duration) * 0.9
-                    progress_callback(min(progress, 1.0))
+            # Send transcription request
+            logger.info("Sending audio to whisper-server...")
+            transcribed_text, language = self._transcribe_file(audio_path)
+
+            if progress_callback:
+                progress_callback(0.9)
+
+            # Save transcription to file (same directory as audio)
+            output_path = audio_path.with_suffix('.txt')
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(transcribed_text)
+
+            logger.info(f"Transcription saved to {output_path}")
+
+            if progress_callback:
+                progress_callback(1.0)
 
             # Build result
-            transcribed_text = " ".join(full_text).strip()
-            result = TranscriptionResult(
+            transcription_result = TranscriptionResult(
                 text=transcribed_text,
                 status=TranscriptionStatus.COMPLETED,
-                segments=segment_list,
-                language=info.language if hasattr(info, 'language') else None,
-                duration=total_duration
+                language=language,
+                duration=None
             )
 
-            logger.info(f"Transcription complete. Language: {result.language}, Duration: {result.duration:.2f}s")
-            callback(result)
+            logger.info(f"Transcription complete. Language: {language}, Length: {len(transcribed_text)} chars")
+            callback(transcription_result)
 
         except FileNotFoundError as e:
             logger.error(f"File not found: {e}")
@@ -278,6 +261,30 @@ class TranscriptionService:
                 error=str(e)
             ))
 
+        except ConnectionError as e:
+            logger.error(f"Server connection error: {e}")
+            callback(TranscriptionResult(
+                text="",
+                status=TranscriptionStatus.ERROR,
+                error=f"Cannot connect to whisper-server: {e}"
+            ))
+
+        except requests.Timeout:
+            logger.error(f"Request timed out after {self.timeout}s")
+            callback(TranscriptionResult(
+                text="",
+                status=TranscriptionStatus.ERROR,
+                error=f"Transcription timed out (max {self.timeout}s)"
+            ))
+
+        except requests.RequestException as e:
+            logger.error(f"HTTP request failed: {e}")
+            callback(TranscriptionResult(
+                text="",
+                status=TranscriptionStatus.ERROR,
+                error=f"Server request failed: {str(e)}"
+            ))
+
         except Exception as e:
             logger.exception("Transcription failed")
             callback(TranscriptionResult(
@@ -287,9 +294,10 @@ class TranscriptionService:
             ))
 
     def cleanup(self):
-        """Release model resources."""
-        with self._model_lock:
-            if self.model is not None:
-                logger.info("Cleaning up transcription model")
-                del self.model
-                self.model = None
+        """
+        Cleanup method for consistency with previous API.
+
+        Note: No cleanup needed for containerized approach since
+        containers are ephemeral (--rm flag handles cleanup).
+        """
+        logger.info("Transcription service cleanup (no-op for containerized approach)")
