@@ -65,13 +65,13 @@ class ConfigManager:
     def get_input_ports(self) -> list[str] | None:
         """Get saved input port names. Returns None if not configured."""
         ports = self.config.get("input_ports")
-        if ports and isinstance(ports, list) and len(ports) == 2:
+        if ports and isinstance(ports, list) and len(ports) > 0:
             return ports
         return None
 
-    def set_input_ports(self, port1: str, port2: str):
+    def set_input_ports(self, ports: list[str]):
         """Save input port configuration."""
-        self.config["input_ports"] = [port1, port2]
+        self.config["input_ports"] = ports
         self.save_config(self.config)
 
     def validate_ports_exist(self, client: jack.Client) -> tuple[bool, list[str]]:
@@ -96,18 +96,19 @@ class ConfigManager:
 
 class AudioEngine:
     """Handles JACK client, ring buffer, and file writing logic."""
-    def __init__(self, buffer_duration=BUFFER_DURATION, config_manager=None):
+    def __init__(self, buffer_duration=BUFFER_DURATION, config_manager=None, num_channels=DEFAULT_CHANNELS):
         self.buffer_duration = buffer_duration
         self.config_manager = config_manager
         self.client = jack.Client("TimeMachinePy")
 
         # Setup input ports
-        self.client.inports.register("in_1")
-        self.client.inports.register("in_2")
+        self.input_ports = []
+        for i in range(num_channels):
+            self.input_ports.append(self.client.inports.register(f"in_{i+1}"))
 
         self.samplerate = int(self.client.samplerate)
         self.blocksize = self.client.blocksize
-        self.channels = len(self.client.inports)
+        self.channels = len(self.input_ports)
 
         # Ring Buffer setup
         self.ring_size = self.samplerate * self.buffer_duration
@@ -125,7 +126,7 @@ class AudioEngine:
         self.peaks = [0.0] * self.channels
 
         # Connection tracking
-        self.connected_sources = [None, None]
+        self.connected_sources = [None] * self.channels
 
         # Register callback
         self.client.set_process_callback(self.process)
@@ -143,7 +144,7 @@ class AudioEngine:
         try:
             # 1. Gather input data from all ports
             # Stack ports into a (frames, channels) array
-            input_arrays = [port.get_array() for port in self.client.inports]
+            input_arrays = [port.get_array() for port in self.input_ports]
             data = np.stack(input_arrays, axis=-1)
             
             # 2. Update Meters (Peak decay logic could go here, keeping it simple for now)
@@ -250,22 +251,22 @@ class AudioEngine:
             print(f"Error getting available ports: {e}")
             return []
 
-    def get_current_connections(self) -> tuple[str | None, str | None]:
+    def get_current_connections(self) -> list[str | None]:
         """
-        Returns the currently connected source ports for in_1 and in_2.
-        Returns: (port_name_1, port_name_2) or (None, None) if not connected
+        Returns the currently connected source ports for registered input ports.
+        Returns: [port_name_1, port_name_2, ...] or [None, ...] if not connected
         """
         try:
-            connections_1 = self.client.get_all_connections(self.client.inports[0])
-            connections_2 = self.client.get_all_connections(self.client.inports[1])
+            current_connections = []
+            for inport in self.input_ports:
+                connections = self.client.get_all_connections(inport)
+                name = connections[0].name if connections else None
+                current_connections.append(name)
 
-            port1 = connections_1[0].name if connections_1 else None
-            port2 = connections_2[0].name if connections_2 else None
-
-            return (port1, port2)
+            return current_connections
         except Exception as e:
             print(f"Error getting current connections: {e}")
-            return (None, None)
+            return [None] * self.channels
 
     def disconnect_inputs(self):
         """
@@ -279,31 +280,32 @@ class AudioEngine:
                     self.client.disconnect(source_port, inport)
                     print(f"Disconnected {source_port.name} from {inport.name}")
 
-            self.connected_sources = [None, None]
+            self.connected_sources = [None] * self.channels
         except Exception as e:
             print(f"Error disconnecting inputs: {e}")
 
-    def connect_inputs(self, source_port1: str, source_port2: str) -> bool:
+    def connect_inputs(self, source_ports: list[str]) -> bool:
         """
-        Connect two source ports to in_1 and in_2 respectively.
+        Connect source ports to our input ports.
         Returns: True on success, False on failure
-        Raises: JackError if ports don't exist or connection fails
         """
         # Safety check: Don't allow connection changes during recording
         if self.is_recording:
             print("Cannot change inputs while recording")
             return False
 
+        if len(source_ports) != self.channels:
+            print(f"Expected {self.channels} source ports, got {len(source_ports)}")
+            return False
+
         try:
-            # Connect the source ports to our input ports
-            self.client.connect(source_port1, self.client.inports[0])
-            self.client.connect(source_port2, self.client.inports[1])
+            for i, source in enumerate(source_ports):
+                if source:
+                    self.client.connect(source, self.input_ports[i])
+                    print(f"Connected {source} → {self.input_ports[i].name}")
 
             # Update tracking
-            self.connected_sources = [source_port1, source_port2]
-
-            print(f"Connected {source_port1} → {self.client.inports[0].name}")
-            print(f"Connected {source_port2} → {self.client.inports[1].name}")
+            self.connected_sources = source_ports.copy()
 
             return True
         except Exception as e:
@@ -375,6 +377,13 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     #button-row Button {
         margin: 0 1;
     }
+
+    #mode-selection {
+        height: 5;
+        border: solid $primary;
+        margin: 1 0;
+        align: center middle;
+    }
     """
 
     BINDINGS = [
@@ -382,7 +391,7 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
         Binding("enter", "confirm", "Confirm Selection"),
     ]
 
-    def __init__(self, available_ports: list[jack.Port], current_ports: tuple[str, str]):
+    def __init__(self, available_ports: list[jack.Port], current_ports: list[str | None]):
         """
         Args:
             available_ports: List of JACK output ports to choose from
@@ -391,21 +400,32 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
         super().__init__()
         self.available_ports = available_ports
         self.current_ports = current_ports
-        self.selection_step = 1  # 1 = selecting for Channel 1, 2 = selecting for Channel 2
+        self.selection_step = 0  # 0 = Mode Selection, 1 = Port 1, 2 = Port 2
+        self.selected_mode = "Stereo" if len(current_ports) == 2 else "Mono"
         self.selected_port1 = None
         self.selected_port2 = None
 
     def compose(self) -> ComposeResult:
         with Container(id="selection-dialog"):
-            yield Label("Select Input Port for Channel 1", id="title")
-            yield Static("Choose from available JACK output ports:", id="help")
+            yield Label("Select Input Mode", id="title")
+            yield Static("Choose whether you want Mono or Stereo input:", id="help")
+            
+            with Vertical(id="mode-selection"):
+                yield Button("Mono", id="mono-btn", variant="primary")
+                yield Button("Stereo", id="stereo-btn", variant="primary")
+
             yield OptionList(id="port-list")
+
             with Horizontal(id="button-row"):
                 yield Button("Cancel", variant="error", id="cancel-btn")
                 yield Button("Confirm", variant="primary", id="confirm-btn")
 
     def on_mount(self):
-        """Populate option list with available ports."""
+        """Populate option list with available ports and set initial UI state."""
+        # Initial display states
+        self.query_one("#port-list").display = False
+        self.query_one("#confirm-btn").display = False
+
         option_list = self.query_one("#port-list", OptionList)
         for port in self.available_ports:
             # Format: "Device Name: port_name [PHYSICAL]"
@@ -431,6 +451,9 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
 
     def action_confirm(self):
         """Handle confirmation of port selection."""
+        if self.selection_step == 0:
+            return
+
         option_list = self.query_one("#port-list", OptionList)
         selected_idx = option_list.highlighted
 
@@ -441,27 +464,38 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
         selected_port = self.available_ports[selected_idx]
 
         if self.selection_step == 1:
-            # Save first selection, move to step 2
             self.selected_port1 = selected_port.name
-            self._switch_to_step_2()
+            if self.selected_mode == "Mono":
+                self.dismiss([self.selected_port1])
+            else:
+                self._switch_to_step_2()
         else:
-            # Save second selection, return result
             self.selected_port2 = selected_port.name
-
-            # Validate: can't select same port twice
             if self.selected_port1 == self.selected_port2:
                 self.notify("Cannot use the same port for both channels", severity="error")
                 return
+            self.dismiss([self.selected_port1, self.selected_port2])
 
-            self.dismiss((self.selected_port1, self.selected_port2))
+    def _switch_to_port_selection(self, mode: str):
+        self.selected_mode = mode
+        self.selection_step = 1
+        self.query_one("#mode-selection").display = False
+        self.query_one("#port-list").display = True
+        self.query_one("#confirm-btn").display = True
+        
+        self.query_one("#title", Label).update(f"Select Input Port (Channel 1 of {'2' if mode == 'Stereo' else '1'})")
+        self.query_one("#help", Static).update("Choose from available JACK output ports:")
+        
+        # Repopulate/Refresh list if needed (it was already populated in on_mount)
+        if len(self.current_ports) > 0 and self.current_ports[0]:
+            self._highlight_port(self.current_ports[0])
 
     def _switch_to_step_2(self):
         """Transition to selecting the second port."""
         self.selection_step = 2
-        self.query_one("#title", Label).update("Select Input Port for Channel 2")
+        self.query_one("#title", Label).update("Select Input Port (Channel 2 of 2)")
 
-        # Highlight currently selected port if applicable
-        if self.current_ports[1]:
+        if len(self.current_ports) > 1 and self.current_ports[1]:
             self._highlight_port(self.current_ports[1])
 
     def action_cancel(self):
@@ -474,6 +508,10 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
             self.action_cancel()
         elif event.button.id == "confirm-btn":
             self.action_confirm()
+        elif event.button.id == "mono-btn":
+            self._switch_to_port_selection("Mono")
+        elif event.button.id == "stereo-btn":
+            self._switch_to_port_selection("Stereo")
 
 class TimeMachineApp(App):
     CSS = """
@@ -554,9 +592,10 @@ class TimeMachineApp(App):
             yield Static("\nBuffers filled: ", id="buffer-info")
 
             with Vertical(id="meters"):
-                yield Label("Channel 1")
+                # Meters will be created dynamically or hidden/shown
+                yield Label("Channel 1", id="label-1")
                 yield VUMeter(id="meter-1")
-                yield Label("Channel 2")
+                yield Label("Channel 2", id="label-2")
                 yield VUMeter(id="meter-2")
 
             yield Static("\n[dim]Press SPACE to Capture | Press I for Inputs[/dim]", classes="help-text")
@@ -566,15 +605,30 @@ class TimeMachineApp(App):
         # Initialize Audio Engine
         try:
             self.config_manager = ConfigManager()
-            self.engine = AudioEngine(config_manager=self.config_manager)
+            saved_ports = self.config_manager.get_input_ports()
+            num_channels = len(saved_ports) if saved_ports else DEFAULT_CHANNELS
+            
+            self.engine = AudioEngine(config_manager=self.config_manager, num_channels=num_channels)
             self.engine.start()
 
             # Attempt to load and connect saved configuration
             self._load_and_connect_saved_inputs()
+            self._update_meter_visibility()
 
             self.set_interval(0.05, self.update_meters) # Update UI at 20FPS
         except Exception as e:
             self.exit(message=f"Failed to start JACK client: {e}")
+
+    def _update_meter_visibility(self):
+        """Show/hide meters based on engine channels."""
+        is_stereo = self.engine.channels == 2
+        self.query_one("#label-2").display = is_stereo
+        self.query_one("#meter-2").display = is_stereo
+        
+        if not is_stereo:
+            self.query_one("#label-1").update("Channel (Mono)")
+        else:
+            self.query_one("#label-1").update("Channel 1")
 
     def on_unmount(self):
         if hasattr(self, 'engine'):
@@ -587,7 +641,7 @@ class TimeMachineApp(App):
         
         # Update VU Meters
         self.query_one("#meter-1", VUMeter).level = peaks[0]
-        if len(peaks) > 1:
+        if len(peaks) > 1 and self.engine.channels > 1:
             self.query_one("#meter-2", VUMeter).level = peaks[1]
 
         # Update Buffer Info
@@ -616,9 +670,9 @@ class TimeMachineApp(App):
 
         # Attempt connection
         try:
-            success = self.engine.connect_inputs(saved_ports[0], saved_ports[1])
+            success = self.engine.connect_inputs(saved_ports)
             if success:
-                self._update_connection_status(saved_ports[0], saved_ports[1])
+                self._update_connection_status(saved_ports)
                 self.notify("Input connections restored", severity="information")
             else:
                 raise Exception("Connection failed")
@@ -626,13 +680,15 @@ class TimeMachineApp(App):
             self.query_one("#connection-status").update("Inputs: [red]Connection failed[/red]")
             self.notify(f"Failed to connect inputs: {e}", severity="error")
 
-    def _update_connection_status(self, port1: str, port2: str):
+    def _update_connection_status(self, ports: list[str]):
         """Update the connection status display in the UI."""
-        # Shorten port names for display
-        short1 = port1.split(':')[-1] if ':' in port1 else port1
-        short2 = port2.split(':')[-1] if ':' in port2 else port2
-
-        status_text = f"Inputs: [green]{short1}[/green] | [green]{short2}[/green]"
+        short_names = [p.split(':')[-1] if ':' in p else p for p in ports]
+        
+        if len(short_names) == 2:
+            status_text = f"Inputs: [green]{short_names[0]}[/green] | [green]{short_names[1]}[/green]"
+        else:
+            status_text = f"Input: [green]{short_names[0]}[/green] (Mono)"
+            
         self.query_one("#connection-status").update(status_text)
 
     def action_toggle_record(self):
@@ -670,26 +726,35 @@ class TimeMachineApp(App):
             current_ports = self.engine.get_current_connections()
 
             # Push the modal screen
-            def handle_selection(result: tuple[str, str] | None):
+            def handle_selection(result: list[str] | None):
                 """Callback when selection screen closes."""
                 if result is None:
                     # User cancelled
                     return
 
-                port1, port2 = result
+                # Check if we need to restart the engine due to channel count change
+                if len(result) != self.engine.channels:
+                    self.engine.stop()
+                    self.engine = AudioEngine(
+                        config_manager=self.config_manager, 
+                        num_channels=len(result)
+                    )
+                    self.engine.start()
+                    self._update_meter_visibility()
 
-                # Disconnect old connections
-                self.engine.disconnect_inputs()
+                # Disconnect old connections (if engine wasn't restarted)
+                else:
+                    self.engine.disconnect_inputs()
 
                 # Connect new ports
                 try:
-                    success = self.engine.connect_inputs(port1, port2)
+                    success = self.engine.connect_inputs(result)
                     if success:
                         # Save configuration
-                        self.config_manager.set_input_ports(port1, port2)
+                        self.config_manager.set_input_ports(result)
 
                         # Update UI
-                        self._update_connection_status(port1, port2)
+                        self._update_connection_status(result)
                         self.notify("Input connections updated", severity="success")
                     else:
                         raise Exception("Connection returned False")
