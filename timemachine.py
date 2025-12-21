@@ -1,21 +1,34 @@
-import sys
-import threading
-import queue
-import time
-import datetime
 import json
+import queue
+import threading
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import jack
 import numpy as np
 import soundfile as sf
-import jack
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical, Horizontal
-from textual.widgets import Header, Footer, Static, ProgressBar, Label, Button, OptionList, DirectoryTree
-from textual.screen import ModalScreen
-from textual.reactive import reactive
 from textual.binding import Binding
+from textual.containers import Container, Horizontal, Vertical
+from textual.reactive import reactive
+from textual.screen import ModalScreen
+from textual.widgets import (
+    Button,
+    DirectoryTree,
+    Footer,
+    Header,
+    Label,
+    OptionList,
+    Static,
+)
+
+# --- Type Aliases ---
+PortName = str
+PortList = list[PortName]
+ConfigDict = dict[str, Any]
+MeterValue = tuple[float, ...]  # (peak_left, peak_right, ...)
 
 # --- Configuration ---
 BUFFER_DURATION = 10  # Seconds of history to keep
@@ -38,7 +51,7 @@ class ConfigManager:
 
         self.config = self._load_config()
 
-    def _load_config(self) -> dict:
+    def _load_config(self) -> ConfigDict:
         """Load configuration from disk, return defaults if not found."""
         try:
             if self.config_path.exists():
@@ -60,7 +73,7 @@ class ConfigManager:
                 "save_path": str(Path.cwd())
             }
 
-    def save_config(self, config: dict) -> bool:
+    def save_config(self, config: ConfigDict) -> bool:
         """Save configuration to disk. Returns True on success."""
         try:
             with open(self.config_path, 'w') as f:
@@ -71,14 +84,32 @@ class ConfigManager:
             return False
 
     def get_input_ports(self) -> list[str] | None:
-        """Get saved input port names. Returns None if not configured."""
-        ports = self.config.get("input_ports")
-        if ports and isinstance(ports, list) and len(ports) > 0:
-            return ports
+        """
+        Get saved input port names from configuration.
+
+        Returns:
+            list[str] | None: List of JACK port names if configured and valid,
+                              None if not configured or empty
+
+        Note:
+            Returned ports should be validated against current JACK graph
+            using validate_ports_exist() before attempting connections.
+        """
+        saved_port_names = self.config.get("input_ports")
+        if saved_port_names and isinstance(saved_port_names, list) and len(saved_port_names) > 0:
+            return saved_port_names
         return None
 
-    def set_input_ports(self, ports: list[str]):
-        """Save input port configuration."""
+    def set_input_ports(self, ports: list[str]) -> None:
+        """
+        Save input port configuration to disk.
+
+        Args:
+            ports: List of JACK port names to persist
+
+        Side Effects:
+            Immediately writes configuration to disk via save_config()
+        """
         self.config["input_ports"] = ports
         self.save_config(self.config)
 
@@ -118,7 +149,12 @@ class ConfigManager:
 
 class AudioEngine:
     """Handles JACK client, ring buffer, and file writing logic."""
-    def __init__(self, buffer_duration=BUFFER_DURATION, config_manager=None, num_channels=DEFAULT_CHANNELS):
+    def __init__(
+        self,
+        buffer_duration: int = BUFFER_DURATION,
+        config_manager: "ConfigManager | None" = None,
+        num_channels: int = DEFAULT_CHANNELS
+    ) -> None:
         self.buffer_duration = buffer_duration
         self.config_manager = config_manager
         self.client = jack.Client("TimeMachinePy")
@@ -159,78 +195,118 @@ class AudioEngine:
         # Register callback
         self.client.set_process_callback(self.process)
 
-    def start(self):
+    def start(self) -> None:
+        """
+        Activate JACK client and begin audio processing.
+
+        Starts the JACK audio callback which will:
+        - Continuously fill the ring buffer with incoming audio
+        - Update peak meters in real-time
+        - Send audio to file writer when recording
+        """
         self.client.activate()
         print(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
 
-    def stop(self):
+    def stop(self) -> None:
+        """
+        Deactivate JACK client and release resources.
+
+        Stops all audio processing and cleanly closes the JACK connection.
+        Should be called before application exit.
+        """
         self.client.deactivate()
         self.client.close()
 
-    def process(self, frames):
+    def _write_to_ring_buffer(self, data: np.ndarray, frames: int) -> None:
+        """
+        Write audio data to ring buffer, handling wrap-around.
+
+        Args:
+            data: Audio data array of shape (frames, channels)
+            frames: Number of frames to write
+        """
+        remaining_space = self.ring_size - self.write_ptr
+
+        if frames <= remaining_space:
+            # Simple case: all data fits before end of buffer
+            self.ring_buffer[self.write_ptr : self.write_ptr + frames] = data
+            self.write_ptr += frames
+        else:
+            # Wrap-around case: split data into two parts
+            part1 = remaining_space
+            part2 = frames - remaining_space
+
+            self.ring_buffer[self.write_ptr : self.write_ptr + part1] = data[:part1]
+            self.ring_buffer[0 : part2] = data[part1:]
+            self.write_ptr = part2
+            self.buffer_filled = True
+
+        if self.write_ptr >= self.ring_size:
+            self.write_ptr = 0
+            self.buffer_filled = True
+
+    def process(self, frames: int) -> None:
         """High-priority audio callback."""
         try:
             # 1. Gather input data from all ports
             # Stack ports into a (frames, channels) array
             input_arrays = [port.get_array() for port in self.input_ports]
             data = np.stack(input_arrays, axis=-1)
-            
+
             # 2. Update Meters
             self.peaks = np.max(np.abs(data), axis=0).tolist()
+            # Convert linear peak to dB using 20*log10 formula
+            # Clip noise floor at -100 dB for silence (1e-5 threshold)
             self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
-            
+
             # 3. Write to Ring Buffer (Memory)
-            # Handle wrap-around writing
-            remaining_space = self.ring_size - self.write_ptr
-            
-            if frames <= remaining_space:
-                self.ring_buffer[self.write_ptr : self.write_ptr + frames] = data
-                self.write_ptr += frames
-            else:
-                # We need to wrap around
-                part1 = remaining_space
-                part2 = frames - remaining_space
-                
-                self.ring_buffer[self.write_ptr : self.write_ptr + part1] = data[:part1]
-                self.ring_buffer[0 : part2] = data[part1:]
-                self.write_ptr = part2
-                self.buffer_filled = True
-                
-            if self.write_ptr >= self.ring_size:
-                self.write_ptr = 0
-                self.buffer_filled = True
+            self._write_to_ring_buffer(data, frames)
 
             # 4. If Recording, send copy to file writer
             if self.is_recording:
                 # We copy to avoid race conditions with the audio buffer being overwritten
                 self.record_queue.put(data.copy())
-                
+
         except Exception as e:
             # Avoid print in realtime thread usually, but okay for debugging
             pass
 
-    def start_recording(self):
+    def start_recording(self) -> str | None:
+        """
+        Begin recording audio to file, including buffered past audio.
+
+        Reconstructs the ring buffer to include the full retroactive buffer
+        (up to 10 seconds of past audio), then continues recording new
+        incoming audio to a timestamped WAV file.
+
+        Returns:
+            str | None: Filename of created recording, or None if already recording
+
+        Thread Safety:
+            Safe to call from main thread; spawns background writer thread
+        """
         if self.is_recording:
-            return
-            
+            return None
+
         self.is_recording = True
         self.stop_event.clear()
-        
-        # Construct the 'past' audio from the ring buffer
-        # The oldest data is at self.write_ptr (current cursor), going forward to end, then 0 to cursor
+
+        # Reconstruct chronological buffer from ring buffer:
+        # If buffer wrapped, combine tail (older audio) + head (recent audio)
+        # Otherwise, just copy the filled portion
         if self.buffer_filled:
-            part_old = self.ring_buffer[self.write_ptr:]
-            part_new = self.ring_buffer[:self.write_ptr]
+            part_old = self.ring_buffer[self.write_ptr:]  # Older audio after cursor
+            part_new = self.ring_buffer[:self.write_ptr]  # Recent audio before cursor
             past_data = np.concatenate((part_old, part_new))
         else:
             past_data = self.ring_buffer[:self.write_ptr].copy()
-            
+
         # Determine filename (tm-YYYY-MM-DD-THH-MM-SS.wav)
         # We subtract buffer duration to match the C code's logic (time recording 'started')
-        start_time = datetime.datetime.now() - datetime.timedelta(seconds=self.buffer_duration)
+        start_time = datetime.now() - timedelta(seconds=self.buffer_duration)
         filename = start_time.strftime("tm-%Y-%m-%dT%H-%M-%S.wav")
         full_path = self.save_path / filename
-        
+
         self.writer_thread = threading.Thread(
             target=self._file_writer,
             args=(str(full_path), past_data)
@@ -238,17 +314,26 @@ class AudioEngine:
         self.writer_thread.start()
         return filename
 
-    def stop_recording(self):
+    def stop_recording(self) -> None:
+        """
+        Stop recording and finalize the audio file.
+
+        Signals the file writer thread to stop, waits for it to finish
+        writing all queued audio data, and cleans up the recording queue.
+
+        Thread Safety:
+            Safe to call from main thread; blocks until writer thread completes
+        """
         self.is_recording = False
         self.stop_event.set()
         if self.writer_thread:
             self.writer_thread.join()
-        
-        # Drain queue
+
+        # Drain queue to prevent memory leaks
         while not self.record_queue.empty():
             self.record_queue.get()
 
-    def _file_writer(self, filename, pre_buffer_data):
+    def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
         """Background thread that writes audio to disk."""
         try:
             with sf.SoundFile(filename, mode='w', samplerate=self.samplerate, channels=self.channels) as file:
@@ -347,25 +432,55 @@ class VUMeter(Static):
     level = reactive(0.0)
     db_level = reactive(-100.0)
     
-    def watch_level(self, level: float):
+    def watch_level(self, level: float) -> None:
         self.update_bar()
 
-    def watch_db_level(self, db_level: float):
+    def watch_db_level(self, db_level: float) -> None:
         self.update_bar()
 
-    def update_bar(self):
-        # Logarithmic scale approximation for display
+    def _get_level_color(self, percentage: float) -> str:
+        """
+        Determine bar color based on audio level percentage.
+
+        Args:
+            percentage: Audio level as percentage (0-100)
+
+        Returns:
+            Color name: "green", "yellow", or "red"
+        """
+        if percentage > 90:
+            return "red"
+        elif percentage > 70:
+            return "yellow"
+        else:
+            return "green"
+
+    def _format_db_display(self, db_value: float) -> str:
+        """
+        Format dB value for display.
+
+        Args:
+            db_value: Decibel level
+
+        Returns:
+            Formatted string (e.g., " -12.3 dB" or "  -inf dB")
+        """
+        if db_value > -100:
+            return f"{db_value:>5.1f} dB"
+        else:
+            return "-inf dB"
+
+    def update_bar(self) -> None:
+        """Update the visual bar display based on current level and dB values."""
         # Convert 0-1 float to 0-100 percentage
         pct = min(100, int(self.level * 100))
-        
-        # Visual color changes based on level
-        color = "green"
-        if pct > 70: color = "yellow"
-        if pct > 90: color = "red"
-        
-        bar_str = "|" * (pct // 2)
-        db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
-        self.update(f"[{color}]{bar_str:50s}[/] [bold]{db_str}[/]")
+
+        # Determine color and formatting
+        color = self._get_level_color(pct)
+        level_bar_display = "|" * (pct // 2)
+        db_str = self._format_db_display(self.db_level)
+
+        self.update(f"[{color}]{level_bar_display:50s}[/] [bold]{db_str}[/]")
 
 class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     """Modal screen for selecting two JACK input ports."""
@@ -490,13 +605,13 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
             return
 
         option_list = self.query_one("#port-list", OptionList)
-        selected_idx = option_list.highlighted
+        selected_option_index = option_list.highlighted
 
-        if selected_idx is None:
+        if selected_option_index is None:
             self.notify("Please select a port", severity="warning")
             return
 
-        selected_port = self.available_ports[selected_idx]
+        selected_port = self.available_ports[selected_option_index]
 
         if self.selection_step == 1:
             self.selected_port1 = selected_port.name
@@ -514,10 +629,12 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     def _switch_to_port_selection(self, mode: str):
         self.selected_mode = mode
         self.selection_step = 1
+
+        # Cache widget queries for visibility updates
         self.query_one("#mode-selection").display = False
         self.query_one("#port-list").display = True
         self.query_one("#confirm-btn").display = True
-        
+
         self.query_one("#title", Label).update(f"Select Input Port (Channel 1 of {'2' if mode == 'Stereo' else '1'})")
         self.query_one("#help", Static).update("Choose from available JACK output ports:")
         
@@ -767,13 +884,16 @@ class TimeMachineApp(App):
     def update_meters(self):
         """Poll audio engine for levels."""
         peaks = self.engine.peaks
-        
-        # Update VU Meters
-        self.query_one("#meter-1", VUMeter).level = peaks[0]
-        self.query_one("#meter-1", VUMeter).db_level = self.engine.dbs[0]
+
+        # Update VU Meters (cache queries to avoid redundant DOM traversal)
+        meter_1 = self.query_one("#meter-1", VUMeter)
+        meter_1.level = peaks[0]
+        meter_1.db_level = self.engine.dbs[0]
+
         if len(peaks) > 1 and self.engine.channels > 1:
-            self.query_one("#meter-2", VUMeter).level = peaks[1]
-            self.query_one("#meter-2", VUMeter).db_level = self.engine.dbs[1]
+            meter_2 = self.query_one("#meter-2", VUMeter)
+            meter_2.level = peaks[1]
+            meter_2.db_level = self.engine.dbs[1]
 
         # Update Buffer Info
         if not self.engine.is_recording:
@@ -813,7 +933,7 @@ class TimeMachineApp(App):
 
     def _update_connection_status(self, ports: list[str]):
         """Update the connection status display in the UI."""
-        short_names = [p.split(':')[-1] if ':' in p else p for p in ports]
+        short_names = [port_name.split(':')[-1] if ':' in port_name else port_name for port_name in ports]
         
         if len(short_names) == 2:
             status_text = f"Inputs: [green]{short_names[0]}[/green] | [green]{short_names[1]}[/green]"
@@ -847,6 +967,42 @@ class TimeMachineApp(App):
             status_bar.remove_class("status-idle")
             status_bar.add_class("status-recording")
 
+    def _restart_engine_with_channels(self, num_channels: int) -> None:
+        """
+        Restart audio engine with a different channel count.
+
+        Args:
+            num_channels: New number of input channels (1 for mono, 2 for stereo)
+        """
+        self.engine.stop()
+        self.engine = AudioEngine(
+            config_manager=self.config_manager,
+            num_channels=num_channels
+        )
+        self.engine.start()
+        self._update_meter_visibility()
+
+    def _apply_input_connections(self, selected_ports: list[str]) -> None:
+        """
+        Apply new input port connections and update configuration.
+
+        Args:
+            selected_ports: List of JACK port names to connect
+
+        Raises:
+            Exception: If connection fails
+        """
+        success = self.engine.connect_inputs(selected_ports)
+        if success:
+            # Save configuration
+            self.config_manager.set_input_ports(selected_ports)
+
+            # Update UI
+            self._update_connection_status(selected_ports)
+            self.notify("Input connections updated", severity="success")
+        else:
+            raise Exception("Connection returned False")
+
     def action_open_input_selector(self):
         """Open the input selection modal screen."""
 
@@ -874,31 +1030,14 @@ class TimeMachineApp(App):
 
                 # Check if we need to restart the engine due to channel count change
                 if len(result) != self.engine.channels:
-                    self.engine.stop()
-                    self.engine = AudioEngine(
-                        config_manager=self.config_manager, 
-                        num_channels=len(result)
-                    )
-                    self.engine.start()
-                    self._update_meter_visibility()
-
-                # Disconnect old connections (if engine wasn't restarted)
+                    self._restart_engine_with_channels(len(result))
                 else:
+                    # Disconnect old connections (if engine wasn't restarted)
                     self.engine.disconnect_inputs()
 
                 # Connect new ports
                 try:
-                    success = self.engine.connect_inputs(result)
-                    if success:
-                        # Save configuration
-                        self.config_manager.set_input_ports(result)
-
-                        # Update UI
-                        self._update_connection_status(result)
-                        self.notify("Input connections updated", severity="success")
-                    else:
-                        raise Exception("Connection returned False")
-
+                    self._apply_input_connections(result)
                 except Exception as e:
                     self.notify(f"Failed to connect: {e}", severity="error")
                     self.query_one("#connection-status").update("Inputs: [red]Connection failed[/red]")
