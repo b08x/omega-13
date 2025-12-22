@@ -2,13 +2,13 @@
 
 **Retroactive Audio Recording for JACK & PipeWire with Session Management**
 
-Omega-13 is a retroactive audio recording tool designed to salvage the verbal drafts of your work. It continuously maintains a 10-second rolling buffer of audio—press a button at any moment to save what you just said, plus everything that follows. It is purpose-built for capturing ad-hoc technical notes, architectural brainstorms, and verbal planning sessions. Instead of losing a complex explanation or a fleeting solution to the air, Omega-13 ensures you can retroactively commit your spoken thoughts to storage.
+Omega-13 is a retroactive audio recording tool designed to salvage verbal drafts and spoken ideas. It continuously maintains a 10-second rolling buffer of audio—press a button at any moment to save what was just said, plus everything that follows. It is purpose-built for capturing ad-hoc technical notes, architectural brainstorms, and verbal planning sessions. Instead of losing a complex explanation or a fleeting solution to the air, Omega-13 enables retroactive commitment of spoken thoughts to storage.
 
 > I used to always keep a minidisc recorder in my studio running in a mode where when you pressed record it wrote the last 10 seconds of audio to the disk and then caught up to realtime and kept recording. The recorder died and haven't been able to replace it, so this is a simple jack app to do the same job. It has the advantage that it never clips and can be wired to any part of the jack graph.
 >
 > The idea is that I doodle away with whatever is kicking around in my studio and when I heard an interesting noise, I'd press record and capture it, without having to try and recreate it. :)
 >
-> — Steve Harris, creator of TimeMachine
+> — Steve Harris, creator of [TimeMachine](https://github.com/steveharris/TimeMachine)
 
 > "It appears to be some sort of weapon... but we have never been able to discover its function."
 >
@@ -18,7 +18,7 @@ Omega-13 is a retroactive audio recording tool designed to salvage the verbal dr
 
 - **🕐 Retroactive Recording** - Always recording the last 10 seconds in memory, ready to save instantly
 
-- **💾 Session Management** - Recordings saved to temporary sessions, only persisted when you choose
+- **💾 Session Management** - Recordings saved to temporary sessions, only persisted when chosen
 
 - **🎚️ Pro Audio Integration** - Seamless routing with JACK or PipeWire's JACK compatibility layer
 
@@ -28,7 +28,7 @@ Omega-13 is a retroactive audio recording tool designed to salvage the verbal dr
 
 - **🔒 Save Protection** - Exit prompt prevents accidental loss of unsaved recordings
 
-- **⚙️ Persistent Configuration** - Remembers your input ports and save directory across sessions
+- **⚙️ Persistent Configuration** - Remembers input ports and save directory across sessions
 
 - **🖥️ Terminal UI** - Clean, reactive text-based interface built with Textual
 
@@ -50,11 +50,11 @@ Omega-13 is a retroactive audio recording tool designed to salvage the verbal dr
 
 ### Audio Backend Installation
 
-Omega-13 interacts with the JACK API. You can provide this API via the classic JACK2 server or the modern PipeWire implementation.
+Omega-13 interacts with the JACK API. This API can be provided via the classic JACK2 server or the modern PipeWire implementation.
 
 **Option A: PipeWire (Fedora Workstation, Ubuntu 22.10+)**
 
-If you are on a standard modern distribution, you likely already use PipeWire. You just need the JACK compatibility libraries.
+Standard modern distributions typically include PipeWire. Only the JACK compatibility libraries are required.
 
 **Fedora (Standard):**
 
@@ -64,7 +64,7 @@ sudo dnf install pipewire-jack-audio-connection-kit pipewire-jack-audio-connecti
 
 **Fedora Atomic (Silverblue, Bluefin, Kinoite):**
 
-If you are running an immutable desktop, you have two choices: use a mutable container (Toolbox/Distrobox) or layer the packages onto your base image.
+For immutable desktops, two options are available: use a mutable container (Toolbox/Distrobox) or layer the packages onto the base image.
 
 - Method 1: Toolbox (Recommended)
 
@@ -122,7 +122,7 @@ sudo pacman -S jack2
 
 2. **Setup the Transcription Server (Optional):**
 
-    If you want the "AI" to actually listen to you (and let's be honest, who doesn't want a machine judging their audio?), you'll need the Whisper server running.
+    For AI transcription capabilities (letting a machine judge audio quality), the Whisper server must be running.
 
     - **Option A: The Shell Script**
 
@@ -142,21 +142,21 @@ sudo pacman -S jack2
 
 3. **Install the Application:**
 
-    We use `uv` because life is too short for slow package managers.
+    This project uses `uv` because life is too short for slow package managers.
 
     ```bash
     uv sync
     ```
 
-    _If you insist on living in the past, `python -m venv .venv && source .venv/bin/activate && pip install -e .` still works, I guess._
+    _Alternative installation: `python -m venv .venv && source .venv/bin/activate && pip install -e .` still works._
 
 ## ⚡ Quick Start
 
-1. **Ensure your Audio Server is ready**:
+1. **Ensure the Audio Server is ready**:
 
-    - **Classic JACK Users**: Start your server:
+    - **Classic JACK Users**: Start the server:
 
-        > **Note**: On Bluefin/Silverblue, pw-jack is often required to correctly map the libraries if they aren't in the standard linker path.
+        > **Note**: On Bluefin/Silverblue, pw-jack is often required to correctly map the libraries when they aren't in the standard linker path.
 
         ```bash
         jackd -d alsa -r 48000 -p 512
@@ -168,15 +168,15 @@ sudo pacman -S jack2
     uv run python -m omega13
     ```
 
-3. **Configure your audio input:**
+3. **Configure audio input:**
 
     - Press `I` to open the input selection dialog
 
         - Choose mono or stereo mode
 
-        - Select your desired output ports (audio sources)
+        - Select desired output ports (audio sources)
 
-4. **Record in your session:**
+4. **Record in the session:**
 
     - Press `SPACE` to begin recording
 
@@ -186,7 +186,7 @@ sudo pacman -S jack2
 
     - Recordings are named sequentially: `001.wav`, `002.wav`, etc.
 
-5. **Save your session:**
+5. **Save the session:**
 
     - Press `S` to save session to permanent storage
 
@@ -198,7 +198,7 @@ sudo pacman -S jack2
 
     - Press `Q` to quit
 
-    - If session has unsaved recordings, you'll be prompted:
+    - If session has unsaved recordings, a prompt appears:
 
         - **Save** - Choose location and save before exiting
 
@@ -220,7 +220,7 @@ sudo pacman -S jack2
 
 ### Understanding the UI
 
-When you launch Omega-13, you'll see several key interface elements:
+Upon launching Omega-13, several key interface elements are displayed:
 
 ```
 ┌─ Status ───────────────────────────┐
@@ -288,7 +288,7 @@ When you launch Omega-13, you'll see several key interface elements:
 
 ### Session Workflow
 
-Omega-13 uses a **session-based workflow** to protect your recordings:
+Omega-13 uses a **session-based workflow** to protect recordings:
 
 ```
 Launch → Create Session → Record → Save Session
@@ -337,7 +337,7 @@ Launch → Create Session → Record → Save Session
 
 ### Configuring Audio Inputs
 
-When you press `I`, you'll go through a two-step process:
+Pressing `I` initiates a two-step process:
 
 **Step 1: Channel Mode Selection**
 
@@ -366,10 +366,12 @@ client_name:port_name
 ```
 
 **Examples (PipeWire):**
+
 - `ALSA:capture_FL` - Physical input Left
 - `Firefox:output_FL` - Browser output
 
 **Examples (Classic JACK):**
+
 - `system:capture_1` - Physical input 1
 - `ardour:master/out_1` - Ardour DAW master output
 
@@ -414,7 +416,7 @@ After saving a session, the directory structure looks like this:
 
 - **Format:** Uncompressed WAV (PCM)
 - **Sample Rate:** Inherited from server configuration (typically 44.1kHz or 48kHz)
-- **Channels:** 1 (mono) or 2 (stereo) based on your selection
+- **Channels:** 1 (mono) or 2 (stereo) based on selection
 - **Bit Depth:** 32-bit float (preserves full dynamic range)
 
 **Sequential Naming:**
@@ -425,7 +427,7 @@ After saving a session, the directory structure looks like this:
 
 - And so on...
 
-**Why Sequential Numbers?**
+**Rationale for Sequential Numbers:**
 
 - Simpler than timestamps within a session
 
@@ -439,11 +441,11 @@ After saving a session, the directory structure looks like this:
 
 Omega-13 implements a **circular buffer** (ring buffer) that continuously stores the most recent 10 seconds of incoming audio:
 
-1. **Always Listening:** From the moment you launch the app, audio flows into the buffer
+1. **Always Listening:** From the moment the app launches, audio flows into the buffer
 
 2. **Circular Overwriting:** Old audio data is continuously replaced by new data
 
-3. **Instant Snapshot:** When you press `SPACE`, the current buffer contents are frozen
+3. **Instant Snapshot:** When `SPACE` is pressed, the current buffer contents are frozen
 
 4. **Continuous Recording:** After the buffer dump, new incoming audio is appended to the file
 
@@ -463,7 +465,7 @@ File contains: [-10s to -7s, -7s to -4s, -4s to NOW, NOW to STOP]
 
 ### Session Management System
 
-Omega-13 uses a sophisticated session management system to protect your work:
+Omega-13 uses a sophisticated session management system to protect recordings:
 
 **Session Lifecycle:**
 
@@ -658,7 +660,7 @@ DEFAULT_CHANNELS = 2  # 1=mono, 2=stereo
 
 **Symptom:** Omega-13 exits with an error about connecting to the server.
 
-**Solution (PipeWire):** Ensure the `pipewire-jack` compatibility layer is installed. You can also try:
+**Solution (PipeWire):** Ensure the `pipewire-jack` compatibility layer is installed. Alternative invocation method:
 
 ```bash
 pw-jack python -m omega13
@@ -749,7 +751,7 @@ jackd -d alsa -r 48000 -p 1024
     jack_lsp -c | grep Omega13
     ```
 
-4. **PipeWire Users**: Use `qpwgraph` or `Helvum` to visually inspect if Omega-13 is connected to your source.
+4. **PipeWire Users**: Use `qpwgraph` or `Helvum` to visually inspect Omega-13 connections to audio sources.
 
 ### Temp Directory Full
 
@@ -964,7 +966,7 @@ Manual testing checklist:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Here's how you can help:
+Contributions are welcome! The following guidelines outline how to participate:
 
 ### Reporting Bugs
 
@@ -988,7 +990,7 @@ Open an issue with:
 
 Before requesting, check existing issues. When creating a new request:
 
-- Describe the problem you're trying to solve
+- Describe the problem to be solved
 
 - Explain why existing features don't address it
 
@@ -1002,7 +1004,7 @@ Before requesting, check existing issues. When creating a new request:
 
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 
-3. Make your changes
+3. Make changes
 
 4. Test thoroughly (manual testing checklist above)
 
