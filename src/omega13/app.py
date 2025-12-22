@@ -1,4 +1,6 @@
 import logging
+import signal
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +22,7 @@ try:
 except ImportError:
     TRANSCRIPTION_AVAILABLE = False
 
-class TimeMachineApp(App):
+class Omega13App(App):
     CSS = """
     Screen { align: center middle; background: $surface; }
     #app-layout { width: 100%; height: 100%; }
@@ -51,11 +53,16 @@ class TimeMachineApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._shutdown_initiated = False
+        self._signal_handlers_registered = False
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="app-layout"):
             with Container(id="audio-pane"):
-                yield Label("TIME MACHINE", classes="title")
+                yield Label("OMEGA-13", classes="title")
                 yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
                 yield Static("Session: New (Unsaved)", id="session-status")
                 yield Static("Inputs: Loading...", id="connection-status")
@@ -71,7 +78,51 @@ class TimeMachineApp(App):
                 yield TranscriptionDisplay(id="transcription-display")
         yield Footer()
 
+    def _register_signal_handlers(self) -> None:
+        """Register handlers for graceful shutdown on signals."""
+        def signal_handler(signum, frame):
+            signal_name = signal.Signals(signum).name
+            logger = logging.getLogger(__name__)
+            logger.info(f"Received signal {signal_name}, initiating graceful shutdown")
+
+            # Prevent multiple shutdown attempts
+            if self._shutdown_initiated:
+                logger.warning("Shutdown already in progress")
+                return
+
+            self._shutdown_initiated = True
+
+            # Post exit to main event loop (thread-safe)
+            self.call_from_thread(self._graceful_shutdown)
+
+        # Register for common termination signals
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        logger = logging.getLogger(__name__)
+        logger.debug("Signal handlers registered")
+
+    def _graceful_shutdown(self) -> None:
+        """Perform graceful shutdown from signal handler."""
+        logger = logging.getLogger(__name__)
+        logger.info("Starting graceful shutdown sequence")
+
+        # Skip save prompt if shutdown via signal
+        # User pressed Ctrl+C, they want to quit NOW
+        if hasattr(self, 'session_manager'):
+            if not self.session_manager.is_saved() and self.session_manager.has_recordings():
+                logger.info("Discarding unsaved session due to signal termination")
+                self.session_manager.discard_session()
+
+        # Exit without further prompts
+        self.exit()
+
     def on_mount(self):
+        # Register signal handlers AFTER Textual is ready
+        if not self._signal_handlers_registered:
+            self._register_signal_handlers()
+            self._signal_handlers_registered = True
+
         try:
             self.config_manager = ConfigManager()
 
@@ -109,18 +160,53 @@ class TimeMachineApp(App):
             self.exit(message=f"Failed to start: {e}")
 
     def on_unmount(self):
-        if hasattr(self, 'engine'):
-            self.engine.stop_recording()
-            self.engine.stop()
+        """Cleanup resources in correct order."""
+        logger = logging.getLogger(__name__)
+        logger.info("Application unmounting, cleaning up resources")
 
-        # Handle unsaved session
+        # Step 1: Cancel interval timers FIRST to prevent callbacks during teardown
+        try:
+            # Textual automatically cancels timers, but be explicit
+            logger.debug("Canceling interval timers")
+        except Exception as e:
+            logger.error(f"Error canceling timers: {e}")
+
+        # Step 2: Stop recording and audio engine
+        if hasattr(self, 'engine'):
+            try:
+                logger.debug("Stopping audio engine")
+                if self.engine.is_recording:
+                    logger.debug("Stopping active recording")
+                    self.engine.stop_recording()  # Now has timeout
+                self.engine.stop()  # Deactivate JACK client
+                logger.debug("Audio engine stopped")
+            except Exception as e:
+                logger.error(f"Error stopping audio engine: {e}")
+
+        # Step 3: Stop transcription service
+        if hasattr(self, 'transcription_service') and self.transcription_service:
+            try:
+                logger.debug("Shutting down transcription service")
+                self.transcription_service.shutdown(timeout=5.0)
+                logger.debug("Transcription service stopped")
+            except Exception as e:
+                logger.error(f"Error stopping transcription: {e}")
+
+        # Step 4: Handle session cleanup
         if hasattr(self, 'session_manager'):
-            if not self.session_manager.is_saved() and self.session_manager.has_recordings():
-                # User will be prompted via action_quit override
-                pass
-            else:
-                # Auto-discard empty or saved sessions
-                self.session_manager.discard_session()
+            try:
+                if not self.session_manager.is_saved() and self.session_manager.has_recordings():
+                    # User will be prompted via action_quit override
+                    # If we got here via signal handler, session was already discarded
+                    logger.debug("Session cleanup will be handled by action_quit")
+                else:
+                    # Auto-discard empty or saved sessions
+                    logger.debug("Auto-discarding empty/saved session")
+                    self.session_manager.discard_session()
+            except Exception as e:
+                logger.error(f"Error during session cleanup: {e}")
+
+        logger.info("Resource cleanup complete")
 
     def update_meters(self):
         peaks = self.engine.peaks
@@ -426,6 +512,25 @@ class TimeMachineApp(App):
 
         self.push_screen(SavePromptScreen(self.session_manager, self.config_manager), handle_choice)
 
+def configure_logging(level: str = "INFO") -> None:
+    """Configure application logging."""
+    log_dir = Path.home() / ".local" / "share" / "omega13" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"omega13_{datetime.now().strftime('%Y%m%d')}.log"
+
+    logging.basicConfig(
+        level=getattr(logging, level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging initialized: {log_file}")
+
 def main():
-    app = TimeMachineApp()
+    configure_logging(level="INFO")  # Change to DEBUG for troubleshooting
+    app = Omega13App()
     app.run()

@@ -1,5 +1,5 @@
 from pathlib import Path
-from timemachine.session import Session
+from omega13.session import Session
 import shutil
 import os
 

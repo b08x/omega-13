@@ -1,3 +1,4 @@
+import logging
 import queue
 import threading
 from pathlib import Path
@@ -7,7 +8,9 @@ import soundfile as sf
 from typing import Optional
 from .config import ConfigManager
 
-BUFFER_DURATION = 10
+logger = logging.getLogger(__name__)
+
+BUFFER_DURATION = 13
 DEFAULT_CHANNELS = 2
 
 class AudioEngine:
@@ -20,7 +23,7 @@ class AudioEngine:
     ) -> None:
         self.buffer_duration = buffer_duration
         self.config_manager = config_manager
-        self.client = jack.Client("TimeMachinePy")
+        self.client = jack.Client("Omega13")
 
         # Setup input ports
         self.input_ports = []
@@ -49,6 +52,9 @@ class AudioEngine:
         # Connection tracking
         self.connected_sources = [None] * self.channels
 
+        # Shutdown state
+        self._stopped = False
+
         self.client.set_process_callback(self.process)
 
     def start(self) -> None:
@@ -56,8 +62,23 @@ class AudioEngine:
         print(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
 
     def stop(self) -> None:
-        self.client.deactivate()
-        self.client.close()
+        """Idempotent JACK client shutdown."""
+        if self._stopped:
+            logger.debug("AudioEngine already stopped")
+            return
+
+        try:
+            if hasattr(self, 'client'):
+                if self.client.status:  # Check if active
+                    logger.debug("Deactivating JACK client")
+                    self.client.deactivate()
+                logger.debug("Closing JACK client")
+                self.client.close()
+            self._stopped = True
+            logger.info("AudioEngine stopped successfully")
+        except Exception as e:
+            logger.error(f"Error stopping AudioEngine: {e}")
+            self._stopped = True  # Mark as stopped even on error
 
     def _write_to_ring_buffer(self, data: np.ndarray, frames: int) -> None:
         remaining_space = self.ring_size - self.write_ptr
@@ -92,7 +113,11 @@ class AudioEngine:
             if self.is_recording:
                 self.record_queue.put(data.copy())
 
-        except Exception:
+        except Exception as e:
+            # Only log in debug mode (performance-sensitive callback)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"JACK process error: {e}")
+            # Must swallow exception for JACK stability
             pass
 
     def start_recording(self, output_path: Path) -> Path | None:
@@ -130,13 +155,31 @@ class AudioEngine:
         return output_path
 
     def stop_recording(self) -> None:
+        """Stop recording with timeout protection."""
+        if not self.is_recording:
+            return
+
         self.is_recording = False
         self.stop_event.set()
-        if self.writer_thread:
-            self.writer_thread.join()
-        
-        while not self.record_queue.empty():
-            self.record_queue.get()
+
+        if self.writer_thread and self.writer_thread.is_alive():
+            # Wait up to 5 seconds for writer thread to finish
+            self.writer_thread.join(timeout=5.0)
+
+            if self.writer_thread.is_alive():
+                # Log the hang but continue cleanup
+                logger.warning(
+                    "Writer thread did not terminate within timeout. "
+                    "Audio file may be incomplete."
+                )
+                # Thread will be forcibly terminated when process exits
+
+        # Clear any remaining queue items
+        try:
+            while not self.record_queue.empty():
+                self.record_queue.get_nowait()
+        except Exception as e:
+            logger.debug(f"Queue cleanup error (non-critical): {e}")
 
     def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
         try:

@@ -1,4 +1,4 @@
-# Quick Start Guide - TimeMachine Transcription
+# Quick Start Guide - Omega-13 Transcription
 
 Get up and running with containerized transcription in 5 minutes.
 
@@ -14,7 +14,7 @@ Get up and running with containerized transcription in 5 minutes.
 ### 1. Build the Container Image
 
 ```bash
-cd /var/home/b08x/Workspace/timemachine-py
+cd /var/home/b08x/Workspace/omega-13
 ./build-whisper-image.sh
 ```
 
@@ -71,7 +71,7 @@ curl -X POST \
 ### 4. Run TimeMachine
 
 ```bash
-python timemachine.py
+python -m omega13
 ```
 
 The app will automatically connect to whisper-server and transcribe recordings!
@@ -81,7 +81,7 @@ The app will automatically connect to whisper-server and transcribe recordings!
 ```
 ┌──────────────────────┐
 │  TimeMachine TUI     │  Python app with Textual UI
-│  (timemachine.py)    │
+│  (omega13 app)       │
 └──────────┬───────────┘
            │
            │ HTTP POST /inference
@@ -95,12 +95,12 @@ The app will automatically connect to whisper-server and transcribe recordings!
 ## File Structure
 
 ```
-timemachine-py/
+omega-13/
 ├── Containerfile                  # Multi-stage CUDA build
 ├── build-whisper-image.sh         # Build script
 ├── podman-compose-production.yml  # Production deployment
 ├── transcription.py               # HTTP API client
-├── timemachine.py                 # Main TUI app
+├── src/omega13/app.py             # Main TUI app
 ├── BUILD.md                       # Detailed build docs
 ├── TRANSCRIPTION.md               # API usage guide
 └── QUICKSTART.md                  # This file

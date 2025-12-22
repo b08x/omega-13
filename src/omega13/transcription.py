@@ -1,6 +1,6 @@
 """
 Audio transcription module using whisper-server HTTP API.
-Refactored to be part of the timemachine package.
+Refactored to be part of the omega13 package.
 """
 
 from pathlib import Path
@@ -41,6 +41,8 @@ class TranscriptionService:
         self.inference_path = inference_path
         self.timeout = timeout
         self.endpoint = f"{self.server_url}{self.inference_path}"
+        self.active_threads: list[threading.Thread] = []
+        self._lock = threading.Lock()
 
     def _check_server_health(self) -> tuple[bool, Optional[str]]:
         try:
@@ -71,12 +73,21 @@ class TranscriptionService:
         callback: Callable[[TranscriptionResult], None],
         progress_callback: Optional[Callable[[float], None]] = None
     ) -> threading.Thread:
+        """Start async transcription with proper cleanup support."""
         thread = threading.Thread(
             target=self._transcribe_worker,
             args=(audio_path, callback, progress_callback),
-            daemon=True
+            daemon=False,  # Changed from True
+            name=f"transcription-{audio_path.stem}"  # Added name for debugging
         )
         thread.start()
+
+        # Track active threads for shutdown
+        with self._lock:
+            # Clean up completed threads
+            self.active_threads = [t for t in self.active_threads if t.is_alive()]
+            self.active_threads.append(thread)
+
         return thread
 
     def _transcribe_worker(
@@ -116,6 +127,20 @@ class TranscriptionService:
                 status=TranscriptionStatus.ERROR,
                 error=str(e)
             ))
+
+    def shutdown(self, timeout: float = 10.0) -> None:
+        """Shutdown service and wait for active transcriptions."""
+        logger.info("Shutting down transcription service")
+
+        with self._lock:
+            threads_to_wait = list(self.active_threads)
+
+        for thread in threads_to_wait:
+            thread.join(timeout=timeout / len(threads_to_wait) if threads_to_wait else timeout)
+            if thread.is_alive():
+                logger.warning(f"Transcription thread {thread.name} did not finish within timeout")
+
+        logger.info("Transcription service shutdown complete")
 
     def cleanup(self):
         logger.info("Transcription service cleanup")

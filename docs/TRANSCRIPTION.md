@@ -2,11 +2,11 @@
 
 ## Architecture Overview
 
-The TimeMachine application uses a **persistent whisper-server** for audio transcription via HTTP API.
+The Omega-13 application uses a **persistent whisper-server** for audio transcription via HTTP API.
 
 ```shell
 ┌─────────────────┐         HTTP POST          ┌──────────────────┐
-│  TimeMachine    │────────────────────────────>│ whisper-server   │
+│  Omega-13       │────────────────────────────>│ whisper-server   │
 │  (TUI App)      │    /inference endpoint     │  (Container)     │
 │                 │<────────────────────────────│                  │
 │  Python Client  │         JSON response       │  Model in Memory │
@@ -62,7 +62,7 @@ Expected output: HTML page with upload form
 The app will automatically connect to the server at `http://localhost:8080`:
 
 ```bash
-python timemachine.py
+python -m omega13
 ```
 
 ## Configuration
@@ -86,7 +86,7 @@ command:
 
 ### Client Configuration
 
-In `timemachine.py`, modify initialization:
+In `omega13` package, modify initialization:
 
 ```python
 self.transcription_service = TranscriptionService(

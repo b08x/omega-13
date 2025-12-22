@@ -4,3 +4,5 @@
 **/results/
 **__pycache__
 *.venv
+.code-packager-config
+omega-13.json
