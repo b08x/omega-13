@@ -1,11 +1,10 @@
 import queue
 import threading
-from datetime import datetime, timedelta
 from pathlib import Path
 import jack
 import numpy as np
 import soundfile as sf
-from typing import Optional, List
+from typing import Optional
 from .config import ConfigManager
 
 BUFFER_DURATION = 10
@@ -49,11 +48,6 @@ class AudioEngine:
 
         # Connection tracking
         self.connected_sources = [None] * self.channels
-
-        # Recording Path
-        self.save_path = Path.cwd()
-        if self.config_manager:
-            self.save_path = self.config_manager.get_save_path()
 
         self.client.set_process_callback(self.process)
 
@@ -101,7 +95,16 @@ class AudioEngine:
         except Exception:
             pass
 
-    def start_recording(self) -> str | None:
+    def start_recording(self, output_path: Path) -> Path | None:
+        """
+        Start recording to specified output path.
+
+        Args:
+            output_path: Full path where recording should be saved
+
+        Returns:
+            Path object of the recording file, or None if already recording
+        """
         if self.is_recording:
             return None
 
@@ -116,16 +119,15 @@ class AudioEngine:
         else:
             past_data = self.ring_buffer[:self.write_ptr].copy()
 
-        start_time = datetime.now() - timedelta(seconds=self.buffer_duration)
-        filename = start_time.strftime("tm-%Y-%m-%dT%H-%M-%S.wav")
-        full_path = self.save_path / filename
+        # Ensure parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.writer_thread = threading.Thread(
             target=self._file_writer,
-            args=(str(full_path), past_data)
+            args=(str(output_path), past_data)
         )
         self.writer_thread.start()
-        return filename
+        return output_path
 
     def stop_recording(self) -> None:
         self.is_recording = False

@@ -30,6 +30,11 @@ class ConfigManager:
                 "auto_transcribe": True,
                 "model_size": "large-v3-turbo",
                 "save_to_file": True
+            },
+            "sessions": {
+                "temp_root": "/tmp/timemachine",
+                "default_save_location": str(Path.home() / "Recordings"),
+                "auto_cleanup_days": 7
             }
         }
         
@@ -40,6 +45,8 @@ class ConfigManager:
                     # Merge defaults for missing keys (simple shallow merge)
                     if "transcription" not in config:
                         config["transcription"] = default_config["transcription"]
+                    if "sessions" not in config:
+                        config["sessions"] = default_config["sessions"]
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -98,3 +105,24 @@ class ConfigManager:
 
     def get_save_transcription_to_file(self) -> bool:
         return self.config.get("transcription", {}).get("save_to_file", True)
+
+    # Session Getters
+    def get_session_temp_root(self) -> Path:
+        """Get temporary root directory for sessions."""
+        temp_root = self.config.get("sessions", {}).get("temp_root", "/tmp/timemachine")
+        return Path(temp_root)
+
+    def get_default_save_location(self) -> Path:
+        """Get default location for saving sessions."""
+        save_loc = self.config.get("sessions", {}).get("default_save_location")
+        if not save_loc:
+            save_loc = str(Path.home() / "Recordings")
+
+        path = Path(save_loc)
+        # Create directory if it doesn't exist
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def get_auto_cleanup_days(self) -> int:
+        """Get number of days before auto-cleanup of temp sessions."""
+        return self.config.get("sessions", {}).get("auto_cleanup_days", 7)
