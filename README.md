@@ -10,13 +10,7 @@ Omega-13 is a real-time audio recording application that lets you capture the im
 
 > I used to always keep a minidisc recorder in my studio running in a mode where when you pressed record it wrote the last 10 seconds of audio to the disk and then caught up to realtime and kept recording. The recorder died and haven't been able to replace it, so this is a simple jack app to do the same job. It has the advantage that it never clips and can be wired to any part of the jack graph.
 > The idea is that I doodle away with whatever is kicking around in my studio and when I heard an interesting noise, I'd press record and capture it, without having to try and recreate it. :)
-> Steve Harris, creator of [TimeMachine](https://github.com/swh/timemachine)
-
-## 🎬 The Omega-13 Origin
-
-The name "Omega-13" is a tribute to the sci-fi comedy classic *Galaxy Quest*. In the film, the Omega-13 is a mysterious alien device built by the Thermians based on broadcasts of a fictional TV show. While its true purpose remains ambiguous, many fans interpret it as a time-rewind mechanism capable of reversing 13 seconds—making it the perfect metaphor for this retroactive audio recording system.
-
-Just as the Omega-13 let the crew undo the immediate past, this application lets you capture the last 10-13 seconds of audio that *already happened*. By happy coincidence, the original TimeMachine's 10-second buffer + a few seconds of reaction time aligns perfectly with the 13-second window of the Omega-13 device.
+> — Steve Harris, creator of [TimeMachine](https://github.com/swh/timemachine)
 
 > *"It appears to be some sort of weapon... but we have never been able to discover its function."*
 > — Mathesar, Galaxy Quest
@@ -482,7 +476,7 @@ Edit [src/omega13/audio.py](src/omega13/audio.py) to adjust these parameters:
 **Buffer Duration:**
 
 ```python
-BUFFER_DURATION = 10  # seconds of retroactive audio
+BUFFER_DURATION = 13  # seconds of retroactive audio
 ```
 
 **Default Channel Count:**
