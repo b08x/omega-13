@@ -11,6 +11,7 @@ from textual.widgets import Header, Footer, Label, Static
 from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
 from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen
+from .session import SessionManager
 
 # Optional import for transcription
 try:
@@ -45,7 +46,7 @@ class TimeMachineApp(App):
     BINDINGS = [
         Binding("space", "toggle_record", "Record/Stop", priority=True),
         Binding("i", "open_input_selector", "Select Inputs"),
-        Binding("p", "open_directory_selector", "Set Save Path"),
+        Binding("s", "save_session", "Save Session"),
         Binding("t", "manual_transcribe", "Transcribe"),
         Binding("q", "quit", "Quit"),
     ]
@@ -56,15 +57,15 @@ class TimeMachineApp(App):
             with Container(id="audio-pane"):
                 yield Label("TIME MACHINE", classes="title")
                 yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
+                yield Static("Session: New (Unsaved)", id="session-status")
                 yield Static("Inputs: Loading...", id="connection-status")
-                yield Static("Save Path: Loading...", id="path-status")
                 yield Static("\nBuffers filled: ", id="buffer-info")
                 with Vertical(id="meters"):
                     yield Label("Channel 1", id="label-1")
                     yield VUMeter(id="meter-1")
                     yield Label("Channel 2", id="label-2")
                     yield VUMeter(id="meter-2")
-                yield Static("\n[dim]SPACE Capture | I Inputs | P Path | T Transcribe[/dim]", classes="help-text")
+                yield Static("\n[dim]SPACE Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
             
             with Container(id="transcription-pane"):
                 yield TranscriptionDisplay(id="transcription-display")
@@ -73,6 +74,19 @@ class TimeMachineApp(App):
     def on_mount(self):
         try:
             self.config_manager = ConfigManager()
+
+            # Initialize session manager
+            temp_root = self.config_manager.get_session_temp_root()
+            self.session_manager = SessionManager(temp_root=temp_root)
+            self.session_manager.create_session()
+            self._update_session_status()
+
+            # Cleanup old sessions
+            days = self.config_manager.get_auto_cleanup_days()
+            cleaned = self.session_manager.cleanup_old_sessions(days)
+            if cleaned > 0:
+                self.notify(f"Cleaned up {cleaned} old session(s)", severity="information", timeout=2)
+
             saved_ports = self.config_manager.get_input_ports()
             num_channels = len(saved_ports) if saved_ports else DEFAULT_CHANNELS
 
@@ -80,7 +94,6 @@ class TimeMachineApp(App):
             self.engine.start()
 
             self._load_and_connect_saved_inputs()
-            self._update_path_status()
             self._update_meter_visibility()
 
             if TRANSCRIPTION_AVAILABLE:
@@ -99,6 +112,15 @@ class TimeMachineApp(App):
         if hasattr(self, 'engine'):
             self.engine.stop_recording()
             self.engine.stop()
+
+        # Handle unsaved session
+        if hasattr(self, 'session_manager'):
+            if not self.session_manager.is_saved() and self.session_manager.has_recordings():
+                # User will be prompted via action_quit override
+                pass
+            else:
+                # Auto-discard empty or saved sessions
+                self.session_manager.discard_session()
 
     def update_meters(self):
         peaks = self.engine.peaks
@@ -141,31 +163,68 @@ class TimeMachineApp(App):
         txt = f"Inputs: [green]{' | '.join(short_names)}[/green]"
         self.query_one("#connection-status").update(txt)
 
-    def _update_path_status(self):
-        path_str = str(self.engine.save_path)
-        if len(path_str) > 50: path_str = f"...{path_str[-47:]}"
-        self.query_one("#path-status").update(f"Save Path: [cyan]{path_str}[/cyan]")
+    def _update_session_status(self):
+        """Update session status display in UI."""
+        if not hasattr(self, 'session_manager'):
+            return
+
+        session = self.session_manager.get_current_session()
+        if not session:
+            self.query_one("#session-status").update("Session: None")
+            return
+
+        info = session.get_info()
+        status = "[green]Saved[/green]" if info['saved'] else "[yellow]Unsaved[/yellow]"
+        count = info['recording_count']
+
+        if count == 0:
+            text = f"Session: New ({status})"
+        else:
+            text = f"Session: {count} recording(s) - {status}"
+
+        self.query_one("#session-status").update(text)
 
     def action_toggle_record(self):
         status_bar = self.query_one("#status-bar")
         if self.engine.is_recording:
             self.engine.stop_recording()
-            status_bar.update("IDLE - Saved.")
+            status_bar.update("IDLE - Recording saved to session.")
             status_bar.remove_class("status-recording").add_class("status-idle")
-            
+
+            # Register recording with session
+            if hasattr(self, '_current_recording_path'):
+                session = self.session_manager.get_current_session()
+                if session:
+                    session.register_recording(
+                        self._current_recording_path,
+                        duration_seconds=0.0,  # TODO: Calculate actual duration
+                        channels=self.engine.channels,
+                        samplerate=self.engine.samplerate
+                    )
+                    self._update_session_status()
+
             if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
                 if last_file := self._get_last_recording_path():
                     self._start_transcription(last_file)
         else:
-            fname = self.engine.start_recording()
-            if fname:
-                self._current_recording_filename = fname
-                status_bar.update(f"RECORDING... \nFile: {fname}")
+            # Get next recording path from session
+            session = self.session_manager.get_current_session()
+            if not session:
+                self.notify("No active session", severity="error")
+                return
+
+            recording_path = session.get_next_recording_path()
+            result = self.engine.start_recording(recording_path)
+
+            if result:
+                self._current_recording_path = result
+                filename = result.name
+                status_bar.update(f"RECORDING... \nFile: {filename}")
                 status_bar.remove_class("status-idle").add_class("status-recording")
 
     def _get_last_recording_path(self) -> Optional[Path]:
-        if hasattr(self, '_current_recording_filename'):
-            return self.engine.save_path / self._current_recording_filename
+        if hasattr(self, '_current_recording_path'):
+            return self._current_recording_path
         return None
 
     def _start_transcription(self, audio_file: Path):
@@ -222,18 +281,145 @@ class TimeMachineApp(App):
         except Exception as e:
             self.notify(str(e), severity="error")
 
-    def action_open_directory_selector(self):
+    def action_save_session(self):
+        """Save current session to permanent storage."""
         if self.engine.is_recording:
-            self.notify("Cannot change path while recording", severity="warning")
+            self.notify("Stop recording before saving session", severity="warning")
             return
-            
+
+        session = self.session_manager.get_current_session()
+        if not session or len(session.recordings) == 0:
+            self.notify("No recordings to save in this session", severity="warning")
+            return
+
+        if session.saved:
+            self.notify("Session already saved", severity="information")
+            return
+
         def handle(result):
             if result:
-                self.engine.save_path = result
-                self.config_manager.set_save_path(result)
-                self._update_path_status()
-        
-        self.push_screen(DirectorySelectionScreen(self.engine.save_path), handle)
+                success = self.session_manager.save_session(result)
+                if success:
+                    self._update_session_status()
+                    save_loc = session.save_location
+                    self.notify(f"Session saved to: {save_loc}", severity="information", timeout=5)
+                else:
+                    self.notify("Failed to save session", severity="error")
+
+        default_location = self.config_manager.get_default_save_location()
+        self.push_screen(DirectorySelectionScreen(default_location), handle)
+
+    def action_quit(self) -> None:
+        """Override quit action to prompt for save if needed."""
+        # Check if we have unsaved recordings
+        if hasattr(self, 'session_manager'):
+            if not self.session_manager.is_saved() and self.session_manager.has_recordings():
+                self._prompt_save_before_quit()
+                return
+
+        # No unsaved work, quit normally
+        self.exit()
+
+    def _prompt_save_before_quit(self):
+        """Show modal to save, discard, or cancel quit."""
+        from textual.screen import ModalScreen
+        from textual.widgets import Button
+        from textual.containers import Grid
+
+        class SavePromptScreen(ModalScreen):
+            """Modal dialog prompting user to save before quitting."""
+
+            CSS = """
+            SavePromptScreen {
+                align: center middle;
+            }
+
+            #dialog {
+                width: 60;
+                height: 15;
+                border: thick $accent;
+                background: $surface;
+                padding: 2;
+            }
+
+            #question {
+                width: 100%;
+                height: 3;
+                content-align: center middle;
+                text-style: bold;
+            }
+
+            #message {
+                width: 100%;
+                height: 3;
+                content-align: center middle;
+                color: $text-muted;
+            }
+
+            Grid {
+                width: 100%;
+                height: auto;
+                grid-size: 3 1;
+                grid-gutter: 1;
+                margin-top: 1;
+            }
+
+            Button {
+                width: 100%;
+            }
+            """
+
+            def __init__(self, session_manager, config_manager):
+                super().__init__()
+                self.session_manager = session_manager
+                self.config_manager = config_manager
+
+            def compose(self) -> ComposeResult:
+                session = self.session_manager.get_current_session()
+                count = len(session.recordings) if session else 0
+
+                with Container(id="dialog"):
+                    yield Static("Save Session Before Quitting?", id="question")
+                    yield Static(f"You have {count} unsaved recording(s)", id="message")
+                    with Grid():
+                        yield Button("Save", variant="primary", id="save")
+                        yield Button("Discard", variant="error", id="discard")
+                        yield Button("Cancel", id="cancel")
+
+            def on_button_pressed(self, event: Button.Pressed) -> None:
+                button_id = event.button.id
+                if button_id == "save":
+                    self.dismiss("save")
+                elif button_id == "discard":
+                    self.dismiss("discard")
+                else:  # cancel
+                    self.dismiss("cancel")
+
+        def handle_choice(choice: str):
+            if choice == "cancel":
+                return  # Stay in app
+
+            if choice == "discard":
+                self.session_manager.discard_session()
+                self.exit()
+                return
+
+            if choice == "save":
+                # Open directory selector for save location
+                def handle_save_location(location):
+                    if location:
+                        success = self.session_manager.save_session(location)
+                        if success:
+                            self.notify("Session saved successfully", severity="information")
+                        else:
+                            self.notify("Failed to save session", severity="error")
+                    # Exit after save attempt (or if user cancelled directory selection)
+                    self.exit()
+
+                default_location = self.config_manager.get_default_save_location()
+                self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
+
+        self.push_screen(SavePromptScreen(self.session_manager, self.config_manager), handle_choice)
 
 def main():
     app = TimeMachineApp()
