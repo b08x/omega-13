@@ -92,11 +92,12 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     """Modal screen for selecting two JACK input ports."""
     CSS = """
     InputSelectionScreen { align: center middle; }
-    #selection-dialog { width: 70; height: 25; border: thick $accent; background: $surface; padding: 1 2; }
+    #selection-dialog { width: 70; height: 30; border: thick $accent; background: $surface; padding: 1 2; }
     #port-list { height: 15; border: solid $primary; margin: 1 0; background: $surface-lighten-1; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
     #button-row Button { margin: 0 1; }
-    #mode-selection { height: 5; border: solid $primary; margin: 1 0; align: center middle; }
+    #mode-selection { height: auto; min-height: 10; border: solid $primary; margin: 1 0; padding: 1; }
+    #mode-selection Button { width: 100%; margin: 1 0; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm Selection")]
 
