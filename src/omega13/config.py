@@ -29,7 +29,8 @@ class ConfigManager:
                 "enabled": True,
                 "auto_transcribe": True,
                 "model_size": "large-v3-turbo",
-                "save_to_file": True
+                "save_to_file": True,
+                "copy_to_clipboard": False
             },
             "sessions": {
                 "temp_root": "/tmp/omega13",
@@ -105,6 +106,17 @@ class ConfigManager:
 
     def get_save_transcription_to_file(self) -> bool:
         return self.config.get("transcription", {}).get("save_to_file", True)
+
+    def get_copy_to_clipboard(self) -> bool:
+        """Get whether to copy transcription results to clipboard."""
+        return self.config.get("transcription", {}).get("copy_to_clipboard", False)
+
+    def set_copy_to_clipboard(self, enabled: bool) -> None:
+        """Set whether to copy transcription results to clipboard."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["copy_to_clipboard"] = enabled
+        self.save_config(self.config)
 
     # Session Getters
     def get_session_temp_root(self) -> Path:

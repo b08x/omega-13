@@ -6,3 +6,5 @@
 *.venv
 .code-packager-config
 omega-13.json
+omega-13.code-workspace
+*.cache/

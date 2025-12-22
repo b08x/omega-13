@@ -12,6 +12,8 @@ import logging
 import requests
 import json
 
+from .clipboard import copy_to_clipboard
+
 logger = logging.getLogger(__name__)
 
 class TranscriptionStatus(Enum):
@@ -71,12 +73,26 @@ class TranscriptionService:
         self,
         audio_path: Path,
         callback: Callable[[TranscriptionResult], None],
-        progress_callback: Optional[Callable[[float], None]] = None
+        progress_callback: Optional[Callable[[float], None]] = None,
+        copy_to_clipboard_enabled: bool = False,
+        clipboard_error_callback: Optional[Callable[[str], None]] = None
     ) -> threading.Thread:
-        """Start async transcription with proper cleanup support."""
+        """
+        Start async transcription with proper cleanup support.
+
+        Args:
+            audio_path: Path to audio file to transcribe
+            callback: Callback function for transcription result
+            progress_callback: Optional callback for progress updates (0.0 to 1.0)
+            copy_to_clipboard_enabled: Whether to copy result to clipboard
+            clipboard_error_callback: Optional callback for clipboard errors (receives error message)
+
+        Returns:
+            Thread object running the transcription
+        """
         thread = threading.Thread(
             target=self._transcribe_worker,
-            args=(audio_path, callback, progress_callback),
+            args=(audio_path, callback, progress_callback, copy_to_clipboard_enabled, clipboard_error_callback),
             daemon=False,  # Changed from True
             name=f"transcription-{audio_path.stem}"  # Added name for debugging
         )
@@ -94,23 +110,32 @@ class TranscriptionService:
         self,
         audio_path: Path,
         callback: Callable[[TranscriptionResult], None],
-        progress_callback: Optional[Callable[[float], None]]
+        progress_callback: Optional[Callable[[float], None]],
+        copy_to_clipboard_enabled: bool = False,
+        clipboard_error_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             if progress_callback: progress_callback(0.0)
-            
+
             if not audio_path.exists():
                 raise FileNotFoundError(f"File not found: {audio_path}")
 
             if progress_callback: progress_callback(0.1)
-            
+
             transcribed_text, language = self._transcribe_file(audio_path)
-            
+
             if progress_callback: progress_callback(0.9)
 
             output_path = audio_path.with_suffix('.txt')
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(transcribed_text)
+
+            # Copy to clipboard if enabled
+            if copy_to_clipboard_enabled and transcribed_text:
+                success, error_msg = copy_to_clipboard(transcribed_text)
+                if not success and clipboard_error_callback:
+                    # Invoke error callback if clipboard copy failed
+                    clipboard_error_callback(error_msg)
 
             if progress_callback: progress_callback(1.0)
 

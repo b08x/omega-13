@@ -42,6 +42,7 @@ class Omega13App(App):
     .status-loading, .status-processing { color: $text; background: $warning; }
     .status-complete { color: $text; background: $success; }
     .status-error { color: $text; background: $error; }
+    #clipboard-toggle { margin-bottom: 1; padding: 0 1; }
     #transcription-log { height: 100%; border: solid $primary; background: $surface-darken-1; padding: 1; }
     """
 
@@ -73,8 +74,9 @@ class Omega13App(App):
                     yield Label("Channel 2", id="label-2")
                     yield VUMeter(id="meter-2")
                 yield Static("\n[dim]SPACE Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
-            
+
             with Container(id="transcription-pane"):
+                # Note: config_manager will be set after on_mount
                 yield TranscriptionDisplay(id="transcription-display")
         yield Footer()
 
@@ -126,6 +128,14 @@ class Omega13App(App):
         try:
             self.config_manager = ConfigManager()
 
+            # Pass config_manager to TranscriptionDisplay widget
+            transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
+            transcription_display.config_manager = self.config_manager
+            # Re-initialize checkbox state now that config_manager is available
+            if transcription_display.clipboard_checkbox:
+                initial_state = self.config_manager.get_copy_to_clipboard()
+                transcription_display.clipboard_checkbox.value = initial_state
+
             # Initialize session manager
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
@@ -154,7 +164,7 @@ class Omega13App(App):
                 except Exception as e:
                     self.transcription_service = None
                     self.notify(f"Transcription init failed: {e}", severity="warning")
-            
+
             self.set_interval(0.05, self.update_meters)
         except Exception as e:
             self.exit(message=f"Failed to start: {e}")
@@ -315,7 +325,7 @@ class Omega13App(App):
 
     def _start_transcription(self, audio_file: Path):
         if not TRANSCRIPTION_AVAILABLE or not self.transcription_service: return
-        
+
         display = self.query_one("#transcription-display", TranscriptionDisplay)
         # Don't clear here, we want to keep history
         display.status = "processing"
@@ -323,8 +333,18 @@ class Omega13App(App):
 
         def on_complete(result): self.call_from_thread(self._handle_result, result, audio_file)
         def on_progress(p): self.call_from_thread(lambda: setattr(display, 'progress', p))
+        def on_clipboard_error(error_msg): self.call_from_thread(self._handle_clipboard_error, error_msg)
 
-        self.transcription_service.transcribe_async(audio_file, on_complete, on_progress)
+        # Get clipboard configuration
+        copy_enabled = self.config_manager.get_copy_to_clipboard()
+
+        self.transcription_service.transcribe_async(
+            audio_file,
+            on_complete,
+            on_progress,
+            copy_to_clipboard_enabled=copy_enabled,
+            clipboard_error_callback=on_clipboard_error
+        )
 
     def _handle_result(self, result, audio_file):
         display = self.query_one("#transcription-display", TranscriptionDisplay)
@@ -338,6 +358,10 @@ class Omega13App(App):
             display.status = "completed"
         else:
             display.show_error(result.error or "Unknown error")
+
+    def _handle_clipboard_error(self, error_msg: str):
+        """Handle clipboard copy errors with UI notification."""
+        self.notify(f"Clipboard copy failed: {error_msg}", severity="warning", timeout=4)
 
     def action_manual_transcribe(self):
         if last := self._get_last_recording_path():
