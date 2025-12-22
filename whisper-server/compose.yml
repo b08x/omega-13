@@ -4,6 +4,9 @@ services:
   whisper-server:
     image: whisper-server-cuda:latest
     container_name: whisper-server
+    build:
+      context: .
+      dockerfile: Containerfile
     restart: unless-stopped
 
     # Port mapping
@@ -34,10 +37,10 @@ services:
       - "--port"
       - "8080"
       - "-t"
-      - "8"  # Adjust based on CPU cores
-      - "--convert"  # Enable ffmpeg audio conversion
-      - "-nf"  # No temperature fallback (faster, deterministic)
-      - "--print-progress"  # Show progress in logs
+      - "8" # Adjust based on CPU cores
+      - "--convert" # Enable ffmpeg audio conversion
+      - "-nf" # No temperature fallback (faster, deterministic)
+      - "--print-progress" # Show progress in logs
 
     # NVIDIA GPU support (requires nvidia-container-toolkit)
     devices:
@@ -51,7 +54,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 12G  # Adjust based on model size
+          memory: 12G # Adjust based on model size
         reservations:
           memory: 8G
 
@@ -61,7 +64,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s  # Allow time for model loading
+      start_period: 60s # Allow time for model loading
 
     # Logging configuration
     logging:
