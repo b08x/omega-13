@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  whisper-server:
+    image: whisper-server-cuda:latest
+    container_name: whisper-server
+    command:
+      - "-m"
+      - "/home/b08x/LLMOS/whisper.cpp/models/ggml-large-v3-turbo-q5_0.bin"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "-t"
+      - "8" # number of threads
+      - "--convert" # enable audio format conversion with ffmpeg
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${HOME}/LLMOS/whisper.cpp/models:/app/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
