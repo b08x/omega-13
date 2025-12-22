@@ -1,0 +1,9 @@
+{
+  "session_id": "project_rename_omega13",
+  "started_at": "2025-12-22T06:48:24",
+  "objective": "Rename project from timemachine-py to omega-13",
+  "current_phase": "1",
+  "completed_tasks": [],
+  "modified_files": [],
+  "next_action": "Rename package directory src/timemachine/ to src/omega13/"
+}

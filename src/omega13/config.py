@@ -7,11 +7,11 @@ import jack
 ConfigDict = Dict[str, Any]
 
 class ConfigManager:
-    """Manages persistent configuration for TimeMachine."""
+    """Manages persistent configuration for Omega-13."""
 
     def __init__(self, config_path: Path = None):
         if config_path is None:
-            config_dir = Path.home() / ".config" / "timemachine"
+            config_dir = Path.home() / ".config" / "omega13"
             config_dir.mkdir(parents=True, exist_ok=True)
             self.config_path = config_dir / "config.json"
         else:
@@ -32,7 +32,7 @@ class ConfigManager:
                 "save_to_file": True
             },
             "sessions": {
-                "temp_root": "/tmp/timemachine",
+                "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
                 "auto_cleanup_days": 7
             }
@@ -109,7 +109,7 @@ class ConfigManager:
     # Session Getters
     def get_session_temp_root(self) -> Path:
         """Get temporary root directory for sessions."""
-        temp_root = self.config.get("sessions", {}).get("temp_root", "/tmp/timemachine")
+        temp_root = self.config.get("sessions", {}).get("temp_root", "/tmp/omega13")
         return Path(temp_root)
 
     def get_default_save_location(self) -> Path:

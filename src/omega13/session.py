@@ -220,9 +220,9 @@ class SessionManager:
 
         Args:
             temp_root: Root directory for temporary sessions.
-                      Defaults to /tmp/timemachine
+                      Defaults to /tmp/omega13
         """
-        self.temp_root = temp_root or Path("/tmp/timemachine")
+        self.temp_root = temp_root or Path("/tmp/omega13")
         self.temp_root.mkdir(parents=True, exist_ok=True)
         self.current_session: Optional[Session] = None
 
@@ -276,7 +276,7 @@ class SessionManager:
         try:
             # Create timestamped directory name for better organization
             timestamp = self.current_session.created_at.strftime("%Y-%m-%d_%H-%M-%S")
-            session_name = f"timemachine_session_{timestamp}"
+            session_name = f"omega13_session_{timestamp}"
             final_destination = destination / session_name
 
             # Copy entire session directory

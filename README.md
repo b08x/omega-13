@@ -1,4 +1,4 @@
-# TimeMachine-py
+# Omega-13
 
 **Retroactive Audio Recording for JACK with Session Management**
 
@@ -6,11 +6,20 @@
 ![JACK](https://img.shields.io/badge/JACK-Audio-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-TimeMachine is a real-time audio recording application that lets you capture the immediate past. It continuously maintains a 10-second rolling buffer of audio—press a button at any moment to save what just happened, plus everything that follows until you stop recording. Perfect for capturing unexpected moments of brilliance during music production, live performance, or audio experimentation.
+Omega-13 is a real-time audio recording application that lets you capture the immediate past. It continuously maintains a 10-second rolling buffer of audio—press a button at any moment to save what just happened, plus everything that follows until you stop recording. Perfect for capturing unexpected moments of brilliance during music production, live performance, or audio experimentation.
 
 > I used to always keep a minidisc recorder in my studio running in a mode where when you pressed record it wrote the last 10 seconds of audio to the disk and then caught up to realtime and kept recording. The recorder died and haven't been able to replace it, so this is a simple jack app to do the same job. It has the advantage that it never clips and can be wired to any part of the jack graph.
 > The idea is that I doodle away with whatever is kicking around in my studio and when I heard an interesting noise, I'd press record and capture it, without having to try and recreate it. :)
 > Steve Harris, creator of [TimeMachine](https://github.com/swh/timemachine)
+
+## 🎬 The Omega-13 Origin
+
+The name "Omega-13" is a tribute to the sci-fi comedy classic *Galaxy Quest*. In the film, the Omega-13 is a mysterious alien device built by the Thermians based on broadcasts of a fictional TV show. While its true purpose remains ambiguous, many fans interpret it as a time-rewind mechanism capable of reversing 13 seconds—making it the perfect metaphor for this retroactive audio recording system.
+
+Just as the Omega-13 let the crew undo the immediate past, this application lets you capture the last 10-13 seconds of audio that *already happened*. By happy coincidence, the original TimeMachine's 10-second buffer + a few seconds of reaction time aligns perfectly with the 13-second window of the Omega-13 device.
+
+> *"It appears to be some sort of weapon... but we have never been able to discover its function."*
+> — Mathesar, Galaxy Quest
 
 ## ✨ Features
 
@@ -58,8 +67,8 @@ sudo pacman -S jack2 libsndfile
 1. **Clone the repository:**
 
 ```bash
-git clone https://github.com/yourusername/timemachine-py.git
-cd timemachine-py
+git clone https://github.com/yourusername/omega-13.git
+cd omega-13
 ```
 
 2. **Create and activate a virtual environment:**
@@ -85,10 +94,10 @@ pip install -e .
 jackd -d alsa -r 48000 -p 512
 ```
 
-2. **Launch TimeMachine:**
+2. **Launch Omega-13:**
 
 ```bash
-python -m timemachine
+python -m omega13
 ```
 
 3. **Configure your audio input:**
@@ -128,7 +137,7 @@ python -m timemachine
 
 ### Understanding the UI
 
-When you launch TimeMachine, you'll see several key interface elements:
+When you launch Omega-13, you'll see several key interface elements:
 
 ```
 ┌─ Status ───────────────────────────┐
@@ -185,7 +194,7 @@ When you launch TimeMachine, you'll see several key interface elements:
 
 ### Session Workflow
 
-TimeMachine uses a **session-based workflow** to protect your recordings:
+Omega-13 uses a **session-based workflow** to protect your recordings:
 
 ```
 Launch → Create Session → Record → Save Session
@@ -197,7 +206,7 @@ Launch → Create Session → Record → Save Session
 
 - New session created automatically on launch
 - Unique session ID: `session_20251221_143045_a3f7b9c1`
-- Temporary directory: `/tmp/timemachine/<session_id>/`
+- Temporary directory: `/tmp/omega13/<session_id>/`
 
 **2. Recording to Session**
 
@@ -209,7 +218,7 @@ Launch → Create Session → Record → Save Session
 
 - Press `S` to save session permanently
 - Choose destination directory
-- Creates timestamped folder: `timemachine_session_2025-12-21_14-30-45/`
+- Creates timestamped folder: `omega13_session_2025-12-21_14-30-45/`
 - All recordings and metadata copied
 
 **4. Exit Behavior**
@@ -254,7 +263,7 @@ Examples:
 After saving a session, the directory structure looks like this:
 
 ```
-~/Recordings/timemachine_session_2025-12-21_14-30-45/
+~/Recordings/omega13_session_2025-12-21_14-30-45/
 ├── recordings/
 │   ├── 001.wav          # First recording
 │   ├── 002.wav          # Second recording
@@ -281,7 +290,7 @@ After saving a session, the directory structure looks like this:
     }
   ],
   "saved": true,
-  "save_location": "/home/user/Recordings/timemachine_session_2025-12-21_14-30-45"
+  "save_location": "/home/user/Recordings/omega13_session_2025-12-21_14-30-45"
 }
 ```
 
@@ -308,7 +317,7 @@ After saving a session, the directory structure looks like this:
 
 ### The Rolling Buffer Concept
 
-TimeMachine implements a **circular buffer** (ring buffer) that continuously stores the most recent 10 seconds of incoming audio:
+Omega-13 implements a **circular buffer** (ring buffer) that continuously stores the most recent 10 seconds of incoming audio:
 
 1. **Always Listening:** From the moment you launch the app, audio flows into the buffer
 2. **Circular Overwriting:** Old audio data is continuously replaced by new data
@@ -327,7 +336,7 @@ File contains: [-10s to -7s, -7s to -4s, -4s to NOW, NOW to STOP]
 
 ### Session Management System
 
-TimeMachine uses a sophisticated session management system to protect your work:
+Omega-13 uses a sophisticated session management system to protect your work:
 
 **Session Lifecycle:**
 
@@ -336,7 +345,7 @@ TimeMachine uses a sophisticated session management system to protect your work:
    ↓
 2. SessionManager creates new session
    - Generates unique ID
-   - Creates /tmp/timemachine/<session_id>/
+   - Creates /tmp/omega13/<session_id>/
    - Initializes metadata
    ↓
 3. User records multiple times
@@ -361,28 +370,28 @@ TimeMachine uses a sophisticated session management system to protect your work:
 
 ### Architecture Overview
 
-TimeMachine is built with a modular Python package structure:
+Omega-13 is built with a modular Python package structure:
 
-**`ConfigManager`** ([src/timemachine/config.py](src/timemachine/config.py))
+**`ConfigManager`** ([src/omega13/config.py](src/omega13/config.py))
 
-- Loads/saves persistent configuration to `~/.config/timemachine/config.json`
+- Loads/saves persistent configuration to `~/.config/omega13/config.json`
 - Validates selected JACK ports on startup
 - Manages session settings and defaults
 
-**`SessionManager`** ([src/timemachine/session.py](src/timemachine/session.py))
+**`SessionManager`** ([src/omega13/session.py](src/omega13/session.py))
 
 - Creates and manages recording sessions
 - Handles temp directory lifecycle
 - Implements save/discard operations
 - Auto-cleanup of old sessions
 
-**`Session`** ([src/timemachine/session.py](src/timemachine/session.py))
+**`Session`** ([src/omega13/session.py](src/omega13/session.py))
 
 - Represents individual session with metadata
 - Tracks all recordings in session
 - Manages session.json persistence
 
-**`AudioEngine`** ([src/timemachine/audio.py](src/timemachine/audio.py))
+**`AudioEngine`** ([src/omega13/audio.py](src/omega13/audio.py))
 
 - Creates and manages JACK client connection
 - Implements ring buffer with NumPy arrays
@@ -390,7 +399,7 @@ TimeMachine is built with a modular Python package structure:
 - Spawns background thread for file writing
 - Calculates peak levels and dB values for metering
 
-**`TimeMachineApp`** ([src/timemachine/app.py](src/timemachine/app.py))
+**`Omega13App`** ([src/omega13/app.py](src/omega13/app.py))
 
 - Main Textual application managing overall UI
 - Coordinates all widgets and modal screens
@@ -398,7 +407,7 @@ TimeMachine is built with a modular Python package structure:
 - Updates meters at 20 FPS via timer callback
 - Manages session lifecycle and save prompts
 
-**UI Components** ([src/timemachine/ui.py](src/timemachine/ui.py))
+**UI Components** ([src/omega13/ui.py](src/omega13/ui.py))
 
 - `VUMeter` - Reactive widget for level visualization
 - `TranscriptionDisplay` - Shows AI transcription results
@@ -407,7 +416,7 @@ TimeMachine is built with a modular Python package structure:
 
 ### Multi-threading Design
 
-TimeMachine uses a **two-thread architecture**:
+Omega-13 uses a **two-thread architecture**:
 
 1. **Real-time Audio Thread** (JACK callback)
    - Runs in `AudioEngine.process()`
@@ -428,7 +437,7 @@ This design ensures the real-time audio callback never blocks waiting for disk I
 
 ### Configuration File
 
-**Location:** `~/.config/timemachine/config.json`
+**Location:** `~/.config/omega13/config.json`
 
 **Full Schema:**
 
@@ -447,7 +456,7 @@ This design ensures the real-time audio callback never blocks waiting for disk I
     "save_to_file": true
   },
   "sessions": {
-    "temp_root": "/tmp/timemachine",
+    "temp_root": "/tmp/omega13",
     "default_save_location": "/home/user/Recordings",
     "auto_cleanup_days": 7
   }
@@ -456,19 +465,19 @@ This design ensures the real-time audio callback never blocks waiting for disk I
 
 **Session Configuration:**
 
-- `temp_root`: Where temporary sessions are created (default: `/tmp/timemachine`)
+- `temp_root`: Where temporary sessions are created (default: `/tmp/omega13`)
 - `default_save_location`: Default directory for saving sessions (default: `~/Recordings`)
 - `auto_cleanup_days`: Days before auto-cleanup of old temp sessions (default: 7)
 
 **Validation Behavior:**
 
-- On startup, TimeMachine validates that saved ports exist in the current JACK graph
+- On startup, Omega-13 validates that saved ports exist in the current JACK graph
 - If ports are missing (e.g., different audio interface), the input selection dialog auto-opens
 - Session temp directory is created if it doesn't exist
 
 ### Customizable Constants
 
-Edit [src/timemachine/audio.py](src/timemachine/audio.py) to adjust these parameters:
+Edit [src/omega13/audio.py](src/omega13/audio.py) to adjust these parameters:
 
 **Buffer Duration:**
 
@@ -486,7 +495,7 @@ DEFAULT_CHANNELS = 2  # 1=mono, 2=stereo
 
 ### JACK Server Not Running
 
-**Symptom:** TimeMachine exits immediately with error about JACK connection
+**Symptom:** Omega-13 exits immediately with error about JACK connection
 
 **Solution:**
 
@@ -580,7 +589,7 @@ jackd -d alsa -r 48000 -p 1024  # Increased from 512
 3. Ensure JACK connections are established:
 
    ```bash
-   jack_lsp -c | grep TimeMachine
+   jack_lsp -c | grep Omega13
    ```
 
 4. Test audio interface with another application
@@ -602,10 +611,10 @@ jackd -d alsa -r 48000 -p 1024  # Increased from 512
 df -h /tmp
 
 # Manually clean old sessions
-rm -rf /tmp/timemachine/session_*
+rm -rf /tmp/omega13/session_*
 
 # Reduce auto_cleanup_days in config:
-# Edit ~/.config/timemachine/config.json
+# Edit ~/.config/omega13/config.json
 # Set "auto_cleanup_days": 3
 ```
 
@@ -617,13 +626,13 @@ rm -rf /tmp/timemachine/session_*
 
 ```bash
 # Check config directory permissions
-ls -la ~/.config/timemachine/
+ls -la ~/.config/omega13/
 
 # If doesn't exist, create it:
-mkdir -p ~/.config/timemachine
+mkdir -p ~/.config/omega13
 
-# Verify TimeMachine can write there:
-touch ~/.config/timemachine/test && rm ~/.config/timemachine/test
+# Verify Omega-13 can write there:
+touch ~/.config/omega13/test && rm ~/.config/omega13/test
 ```
 
 ## 👨‍💻 Development
@@ -631,9 +640,9 @@ touch ~/.config/timemachine/test && rm ~/.config/timemachine/test
 ### Project Structure
 
 ```
-timemachine-py/
+omega-13/
 ├── src/
-│   └── timemachine/
+│   └── omega13/
 │       ├── __init__.py
 │       ├── __main__.py        # Entry point
 │       ├── app.py             # Main Textual application
@@ -684,16 +693,16 @@ timemachine-py/
 source .venv/bin/activate
 
 # Run from package
-python -m timemachine
+python -m omega13
 
 # Run with Python debugger on crash
-python -i -m timemachine
+python -i -m omega13
 
 # Run with Textual development mode (shows layout inspector)
-textual run --dev src/timemachine/app.py
+textual run --dev src/omega13/app.py
 
 # Run with verbose JACK logging
-JACK_DEFAULT_SERVER=default python -m timemachine
+JACK_DEFAULT_SERVER=default python -m omega13
 ```
 
 ### Testing Workflow
@@ -702,7 +711,7 @@ Manual testing checklist:
 
 **Session Management:**
 
-- [ ] Launch creates new session in /tmp/timemachine
+- [ ] Launch creates new session in /tmp/omega13
 - [ ] Recording creates 001.wav in session temp directory
 - [ ] Multiple recordings numbered sequentially
 - [ ] Save session (S) copies all files to destination
@@ -736,8 +745,8 @@ Manual testing checklist:
 | **Buffer Implementation** | NumPy circular array (10s × sample_rate × channels) |
 | **Thread Model** | 2 threads (real-time audio + background file I/O) |
 | **Audio Format** | WAV PCM, 32-bit float, JACK sample rate, 1-2 channels |
-| **Session Storage** | Temp: `/tmp/timemachine/`, Permanent: User-chosen |
-| **Config Storage** | JSON at `~/.config/timemachine/config.json` |
+| **Session Storage** | Temp: `/tmp/omega13/`, Permanent: User-chosen |
+| **Config Storage** | JSON at `~/.config/omega13/config.json` |
 | **Platform** | Linux (JACK dependency) |
 
 ## 🤝 Contributing
@@ -748,7 +757,7 @@ Contributions are welcome! Here's how you can help:
 
 Open an issue with:
 
-- TimeMachine version / git commit hash
+- Omega-13 version / git commit hash
 - Python version (`python --version`)
 - JACK version (`jackd --version`)
 - Distribution and kernel version
@@ -801,8 +810,8 @@ Inspired by the original [TimeMachine](https://plugin.org.uk/timemachine/) by St
 
 ## 📞 Support
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/timemachine-py/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/timemachine-py/discussions)
+- **Issues:** [GitHub Issues](https://github.com/yourusername/omega-13/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/yourusername/omega-13/discussions)
 - **JACK Help:** [JACK Audio Discord](https://discord.gg/jackaudio) or [Linux Audio Users Mailing List](https://lists.linuxaudio.org/listinfo/linux-audio-user)
 
 ---

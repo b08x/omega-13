@@ -20,7 +20,7 @@ class AudioEngine:
     ) -> None:
         self.buffer_duration = buffer_duration
         self.config_manager = config_manager
-        self.client = jack.Client("TimeMachinePy")
+        self.client = jack.Client("Omega13")
 
         # Setup input ports
         self.input_ports = []

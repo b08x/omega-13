@@ -20,7 +20,7 @@ try:
 except ImportError:
     TRANSCRIPTION_AVAILABLE = False
 
-class TimeMachineApp(App):
+class Omega13App(App):
     CSS = """
     Screen { align: center middle; background: $surface; }
     #app-layout { width: 100%; height: 100%; }
@@ -55,7 +55,7 @@ class TimeMachineApp(App):
         yield Header()
         with Horizontal(id="app-layout"):
             with Container(id="audio-pane"):
-                yield Label("TIME MACHINE", classes="title")
+                yield Label("OMEGA-13", classes="title")
                 yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
                 yield Static("Session: New (Unsaved)", id="session-status")
                 yield Static("Inputs: Loading...", id="connection-status")
@@ -427,5 +427,5 @@ class TimeMachineApp(App):
         self.push_screen(SavePromptScreen(self.session_manager, self.config_manager), handle_choice)
 
 def main():
-    app = TimeMachineApp()
+    app = Omega13App()
     app.run()

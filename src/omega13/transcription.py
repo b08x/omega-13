@@ -1,6 +1,6 @@
 """
 Audio transcription module using whisper-server HTTP API.
-Refactored to be part of the timemachine package.
+Refactored to be part of the omega13 package.
 """
 
 from pathlib import Path
