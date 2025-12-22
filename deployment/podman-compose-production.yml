@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  whisper-server:
+    image: whisper-server-cuda:latest
+    container_name: whisper-server
+    restart: unless-stopped
+
+    # Port mapping
+    ports:
+      - "8080:8080"
+
+    # Volume mounts
+    volumes:
+      # Models directory (read-only) - :Z for SELinux context
+      - ${HOME}/LLMOS/whisper.cpp/models:/app/models:ro,Z
+      # Optional: Mount recordings directory for direct access
+      - ${HOME}/Notebooks:/recordings:ro,Z
+
+    # Environment variables
+    environment:
+      - LD_LIBRARY_PATH=/app/lib:/usr/local/cuda/lib64
+      - WHISPER_MODEL=/app/models/ggml-large-v3-turbo-q5_0.bin
+      - WHISPER_THREADS=8
+      - WHISPER_HOST=0.0.0.0
+      - WHISPER_PORT=8080
+
+    # Override default command if needed
+    command:
+      - "-m"
+      - "/app/models/ggml-large-v3-turbo-q5_0.bin"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "-t"
+      - "8"  # Adjust based on CPU cores
+      - "--convert"  # Enable ffmpeg audio conversion
+      - "-nf"  # No temperature fallback (faster, deterministic)
+      - "--print-progress"  # Show progress in logs
+
+    # NVIDIA GPU support (requires nvidia-container-toolkit)
+    devices:
+      - nvidia.com/gpu=all
+
+    # Security options for rootless GPU access
+    security_opt:
+      - label=disable
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 12G  # Adjust based on model size
+        reservations:
+          memory: 8G
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Allow time for model loading
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

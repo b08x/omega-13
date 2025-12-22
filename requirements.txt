@@ -1,4 +1,0 @@
-textual>=0.70.0
-JACK-Client>=0.5.4
-numpy>=1.24.0
-soundfile>=0.12.1
