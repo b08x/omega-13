@@ -231,7 +231,7 @@ class TimeMachineApp(App):
         if not TRANSCRIPTION_AVAILABLE or not self.transcription_service: return
         
         display = self.query_one("#transcription-display", TranscriptionDisplay)
-        display.clear()
+        # Don't clear here, we want to keep history
         display.status = "processing"
         display.progress = 0.0
 
@@ -243,7 +243,12 @@ class TimeMachineApp(App):
     def _handle_result(self, result, audio_file):
         display = self.query_one("#transcription-display", TranscriptionDisplay)
         if result.status == TranscriptionStatus.COMPLETED:
-            display.update_text(result.text)
+            session = self.session_manager.get_current_session()
+            if session:
+                session.add_transcription(result.text)
+                display.update_buffer(session.transcriptions)
+            else:
+                display.update_text(result.text)
             display.status = "completed"
         else:
             display.show_error(result.error or "Unknown error")
