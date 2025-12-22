@@ -71,12 +71,18 @@ class TranscriptionDisplay(Static):
             self.status_label.update(f"Transcribing... {int(new_progress * 100)}%")
 
     def update_text(self, text: str):
-        self.text_log.clear()
+        """Append a single transcription to the log."""
         self.text_log.write(text)
+
+    def update_buffer(self, transcriptions: list[str]):
+        """Update the log with the full session buffer."""
+        self.text_log.clear()
+        for text in transcriptions:
+            self.text_log.write(text)
+            self.text_log.write("") # Add spacing between transcriptions
 
     def show_error(self, error_message: str):
         self.status = "error"
-        self.text_log.clear()
         self.text_log.write(f"[red]Error:[/red] {error_message}")
 
     def clear(self):

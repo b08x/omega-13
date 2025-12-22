@@ -71,6 +71,7 @@ class Session:
         self.session_dir = session_dir
         self.created_at = created_at or datetime.now()
         self.recordings: List[SessionRecording] = []
+        self.transcriptions: List[str] = []
         self.saved = False
         self.save_location: Optional[Path] = None
 
@@ -108,6 +109,47 @@ class Session:
         self.recordings.append(recording)
         self.save_metadata()
 
+    def add_transcription(self, text: str) -> None:
+        """
+        Add a transcription to the session with overlap deduplication.
+        
+        Compares the new text with the previous transcriptions to find the
+        longest word-based suffix-prefix overlap and strips it.
+        """
+        if not text:
+            return
+
+        # Canonicalize text (strip whitespace)
+        new_text = text.strip()
+        if not new_text:
+            return
+
+        # If no history, just add it
+        if not self.transcriptions:
+            self.transcriptions.append(new_text)
+            self.save_metadata()
+            return
+
+        # Join the last few transcriptions to check for overlap
+        # Using the last 5 transcriptions or ~500 words should be enough context
+        history_context = " ".join(self.transcriptions[-5:]).split()
+        new_words = new_text.split()
+
+        # Find the longest suffix of history that matches the prefix of new_words
+        max_overlap = 0
+        max_search = min(len(history_context), len(new_words))
+        
+        for i in range(1, max_search + 1):
+            if history_context[-i:] == new_words[:i]:
+                max_overlap = i
+
+        # Extract only the unique part
+        unique_segment = " ".join(new_words[max_overlap:])
+        
+        if unique_segment:
+            self.transcriptions.append(unique_segment)
+            self.save_metadata()
+
     def get_metadata_path(self) -> Path:
         """Get path to session metadata file."""
         return self.session_dir / "session.json"
@@ -118,6 +160,7 @@ class Session:
             "session_id": self.session_id,
             "created_at": self.created_at.isoformat(),
             "recordings": [r.to_dict() for r in self.recordings],
+            "transcriptions": self.transcriptions,
             "saved": self.saved,
             "save_location": str(self.save_location) if self.save_location else None
         }
@@ -148,6 +191,7 @@ class Session:
         session.recordings = [
             SessionRecording.from_dict(r) for r in data.get("recordings", [])
         ]
+        session.transcriptions = data.get("transcriptions", [])
         session.saved = data.get("saved", False)
 
         save_loc = data.get("save_location")

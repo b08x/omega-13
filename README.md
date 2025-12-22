@@ -8,6 +8,10 @@
 
 TimeMachine is a real-time audio recording application that lets you capture the immediate past. It continuously maintains a 10-second rolling buffer of audio—press a button at any moment to save what just happened, plus everything that follows until you stop recording. Perfect for capturing unexpected moments of brilliance during music production, live performance, or audio experimentation.
 
+> I used to always keep a minidisc recorder in my studio running in a mode where when you pressed record it wrote the last 10 seconds of audio to the disk and then caught up to realtime and kept recording. The recorder died and haven't been able to replace it, so this is a simple jack app to do the same job. It has the advantage that it never clips and can be wired to any part of the jack graph.
+> The idea is that I doodle away with whatever is kicking around in my studio and when I heard an interesting noise, I'd press record and capture it, without having to try and recreate it. :)
+> Steve Harris, creator of [TimeMachine](https://github.com/swh/timemachine)
+
 ## ✨ Features
 
 - **🕐 Retroactive Recording** - Always recording the last 10 seconds in memory, ready to save instantly
@@ -150,26 +154,31 @@ When you launch TimeMachine, you'll see several key interface elements:
 ```
 
 **Status Bar:**
+
 - Shows current recording state (RECORDING/IDLE)
 - Updates in real-time
 
 **Session Status:**
+
 - Shows number of recordings in current session
 - Indicates saved/unsaved state
 - Updated after each recording
 
 **VU Meters:**
+
 - Visual bar graphs showing audio levels
 - Numeric dB values for precise monitoring
 - Color-coded: Green (safe), Yellow (moderate), Red (clipping)
 - Updates 20 times per second for responsive feedback
 
 **Connection Status:**
+
 - Displays currently selected JACK input ports
 - Shows channel routing (mono or stereo)
 - Press `I` to reconfigure
 
 **Buffer Fill Indicator:**
+
 - Shows pre-record buffer status
 - Reaches 100% after 10 seconds of runtime
 - Recording before 100% includes whatever buffer has accumulated
@@ -185,22 +194,26 @@ Launch → Create Session → Record → Save Session
 ```
 
 **1. Session Creation (Automatic)**
+
 - New session created automatically on launch
 - Unique session ID: `session_20251221_143045_a3f7b9c1`
 - Temporary directory: `/tmp/timemachine/<session_id>/`
 
 **2. Recording to Session**
+
 - Each recording saved to session temp directory
 - Sequential naming: `001.wav`, `002.wav`, `003.wav`, etc.
 - Session metadata tracked in `session.json`
 
 **3. Saving Session**
+
 - Press `S` to save session permanently
 - Choose destination directory
 - Creates timestamped folder: `timemachine_session_2025-12-21_14-30-45/`
 - All recordings and metadata copied
 
 **4. Exit Behavior**
+
 - If session saved or empty: Clean exit
 - If unsaved recordings exist: Prompt appears
   - **Save** - Choose location and save
@@ -212,10 +225,12 @@ Launch → Create Session → Record → Save Session
 When you press `I`, you'll go through a two-step process:
 
 **Step 1: Channel Mode Selection**
+
 - **Mono**: Records a single channel from one JACK output port
 - **Stereo**: Records two channels from two separate JACK output ports
 
 **Step 2: Port Selection**
+
 - Browse available JACK output ports (audio sources)
 - Common ports include:
   - `system:capture_X` - Physical audio interface inputs
@@ -251,6 +266,7 @@ After saving a session, the directory structure looks like this:
 ```
 
 **session.json Example:**
+
 ```json
 {
   "session_id": "session_20251221_143045_a3f7b9c1",
@@ -277,11 +293,13 @@ After saving a session, the directory structure looks like this:
 **Bit Depth:** 32-bit float (preserves full dynamic range)
 
 **Sequential Naming:**
+
 - First recording: `001.wav`
 - Second recording: `002.wav`
 - And so on...
 
 **Why Sequential Numbers?**
+
 - Simpler than timestamps within a session
 - Clear recording order
 - Session metadata contains actual timestamps
@@ -336,6 +354,7 @@ TimeMachine uses a sophisticated session management system to protect your work:
 ```
 
 **Automatic Cleanup:**
+
 - On launch, old temp sessions (>7 days) are automatically removed
 - Prevents /tmp directory from filling up
 - Configurable via `auto_cleanup_days` setting
@@ -345,22 +364,26 @@ TimeMachine uses a sophisticated session management system to protect your work:
 TimeMachine is built with a modular Python package structure:
 
 **`ConfigManager`** ([src/timemachine/config.py](src/timemachine/config.py))
+
 - Loads/saves persistent configuration to `~/.config/timemachine/config.json`
 - Validates selected JACK ports on startup
 - Manages session settings and defaults
 
 **`SessionManager`** ([src/timemachine/session.py](src/timemachine/session.py))
+
 - Creates and manages recording sessions
 - Handles temp directory lifecycle
 - Implements save/discard operations
 - Auto-cleanup of old sessions
 
 **`Session`** ([src/timemachine/session.py](src/timemachine/session.py))
+
 - Represents individual session with metadata
 - Tracks all recordings in session
 - Manages session.json persistence
 
 **`AudioEngine`** ([src/timemachine/audio.py](src/timemachine/audio.py))
+
 - Creates and manages JACK client connection
 - Implements ring buffer with NumPy arrays
 - Processes audio in real-time callback
@@ -368,6 +391,7 @@ TimeMachine is built with a modular Python package structure:
 - Calculates peak levels and dB values for metering
 
 **`TimeMachineApp`** ([src/timemachine/app.py](src/timemachine/app.py))
+
 - Main Textual application managing overall UI
 - Coordinates all widgets and modal screens
 - Handles keybindings and application lifecycle
@@ -375,6 +399,7 @@ TimeMachine is built with a modular Python package structure:
 - Manages session lifecycle and save prompts
 
 **UI Components** ([src/timemachine/ui.py](src/timemachine/ui.py))
+
 - `VUMeter` - Reactive widget for level visualization
 - `TranscriptionDisplay` - Shows AI transcription results
 - `InputSelectionScreen` - Modal for port selection
@@ -481,6 +506,7 @@ qjackctl
 **Symptom:** Input selection dialog shows empty list
 
 **Causes:**
+
 1. Audio interface not connected
 2. JACK not detecting hardware
 3. No other JACK applications running (in "output ports" view)
@@ -523,6 +549,7 @@ ulimit -r  # Should return non-zero value
 **Symptom:** Crackling, pops, or gaps in recordings
 
 **Causes:**
+
 - JACK buffer too small
 - System under heavy load
 - USB audio interface issues
@@ -551,9 +578,11 @@ jackd -d alsa -r 48000 -p 1024  # Increased from 512
 1. Check VU meters are showing signal before recording
 2. Verify correct ports selected with `I` key
 3. Ensure JACK connections are established:
+
    ```bash
    jack_lsp -c | grep TimeMachine
    ```
+
 4. Test audio interface with another application
 5. Check if other JACK apps can receive audio from same source
 
@@ -562,6 +591,7 @@ jackd -d alsa -r 48000 -p 1024  # Increased from 512
 **Symptom:** "Disk full" errors when recording
 
 **Causes:**
+
 - /tmp partition full
 - Many old unsaved sessions
 
@@ -671,6 +701,7 @@ JACK_DEFAULT_SERVER=default python -m timemachine
 Manual testing checklist:
 
 **Session Management:**
+
 - [ ] Launch creates new session in /tmp/timemachine
 - [ ] Recording creates 001.wav in session temp directory
 - [ ] Multiple recordings numbered sequentially
@@ -681,6 +712,7 @@ Manual testing checklist:
 - [ ] Auto-cleanup removes old sessions
 
 **Audio Recording:**
+
 - [ ] Launch with JACK server stopped (should fail gracefully)
 - [ ] Launch with no audio ports available
 - [ ] Switch between mono and stereo modes
@@ -689,6 +721,7 @@ Manual testing checklist:
 - [ ] Record with buffer full
 
 **Configuration:**
+
 - [ ] Restart with saved configuration (should restore ports)
 - [ ] Restart with unavailable ports in config (should prompt re-selection)
 
