@@ -7,7 +7,7 @@ import soundfile as sf
 from typing import Optional
 from .config import ConfigManager
 
-BUFFER_DURATION = 10
+BUFFER_DURATION = 13
 DEFAULT_CHANNELS = 2
 
 class AudioEngine:
