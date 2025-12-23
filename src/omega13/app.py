@@ -7,7 +7,7 @@ from typing import Optional
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Label, Static
+from textual.widgets import Header, Footer, Label, Static, Checkbox
 
 # Import refactored modules
 from .config import ConfigManager
@@ -26,8 +26,13 @@ class Omega13App(App):
     CSS = """
     Screen { align: center middle; background: $surface; }
     #app-layout { width: 100%; height: 100%; }
-    #audio-pane { width: 50%; border: solid $accent; padding: 1 2; background: $surface-lighten-1; }
-    #transcription-pane { width: 50%; border: solid $accent; padding: 1 2; background: $surface-lighten-1; margin-left: 1; }
+    
+    #left-pane { width: 40%; height: 100%; border: solid $accent; margin-right: 1; }
+    #audio-controls { height: 75%; padding: 1 2; background: $surface-lighten-1; border-bottom: solid $accent; }
+    #transcription-controls { height: 25%; padding: 1 2; background: $surface-darken-1; }
+    
+    #transcription-pane { width: 60%; height: 100%; border: solid $accent; padding: 1 2; background: $surface-lighten-1; }
+    
     .title { text-align: center; text-style: bold; margin-bottom: 1; }
     .status-idle { color: $text; background: $success; padding: 1; text-align: center; text-style: bold; }
     .status-recording { color: $text; background: $error; padding: 1; text-align: center; text-style: bold; }
@@ -36,6 +41,7 @@ class Omega13App(App):
     #meters { height: 5; margin-top: 1; border: heavy $primary; }
     .help-text { text-align: center; width: 100%; margin-top: 1; }
     Label { width: 100%; }
+    
     /* UI Imports CSS */
     .transcription-title { text-align: center; text-style: bold; margin-bottom: 1; color: $accent; }
     #transcription-status { text-align: center; padding: 1; margin-bottom: 1; border: solid $primary; }
@@ -43,7 +49,7 @@ class Omega13App(App):
     .status-complete { color: $text; background: $success; }
     .status-error { color: $text; background: $error; }
     #clipboard-toggle { margin-bottom: 1; padding: 0 1; }
-    #transcription-log { height: 100%; border: solid $primary; background: $surface-darken-1; padding: 1; }
+    #transcription-log { height: 1fr; border: solid $primary; background: $surface-darken-1; padding: 1; }
     """
 
     BINDINGS = [
@@ -62,18 +68,24 @@ class Omega13App(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="app-layout"):
-            with Container(id="audio-pane"):
-                yield Label("OMEGA-13", classes="title")
-                yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
-                yield Static("Session: New (Unsaved)", id="session-status")
-                yield Static("Inputs: Loading...", id="connection-status")
-                yield Static("\nBuffers filled: ", id="buffer-info")
-                with Vertical(id="meters"):
-                    yield Label("Channel 1", id="label-1")
-                    yield VUMeter(id="meter-1")
-                    yield Label("Channel 2", id="label-2")
-                    yield VUMeter(id="meter-2")
-                yield Static("\n[dim]SPACE Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
+            with Vertical(id="left-pane"):
+                with Vertical(id="audio-controls"):
+                    yield Label("OMEGA-13", classes="title")
+                    yield Static("IDLE - Ready to Capture", id="status-bar", classes="status-idle")
+                    yield Static("Session: New (Unsaved)", id="session-status")
+                    yield Static("Inputs: Loading...", id="connection-status")
+                    yield Static("\nBuffers filled: ", id="buffer-info")
+                    with Vertical(id="meters"):
+                        yield Label("Channel 1", id="label-1")
+                        yield VUMeter(id="meter-1")
+                        yield Label("Channel 2", id="label-2")
+                        yield VUMeter(id="meter-2")
+                    yield Static("\n[dim]SPACE Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
+
+                with Vertical(id="transcription-controls"):
+                    yield Label("Transcription Status", classes="transcription-title")
+                    yield Static("Ready", id="transcription-status", classes="status-idle")
+                    yield Checkbox("Copy to clipboard", id="clipboard-toggle", classes="clipboard-checkbox")
 
             with Container(id="transcription-pane"):
                 # Note: config_manager will be set after on_mount
@@ -279,6 +291,14 @@ class Omega13App(App):
             text = f"Session: {count} recording(s) - {status}"
 
         self.query_one("#session-status").update(text)
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        """Handle clipboard toggle state changes."""
+        if event.checkbox.id == "clipboard-toggle":
+            if hasattr(self, 'config_manager'):
+                self.config_manager.set_copy_to_clipboard(event.value)
+                status = "enabled" if event.value else "disabled"
+                self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
 
     def action_toggle_record(self):
         status_bar = self.query_one("#status-bar")

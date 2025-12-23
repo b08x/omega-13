@@ -28,7 +28,7 @@ class SessionRecording:
         timestamp: datetime,
         duration_seconds: float = 0.0,
         channels: int = 2,
-        samplerate: int = 48000
+        samplerate: int = 16000
     ):
         self.filename = filename
         self.timestamp = timestamp
@@ -54,7 +54,7 @@ class SessionRecording:
             timestamp=datetime.fromisoformat(data["timestamp"]),
             duration_seconds=data.get("duration_seconds", 0.0),
             channels=data.get("channels", 2),
-            samplerate=data.get("samplerate", 48000)
+            samplerate=data.get("samplerate", 16000)
         )
 
 
@@ -96,7 +96,7 @@ class Session:
         filepath: Path,
         duration_seconds: float = 0.0,
         channels: int = 2,
-        samplerate: int = 48000
+        samplerate: int = 16000
     ) -> None:
         """Register a completed recording in the session."""
         recording = SessionRecording(

@@ -47,14 +47,13 @@ class TranscriptionDisplay(Static):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("Transcription", classes="transcription-title")
-            yield Static("Ready", id="transcription-status", classes="status-idle")
-            yield Checkbox("Copy to clipboard", id="clipboard-toggle", classes="clipboard-checkbox")
             yield RichLog(id="transcription-log", wrap=True, highlight=True)
 
     def on_mount(self):
         self.text_log = self.query_one("#transcription-log", RichLog)
-        self.status_label = self.query_one("#transcription-status", Static)
-        self.clipboard_checkbox = self.query_one("#clipboard-toggle", Checkbox)
+        # These are now external to this widget, queried from the app
+        self.status_label = self.app.query_one("#transcription-status", Static)
+        self.clipboard_checkbox = self.app.query_one("#clipboard-toggle", Checkbox)
         self.text_log.max_lines = 1000
 
         # Initialize checkbox state from config
@@ -62,14 +61,6 @@ class TranscriptionDisplay(Static):
             initial_state = self.config_manager.get_copy_to_clipboard()
             self.clipboard_checkbox.value = initial_state
 
-    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        """Handle clipboard toggle state changes."""
-        if event.checkbox.id == "clipboard-toggle" and self.config_manager:
-            self.config_manager.set_copy_to_clipboard(event.value)
-            # Notify user of state change
-            status = "enabled" if event.value else "disabled"
-            if hasattr(self.app, 'notify'):
-                self.app.notify(f"Clipboard copy {status}", severity="information", timeout=2)
 
     def watch_status(self, new_status: str) -> None:
         status_map = {
