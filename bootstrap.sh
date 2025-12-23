@@ -15,19 +15,19 @@ NC='\033[0m' # No Color
 # --- Helper Functions ---
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} "
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} "
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} "
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} "
 }
 
 # --- 1. Detect Package Manager ---
@@ -132,7 +132,50 @@ setup_project() {
     log_success "Python environment ready."
 }
 
-# --- 5. Whisper Server Setup (Optional) ---
+# --- 5. Build Whisper Image ---
+build_whisper_image() {
+    log_info "Building whisper-server CUDA image."
+
+    # Configuration
+    local IMAGE_NAME="whisper-server-cuda"
+    local IMAGE_TAG="latest"
+    local FULL_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
+
+    # Build arguments
+    local WHISPER_VERSION="${WHISPER_VERSION:-master}"
+    # Default: support RTX 20xx/30xx/40xx, A100, H100
+    # Customize with: CUDA_ARCHITECTURES="86" ./bootstrap.sh
+    local CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-75;80;86;89;90}"
+
+    echo ""
+    log_info "Build Configuration:"
+    echo "  Image:              ${FULL_IMAGE}"
+    echo "  Whisper version:      ${WHISPER_VERSION}"
+    echo "  CUDA architectures:   ${CUDA_ARCHITECTURES}"
+    echo ""
+    log_info "Reference for CUDA architectures:"
+    echo "  75: RTX 20xx (Turing)   80: A100 (Ampere)"
+    echo "  86: RTX 30xx (Ampere)   89: RTX 40xx (Ada)"
+    echo "  90: H100 (Hopper)"
+    echo ""
+
+    # Build the image
+    log_info "Starting build (this may take a while)..."
+    podman build \
+        --tag "${FULL_IMAGE}" \
+        --build-arg WHISPER_VERSION="${WHISPER_VERSION}" \
+        --build-arg CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+        --file Containerfile \
+        .
+    
+    log_success "Image '${FULL_IMAGE}' built successfully."
+    echo ""
+    log_info "To run the server, use:"
+    log_info "  podman-compose up -d"
+
+}
+
+# --- 6. Whisper Server Setup (Optional) ---
 
 setup_whisper() {
     echo ""
@@ -140,30 +183,15 @@ setup_whisper() {
     read -p "Do you want to build the CUDA-enabled Whisper Server image now? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if [ -d "whisper-server" ]; then
-            cd whisper-server
-            
-            # Check for NVIDIA drivers
-            if command -v nvidia-smi >/dev/null 2>&1; then
-                log_info "NVIDIA GPU detected."
-            else
-                log_warn "NVIDIA GPU not detected. The container requires NVIDIA drivers for CUDA support."
-            fi
-
-            log_info "Building container image (this may take a while)..."
-            if [ -f "./build-whisper-image.sh" ]; then
-                chmod +x ./build-whisper-image.sh
-                ./build-whisper-image.sh
-            else
-                podman build -t whisper-server-cuda:latest -f Containerfile .
-            fi
-            
-            cd ..
-            log_success "Whisper server image built."
-            log_info "You can start the server later with: podman-compose -f whisper-server/compose.yml up -d"
+        # Check for NVIDIA drivers
+        if command -v nvidia-smi >/dev/null 2>&1; then
+            log_info "NVIDIA GPU detected."
         else
-            log_warn "whisper-server directory not found. Skipping."
+            log_warn "NVIDIA GPU not detected. The container may require NVIDIA drivers for CUDA support."
         fi
+
+        build_whisper_image
+        
     else
         log_info "Skipping Whisper Server build."
     fi
