@@ -86,7 +86,7 @@ class Omega13App(App):
                         yield VUMeter(id="meter-1")
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
-                    yield Static("\n[dim]REC Key to Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
@@ -142,6 +142,13 @@ class Omega13App(App):
 
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
+            
+            # Update help text with configured hotkey
+            hotkey = self.config_manager.get_global_hotkey()
+            formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
+            
+            help_text = self.query_one("#help-text", Static)
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | S Save | T Transcribe[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
