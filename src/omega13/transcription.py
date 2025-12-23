@@ -4,7 +4,7 @@ Refactored to be part of the omega13 package.
 """
 
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from dataclasses import dataclass
 from enum import Enum
 import threading
@@ -37,11 +37,13 @@ class TranscriptionService:
         self,
         server_url: str = "http://localhost:8080",
         inference_path: str = "/inference",
-        timeout: int = 600
+        timeout: int = 600,
+        notifier: Optional[Any] = None
     ):
         self.server_url = server_url.rstrip('/')
         self.inference_path = inference_path
         self.timeout = timeout
+        self.notifier = notifier
         self.endpoint = f"{self.server_url}{self.inference_path}"
         self.active_threads: list[threading.Thread] = []
         self._lock = threading.Lock()
@@ -145,8 +147,15 @@ class TranscriptionService:
                 language=language
             ))
 
+            if self.notifier:
+                preview = transcribed_text[:50] + "..." if len(transcribed_text) > 50 else transcribed_text
+                self.notifier.notify("Transcription Complete", f"\"{preview}\"")
+
         except Exception as e:
             logger.exception("Transcription failed")
+            if self.notifier:
+                self.notifier.notify("Transcription Failed", str(e), urgency="critical")
+
             callback(TranscriptionResult(
                 text="",
                 status=TranscriptionStatus.ERROR,
