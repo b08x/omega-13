@@ -427,8 +427,16 @@ class Omega13App(App):
             self.notify("No recordings to save in this session", severity="warning")
             return
 
-        if session.saved:
-            self.notify("Session already saved", severity="information")
+        if session.saved and session.save_location:
+            # Session was already saved, update the existing location (snapshot)
+            # save_session expects the parent directory of the session folder
+            parent_dir = session.save_location.parent
+            success = self.session_manager.save_session(parent_dir)
+            if success:
+                self._update_session_status()
+                self.notify(f"Session snapshot updated: {session.save_location.name}", severity="information", timeout=5)
+            else:
+                self.notify("Failed to update session snapshot", severity="error")
             return
 
         def handle(result):

@@ -283,7 +283,7 @@ class SessionManager:
             shutil.copytree(
                 self.current_session.session_dir,
                 final_destination,
-                dirs_exist_ok=False
+                dirs_exist_ok=True
             )
 
             # Update session metadata
