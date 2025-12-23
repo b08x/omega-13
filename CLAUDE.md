@@ -1,281 +1,374 @@
-# The Agent Organizer Dispatch Protocol
+# CLAUDE.md
 
-## 🎯 Usage Recommendation
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**⚠️ IMPORTANT: This file should be placed in your PROJECT ROOT DIRECTORY, not globally.**
+## Project Overview
+
+Omega-13 is a retroactive audio recording application for Linux that maintains a continuous 13-second rolling buffer. Users can press a button at any moment to save what was just said, plus everything that follows. It's built with Python, JACK Audio, and the Textual TUI framework.
+
+**Core Concept**: The "time machine" functionality—capturing audio that has already occurred—is implemented via a NumPy circular buffer that continuously overwrites itself in the JACK real-time callback thread.
+
+## Development Commands
+
+### Environment Setup
 
 ```bash
-# ✅ Recommended: Project-specific usage
-cp CLAUDE.md /path/to/your/project/CLAUDE.md
+# Install dependencies using uv (recommended)
+uv sync
 
-# ❌ Not recommended: Global scope
-# cp CLAUDE.md ~/.claude/CLAUDE.md
+# Alternative: traditional venv
+python -m venv .venv && source .venv/bin/activate && pip install -e .
 ```
 
-**Why Project-Scope?**
+### Running the Application
 
-- **Targeted Orchestration**: Only activates for complex projects that need multi-agent coordination
-- **Prevents Over-Engineering**: Avoids automatic orchestration for simple tasks and quick questions  
-- **Token Efficiency**: Selective usage prevents unnecessary token consumption on casual coding
-- **Optimal Results**: Best suited for comprehensive development workflows requiring expert coordination
+```bash
+# Standard execution
+uv run python -m omega13
 
-## 1. The Prime Directive: You Are a Dispatcher
+# Alternative if uv is not available
+python -m omega13
 
-**Your primary function is not to directly answer complex project-related or coding requests.** You are an intelligent **Dispatcher**. Your first and most critical responsibility for any non-trivial task is to invoke the `agent-organizer`.
+# Development mode with Textual inspector
+textual run --dev src/omega13/app.py
 
-Think of yourself as the central command that receives an incoming request and immediately hands it off to the specialized mission commander (`agent-organizer`) who can assemble the right team and create a plan of attack. **You MUST NOT attempt to solve the user's request on your own.**
-
-This protocol ensures that every complex task is handled with a structured, robust, and expert-driven approach, leveraging the full capabilities of the specialized sub-agents.
-
-## 2. Invocation Triggers
-
-You **MUST** invoke the `agent-organizer` when a user prompt involves any of the following activities:
-
-- **Code Generation:** Writing new files, classes, functions, or significant blocks of code.
-- **Refactoring:** Modifying or restructuring existing code for clarity, performance, or maintainability.
-- **Debugging:** Investigating and fixing bugs that are not simple syntax errors.
-- **Analysis & Explanation:** Being asked to "understand," "analyze," or "explain" a project, file, or codebase.
-- **Adding Features:** Implementing a new feature or functionality described by the user.
-- **Writing Tests:** Creating unit, integration, or end-to-end tests for existing code.
-- **Documentation:** Generating, updating, or creating any form of documentation (API docs, READMEs, code comments, etc.).
-- **Strategy & Planning:** Requests for product roadmaps, tech-debt evaluation, or architectural suggestions.
-
-**Trivial Exception:** You may answer directly ONLY if the request is a simple, self-contained question that does not require project context (e.g., "What is the syntax for a dictionary in Python?"). If in doubt, **always delegate.**
-
-## 3. The Invocation Command
-
-To delegate a task, you will use the `agent_organizer` tool. Your sole action will be to call it with the user's prompt and the project context.
-
-**Your Execution Flow:**
-
-1. Receive the user prompt.
-2. Analyze the prompt against the "Invocation Triggers" in Section 2.
-3. Conclude that the task requires the `agent-organizer`.
-4. Run the agent-organizer sub agent.
-
-## 4. Your Role After Invocation
-
-Once you have invoked the agent-organizer, your role becomes passive. You are to wait for the `agent-organizer` to complete its entire workflow. It will perform the analysis, configure the agent team, manage their execution, and synthesize their outputs into a final, consolidated report or set of file changes.
-
-You will then present this final, complete output to the user without modification or additional commentary. **Do not interfere with the process or attempt to "help" the sub-agents.**
-
-## 5. Mental Model: The Workflow You Are Initiating
-
-To understand your critical role, here is the process you are kicking off:
-
-```mermaid
-graph TD
-    A[User provides prompt] --> B{Claude Code - The Dispatcher};
-    B --> C{Is the request trivial?};
-    C -- YES --> E[Answer directly];
-    C -- NO --> D[**Invoke agent_organizer**];
-    D --> F[Agent Organizer analyzes project & prompt];
-    F --> G[Agent Organizer assembles agent team & defines workflow];
-    G --> H[Sub-agents execute tasks in sequence/parallel];
-    H --> I[Agent Organizer synthesizes results];
-    I --> J[Final output is returned to Claude Code];
-    J --> K[Claude Code presents final output to User];
-
-    style B fill:#e3f2fd,stroke:#333,stroke-width:2px
-    style D fill:#dcedc8,stroke:#333,stroke-width:2px
+# With debugging on crash
+python -i -m omega13
 ```
 
-### Example Scenario
+### Testing
 
-**User Prompt:** "This project is a mess. Can you analyze my Express.js API, create documentation for it, and refactor the `userController.js` file to be more efficient?"
+```bash
+# Run specific test
+python tests/test_incremental_save.py
 
-**Your Internal Monologue and Action:**
-
-1. **Analyze Prompt:** The user is asking for analysis, documentation creation, and code refactoring.
-2. **Check Triggers:** This hits at least three invocation triggers. This is a non-trivial task.
-3. **Prime Directive:** My role is to dispatch, not to solve. I must invoke the `agent-organizer`.
-4. **Execute Agent:** Execute the `agent-organizer` sub agent.
-5. **Wait:** My job is now done until the organizer returns the complete result. I will then present that result to the user.
-
-## 6. Follow-Up Question Handling Protocol
-
-When users ask follow-up questions after an initial agent-organizer workflow, apply intelligent escalation based on complexity assessment to avoid unnecessary overhead while maintaining quality.
-
-### Complexity Assessment for Follow-Ups
-
-**Simple Follow-ups** (Handle directly without sub-agents):
-
-- Clarification questions about previous work ("What does this function do?")
-- Minor modifications to existing output ("Can you fix this typo?")
-- Status updates or explanations ("Why did you choose this approach?")
-- Single-step tasks taking <5 minutes
-
-**Moderate Follow-ups** (Use previously identified agents):
-
-- Building on existing work within same domain ("Add error handling to this API")
-- Extending or refining previous deliverables ("Make the UI more responsive")
-- Related tasks using same technology stack ("Add tests for this feature")
-- Tasks requiring 1-3 of the previously selected agents
-
-**Complex Follow-ups** (Re-run agent-organizer):
-
-- New requirements spanning multiple domains ("Now add authentication and deploy to AWS")
-- Significant scope changes or pivots ("Actually, let's make this a mobile app instead")
-- Tasks requiring different expertise than previously identified
-- Multi-phase workflows needing fresh team assembly
-
-### Follow-Up Decision Tree
-
-```mermaid
-graph TD
-    A[User Follow-Up Question] --> B{Assess Complexity}
-    B --> C{New domain or major scope change?}
-    C -- YES --> D[Re-run agent-organizer]
-    C -- NO --> E{Can previous agents handle this?}
-    E -- NO --> G{Simple clarification or minor task?}
-    G -- NO --> D
-    G -- YES --> H[Handle directly without sub-agents]
-    E -- YES ---> F[Use subset of previous team<br/>Max 3 agents]
-    
-    style D fill:#dcedc8,stroke:#333,stroke-width:2px
-    style F fill:#fff3e0,stroke:#333,stroke-width:2px  
-    style H fill:#e8f5e8,stroke:#333,stroke-width:2px
+# Run test with source path
+cd tests && python -c "import sys; sys.path.append('../src'); import test_incremental_save; test_incremental_save.test_incremental_save()"
 ```
 
-### Implementation Guidelines
+### Whisper Transcription Server (Optional)
 
-**Direct Handling Indicators:**
+The AI transcription feature requires a separate containerized Whisper server:
 
-- User asks "What does this mean?" or "Can you explain..."
-- Simple clarifications about previous output
-- Status questions or progress updates
-- Minor formatting or presentation changes
+```bash
+# Build the CUDA-enabled image
+./build-whisper-image.sh
 
-**Previous Agent Reuse Indicators:**
+# Deploy with Podman Compose
+podman-compose up -d
 
-- Follow-up extends existing work in same domain
-- Same technology stack and expertise area
-- Previous agent team has the required capabilities
-- Task complexity matches previous agent scope (≤3 agents needed)
+# Check status
+podman-compose ps
 
-**Agent-Organizer Re-run Indicators:**
+# View logs
+podman-compose logs -f
+```
 
-- New domains introduced (e.g., adding security to a frontend task)
-- Significant scope expansion or change in requirements
-- Previous team lacks expertise for the follow-up
-- Multi-domain coordination needed for the follow-up task
+**Note**: Transcription is optional. The app will detect if the service is unavailable and disable the feature gracefully (though the UI still reserves space for it—a known quirk).
 
-### Context Preservation Strategy
+## Critical Architecture Patterns
 
-**For Agent Reuse:**
+### 1. Multi-Threading Safety Model
 
-- Provide agents with full context from previous workflow
-- Reference previous deliverables and decisions made
-- Maintain consistency with established patterns and choices
-- Build incrementally on existing work
+**THE CARDINAL RULE**: The JACK process callback (`AudioEngine.process()`) must NEVER block or perform I/O. This is enforced through strict separation:
 
-**For Agent-Organizer Re-run:**
+- **Real-time Thread (JACK callback)**: Writes to NumPy ring buffer, calculates peak meters. Lock-free, non-allocating.
+- **Background File Writer Thread**: Spawned on recording start. Drains `record_queue` and performs disk I/O.
+- **UI Thread (Textual)**: Polls `AudioEngine.peaks` at 20 FPS for meter updates.
 
-- Include context about previous work and decisions
-- Specify what has already been completed
-- Clarify how the follow-up relates to or modifies previous work
-- Allow for fresh perspective while respecting prior decisions
+```python
+# CORRECT: In JACK callback
+self.ring_buffer[self.write_ptr : self.write_ptr + frames] = data
+self.record_queue.put(data.copy())  # Non-blocking queue
 
-### Example Follow-Up Scenarios
+# INCORRECT: Would cause xruns (audio dropouts)
+# soundfile.write(filename, data)  # NEVER do I/O in callback
+# with some_lock: ...              # NEVER acquire locks
+```
 
-**Simple (Direct Handling):**
+**Data Flow Pattern**:
 
-- User: "What's the difference between the two approaches you suggested?"
-- Action: Answer directly with explanation
+```shell
+Hardware → JACK Thread → ring_buffer → record_queue → Writer Thread → Disk
+                      ↓
+                   peaks/dbs → UI Thread (polling)
+```
 
-**Moderate (Previous Agent Reuse):**
+### 2. Session Management Lifecycle
 
-- User: "Can you add input validation to the API endpoints we just created?"
-- Action: Use `backend-architect` from previous team with full context
+Omega-13 uses a **temporary-then-permanent** storage pattern to protect recordings from accidental loss:
 
-**Complex (Re-run Agent-Organizer):**
+1. **Launch**: Creates unique session in `/tmp/omega13/session_<timestamp>_<uuid>/`
+2. **Record**: Saves sequentially numbered WAVs (`001.wav`, `002.wav`, etc.) to temp directory
+3. **Save (S key)**: User chooses permanent location; files are copied with metadata
+4. **Exit**: Prompts to save if unsaved recordings exist; otherwise cleans temp files
 
-- User: "Now I need to add user authentication, set up a database, and deploy this to production"
-- Action: Re-run agent-organizer for comprehensive multi-domain planning
+**Critical Session Paths**:
 
-This approach ensures efficient follow-up handling while maintaining the structured, expert-driven approach that makes the agent system effective.
+- Temp recordings: `/tmp/omega13/<session_id>/recordings/001.wav`
+- Session metadata: `/tmp/omega13/<session_id>/session.json`
+- Permanent saves: User-chosen directory with `omega13_session_<timestamp>/` structure
 
-## 7. The Context Manager: Project Intelligence System
+**Auto-Cleanup**: On startup, sessions older than 7 days in `/tmp/omega13/` are automatically purged.
 
-### Purpose and Role
+### 3. The Rolling Buffer Implementation
 
-The **context-manager** serves as the central nervous system for multi-agent coordination, acting as a specialized agent that maintains real-time awareness of your project's structure, purpose, and evolution. Think of it as the project's "memory" that ensures all agents work with accurate, up-to-date information.
+The core "retroactive capture" mechanism is a circular array with manual wraparound:
 
-### Key Capabilities
+```python
+# Key attributes in AudioEngine
+self.ring_size = self.samplerate * 13  # 13 seconds (not 10 as README states)
+self.ring_buffer = np.zeros((self.ring_size, channels), dtype='float32')
+self.write_ptr = 0
+self.buffer_filled = False  # True after first wraparound
+```
 
-- **Intelligent Project Mapping**: Creates and maintains a comprehensive JSON knowledge graph (`context-manager.json`) of your entire project structure
-- **Incremental Updates**: Efficiently tracks changes without unnecessary full scans, optimizing performance for large projects
-- **Context Distribution**: Provides tailored project briefings to other agents based on their specific needs
-- **Activity Logging**: Maintains an audit trail of all agent activities and file modifications
-- **Cross-Agent Communication**: Facilitates seamless information sharing between specialized agents
+**How Retroactive Capture Works**:
 
-### When to Use the Context Manager
+1. User presses SPACE → `start_recording()` called
+2. Current buffer state is "frozen" and passed to writer thread
+3. If `buffer_filled == True`: Use `np.roll()` to unwrap circular buffer into linear sequence
+4. If `buffer_filled == False`: Only write `ring_buffer[:write_ptr]` (may contain zeros if < 13s runtime)
+5. Writer thread dumps buffer to WAV, then continuously appends new data from `record_queue`
 
-The context-manager is **automatically integrated** into multi-agent workflows when using the agent-organizer. However, you may want to explicitly invoke it for:
+**Warning**: Recording before the 13-second mark will include pre-allocated zeros (silence) at the start of the file. This is by design and not prevented.
 
-#### **Project Onboarding**
+### 4. Configuration & State Management
 
-- Initial project analysis and structure mapping
-- Understanding legacy codebases or inherited projects
-- Creating comprehensive project documentation
-
-#### **Knowledge Queries**
-
-- "Where are the authentication routes defined?"
-- "What's the purpose of the /utils directory?"
-- "Which files were recently modified by other agents?"
-
-#### **Multi-Agent Coordination**
-
-- When multiple agents need to work on related parts of the codebase
-- During complex refactoring that spans multiple domains
-- For maintaining consistency across team-based development
-
-### Integration with Agent Workflows
-
-The context-manager uses a standardized communication protocol:
+Configuration is stored at `~/.config/omega13/config.json` with a versioned schema (currently v2):
 
 ```json
 {
-  "requesting_agent": "agent-name",
-  "request_type": "get_task_briefing",
-  "payload": {
-    "query": "Initial briefing required for [task]. Provide overview of [relevant areas]."
+  "version": 2,
+  "input_ports": ["system:capture_1", "system:capture_2"],
+  "save_path": "/home/user/Recordings",
+  "transcription": {
+    "enabled": true,
+    "auto_transcribe": true,
+    "model_size": "large-v3-turbo",
+    "copy_to_clipboard": false
+  },
+  "sessions": {
+    "temp_root": "/tmp/omega13",
+    "default_save_location": "/home/user/Recordings",
+    "auto_cleanup_days": 7
   }
 }
 ```
 
-**Response Format:**
+**Port Validation**: On startup, `ConfigManager` validates that saved `input_ports` still exist in the JACK graph. If hardware changed (different audio interface), the app auto-opens the input selection dialog.
 
-```json
-{
-  "response_to": "agent-name",
-  "status": "success",
-  "briefing": {
-    "summary": "Concise project context summary",
-    "relevant_paths": ["/path/to/relevant/files"],
-    "file_purposes": {"directory": "purpose description"},
-    "related_activity": [{"agent": "name", "summary": "recent work"}]
-  }
-}
+### 5. JACK Client Lifecycle
+
+The application requires a running JACK server. Initialization sequence:
+
+1. `AudioEngine.__init__()` → `jack.Client("Omega13")`
+2. Registers input ports (mono or stereo based on `num_channels`)
+3. Sets process callback: `client.set_process_callback(self.process)`
+4. `client.activate()` → JACK thread starts calling `process()`
+
+**Graceful Shutdown**:
+
+```python
+# Idempotent shutdown pattern
+if self.client.status:
+    self.client.deactivate()
+self.client.close()
 ```
 
-### Benefits for Complex Projects
+### 6. Transcription Async Pattern
 
-- **🎯 Targeted Context**: Agents receive only relevant information for their specific tasks
-- **⚡ Performance**: Incremental updates prevent redundant scanning of large codebases  
-- **🔄 Consistency**: All agents work from the same, synchronized understanding of the project
-- **📊 Visibility**: Track what changes were made by which agents and when
-- **🧠 Memory**: Persistent project knowledge that survives across sessions
+Transcription uses background threads to avoid blocking the UI:
 
-### Example Workflow Integration
+1. Recording completes → `TranscriptionService.transcribe_async()` called
+2. Spawns worker thread (daemon=False) that POSTs WAV file to Whisper server
+3. Worker receives JSON response, writes to `.txt` file
+4. Calls back to UI via `call_from_thread()` to update display
+5. `Session.add_transcription()` performs overlap deduplication to prevent redundant text
 
-When you invoke the agent-organizer for a complex task, here's how context-manager fits in:
+**Overlap Deduplication**: The session manager uses suffix-prefix matching to merge overlapping transcription segments when recording in chunks. This prevents "the the cat cat sat sat" artifacts.
 
-1. **Agent-organizer** consults **context-manager** for project understanding
-2. **Context-manager** provides tailored briefings to each specialized agent
-3. Specialized agents work with accurate, current project context
-4. Agents report back to **context-manager** upon task completion
-5. **Context-manager** updates project knowledge and activity logs
+## Code Organization
 
-This creates a sophisticated project intelligence system that grows smarter with each interaction, ensuring optimal coordination and preventing agents from working with outdated or incomplete information.
+```
+src/omega13/
+├── __main__.py          # Entry point
+├── app.py               # Omega13App (main Textual orchestrator)
+├── audio.py             # AudioEngine (JACK client + ring buffer)
+├── config.py            # ConfigManager (persistent JSON settings)
+├── session.py           # SessionManager + Session (temp/permanent storage)
+├── transcription.py     # TranscriptionService (HTTP API client)
+├── clipboard.py         # Clipboard integration utilities
+└── ui.py                # UI widgets (VUMeter, TranscriptionDisplay, modal screens)
+```
+
+**Dependency Flow**:
+
+```
+Omega13App (app.py)
+    ├─ AudioEngine (audio.py)
+    ├─ SessionManager (session.py)
+    ├─ ConfigManager (config.py)
+    └─ TranscriptionService (transcription.py) [optional]
+```
+
+## Common Patterns When Modifying Code
+
+### Adding a New Keybinding
+
+1. Add to `Omega13App.BINDINGS` list
+2. Implement `action_<name>()` method in `Omega13App` class
+3. Update help text in UI if user-facing
+
+### Modifying Ring Buffer Duration
+
+Edit `BUFFER_DURATION` constant in `audio.py`:
+
+```python
+BUFFER_DURATION = 13  # Change to desired seconds
+```
+
+**Warning**: Increasing buffer duration increases memory usage proportionally (`samplerate × duration × channels × 4 bytes`).
+
+### Adding Session Metadata Fields
+
+1. Update `Session.__init__()` and `Session.to_dict()` in `session.py`
+2. Modify `session.json` serialization in `Session.save_metadata()`
+3. Update `Session.load_from_directory()` deserialization logic
+
+### Working with the File Writer Thread
+
+The background writer runs in `AudioEngine._file_writer()`. Key considerations:
+
+- Must continuously drain `record_queue` to prevent memory buildup
+- Uses `stop_event.wait(timeout)` to check for termination
+- Writes initial buffer dump, then streams from queue
+- Thread is **not** daemonic—will finish writing before app exits
+
+## Known Structural Quirks
+
+1. **Buffer Duration Mismatch**: README says 10 seconds, code implements 13 seconds (`BUFFER_DURATION = 13` in `audio.py`). The 13-second implementation is correct.
+
+2. **Transcription UI Pane**: The UI allocates 60% width to transcription display even if `TranscriptionService` import fails or is disabled. This creates an empty pane when transcription is unavailable.
+
+3. **Daemon Thread Inconsistency**: File writer uses `daemon=False` (changed from `True`), transcription threads also use `daemon=False`. This ensures data integrity but may delay shutdown if network is slow.
+
+4. **Magic -100 dB Floor**: The audio engine uses `-100.0` as the floor for dB calculations when peak is zero. The UI explicitly checks for `-100` to display `-inf dB`, creating a coupling between audio processing and UI formatting.
+
+5. **Auto-Cleanup Timing**: The 7-day cleanup runs on **every** app launch, not on a scheduled background task. For frequently-used systems, this is aggressive but harmless.
+
+## JACK Audio Environment
+
+### Required Setup
+
+- **JACK Server**: Must be running before launching Omega-13
+- **PipeWire Alternative**: PipeWire's JACK compatibility layer works (`pipewire-jack`)
+- **Sample Rate**: Inherited from JACK server (typically 44.1kHz or 48kHz)
+- **Port Connections**: Must manually connect Omega-13 input ports to audio sources via `qjackctl`, `qpwgraph`, or `Helvum`
+
+### Verifying JACK Status
+
+```bash
+# Check if JACK is running
+jack_lsp
+
+# List all ports with connections
+jack_lsp -c
+
+# Find Omega-13 ports
+jack_lsp | grep Omega13
+```
+
+## Testing Strategy
+
+The project uses manual testing with discrete test files:
+
+- `tests/test_incremental_save.py`: Validates session save/load and incremental updates
+- `tests/test_deduplication.py`: Tests transcription overlap removal logic
+
+**Running Tests**:
+
+```bash
+# Ensure src is in Python path
+python -c "import sys; sys.path.append('./src'); from tests import test_incremental_save; test_incremental_save.test_incremental_save()"
+```
+
+## Debugging Tips
+
+### Audio Dropouts (Xruns)
+
+If you hear pops/clicks in recordings:
+
+1. Check JACK buffer size: `jackd -d alsa -r 48000 -p 1024`
+2. Monitor process callback performance (should be < 5ms)
+3. Verify no blocking operations in `AudioEngine.process()`
+
+### Silent Recordings
+
+1. Check VU meters show signal **before** pressing SPACE
+2. Verify JACK connections: `jack_lsp -c | grep Omega13`
+3. Use `qpwgraph` (PipeWire) or `qjackctl` (JACK) to visually inspect connections
+
+### Transcription Failures
+
+1. Check Whisper server: `curl http://localhost:8080`
+2. View container logs: `podman-compose logs -f`
+3. Verify GPU access: `podman exec whisper-server nvidia-smi`
+
+### Config Not Persisting
+
+1. Check directory permissions: `ls -la ~/.config/omega13/`
+2. Verify JSON validity: `python -m json.tool ~/.config/omega13/config.json`
+
+## Performance Considerations
+
+### Memory Usage
+
+- Ring buffer: `samplerate × 13s × channels × 4 bytes` (≈2.5 MB for 48kHz stereo)
+- NumPy arrays are pre-allocated, no runtime allocation in JACK callback
+- Session temp files accumulate in `/tmp` until saved or cleanup occurs
+
+### CPU Impact
+
+- JACK callback: Peak detection via `np.max(np.abs(data))` on every block
+- UI updates: 20 FPS meter polling (minimal overhead)
+- Transcription: Offloaded to GPU-accelerated container (not in Python process)
+
+## Type Hints and Code Style
+
+- **Type Hints**: Used throughout for function signatures
+- **Docstrings**: Present on all classes and public methods
+- **Naming Conventions**:
+  - `snake_case` for functions/variables
+  - `PascalCase` for classes
+  - `UPPER_SNAKE_CASE` for constants
+- **Textual Patterns**:
+  - `on_*` methods for event handlers
+  - `action_*` methods for keybinding actions
+  - CSS defined in class docstrings
+
+## External Dependencies
+
+- **Core**: `textual`, `JACK-Client`, `numpy`, `soundfile`
+- **Optional**: `requests` (for transcription), `pyperclip` (for clipboard)
+- **System**: `libjack` or `pipewire-jack`, `libsndfile`
+
+## Modifying the UI Layout
+
+The layout is defined in `Omega13App.CSS` and `compose()` method. Key containers:
+
+- `#left-pane`: Audio controls (40% width)
+- `#transcription-pane`: Transcription display (60% width)
+- `#meters`: VU meter container with reactive level updates
+
+**CSS Color Scheme**: Uses Textual's themed variables (`$success`, `$error`, `$warning`, `$accent`).
+
+## Session Incremental Save Pattern
+
+A recent architectural change allows **incremental saves**: If a session is saved once, subsequent saves to the same location merge new recordings without overwriting:
+
+1. First save: Creates `omega13_session_<timestamp>/` with initial recordings
+2. User continues recording after save
+3. Second save to same location: Appends new recordings, updates `session.json`
+
+This enables "work in progress" sessions where users can save checkpoints without losing the ability to add more recordings.
