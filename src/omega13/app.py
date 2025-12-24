@@ -1,6 +1,7 @@
 import logging
 import signal
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -201,40 +202,73 @@ class Omega13App(App):
             self.exit(message=f"Failed to start: {e}")
 
     def on_unmount(self):
+        logger = logging.getLogger(__name__)
+        logger.info("=== SHUTDOWN SEQUENCE STARTING ===")
+
+        # Emergency deadline: 60 seconds total (data integrity priority)
+        shutdown_deadline = time.time() + 60.0
+
+        # 1. Stop hotkey listener
         if self.hotkey_listener:
             try:
                 self.hotkey_listener.stop()
-            except Exception:
-                pass
+                logger.info("Hotkey listener stopped")
+            except Exception as e:
+                logger.error(f"Hotkey stop error: {e}")
 
+        # 2. Stop audio engine
         if hasattr(self, 'engine'):
             try:
                 if self.engine.is_recording:
+                    logger.info("Stopping active recording...")
                     self.engine.stop_recording()
                 self.engine.stop()
-            except Exception:
-                pass
+                logger.info("Audio engine stopped")
+            except Exception as e:
+                logger.error(f"Audio engine error: {e}")
 
+        # Check deadline before transcription
+        if time.time() > shutdown_deadline:
+            logger.critical("EMERGENCY SHUTDOWN: Deadline exceeded before transcription")
+            return
+
+        # 3. Shutdown transcription service
         if hasattr(self, 'transcription_service') and self.transcription_service:
             try:
-                self.transcription_service.shutdown(timeout=5.0)
-            except Exception:
-                pass
+                active = len([t for t in self.transcription_service.active_threads if t.is_alive()])
+                logger.info(f"Shutting down transcription ({active} active threads)")
 
+                # Give more time for transcription (data integrity priority)
+                remaining_time = max(5.0, shutdown_deadline - time.time())
+                self.transcription_service.shutdown(timeout=min(remaining_time, 30.0))
+
+                # Check for orphaned threads
+                orphaned = [t for t in self.transcription_service.active_threads if t.is_alive()]
+                if orphaned:
+                    logger.warning(f"Orphaned threads: {[t.name for t in orphaned]}")
+                    logger.warning("Transcriptions may continue in background")
+            except Exception as e:
+                logger.error(f"Transcription shutdown error: {e}")
+
+        # 4. Session cleanup
         if hasattr(self, 'session_manager'):
             try:
                 if not self.session_manager.is_saved() and self.session_manager.has_recordings():
-                    pass 
+                    logger.info("Leaving unsaved session intact")
                 else:
                     self.session_manager.discard_session()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Session cleanup error: {e}")
 
+        # 5. PID file cleanup
         if hasattr(self, '_pid_file') and self._pid_file.exists():
             try:
                 self._pid_file.unlink()
             except Exception:
                 pass
+
+        total_time = time.time() - (shutdown_deadline - 60.0)
+        logger.info(f"=== SHUTDOWN COMPLETE: {total_time:.2f}s ===")
 
     def update_meters(self):
         peaks = self.engine.peaks
