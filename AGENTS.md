@@ -1,27 +1,38 @@
-# Development Commands
+# AGENTS.md
 
-**Setup**: `uv sync` | **Run**: `uv run python -m omega13` | **Dev mode**: `textual run --dev src/omega13/app.py`
-**Single test**: `cd tests && python -c "import sys; sys.path.append('../src'); import test_incremental_save; test_incremental_save.test_incremental_save()"`
+## Build/Lint/Test Commands
 
-# Code Style Guidelines
+**Environment Setup:**
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
 
-- **Imports**: stdlib → third-party → relative imports; use absolute imports from project root
-- **Types**: Use type hints (PEP 695 style: `list[str] | None`); `Optional[Path]` for Optional
-- **Naming**: `snake_case` functions/variables, `PascalCase` classes, `UPPER_SNAKE_CASE` constants
-- **Docstrings**: On classes and public methods only
-- **Textual**: `on_*` for event handlers, `action_*` for keybindings; CSS in class docstrings
-- **Logging**: `logger = logging.getLogger(__name__)` at module top
-- **Error handling**: JACK process callback must never block; swallow exceptions for stability
-- **Threading**: File writer uses `daemon=False` for data integrity; `queue.Queue()` for thread-safe data
-- **Python**: 3.12+ required; no code comments unless explicitly requested
+**Testing:**
+```bash
+# Run all tests
+python -m pytest tests/
 
-# Critical Architecture Patterns
+# Run specific test
+python -m pytest tests/test_deduplication.py -v
 
-See CLAUDE.md for detailed architecture patterns including:
+# Run with coverage
+python -m pytest --cov=omega13 tests/
+```
 
-- Multi-threading safety model (JACK callback must never block)
-- Session management lifecycle (temporary-then-permanent storage)
-- Rolling buffer implementation (13-second circular buffer)
-- Configuration & state management (JSON config with versioning)
-- JACK client lifecycle (activation/deactivation patterns)
-- Transcription async pattern (background threads with callbacks)
+## Code Style Guidelines
+
+**Imports:** Use absolute imports for local modules, group standard library imports first, then third-party, then local imports.
+
+**Formatting:** Follow PEP 8 guidelines. Use 4 spaces for indentation, limit lines to 88 characters.
+
+**Types:** Use Python type hints for function signatures and variables. Avoid runtime type checking.
+
+**Naming:** Use snake_case for variables/functions, CamelCase for classes, UPPER_CASE for constants.
+
+**Error Handling:** Use specific exception types, avoid bare except clauses. Log errors appropriately.
+
+**Thread Safety:** JACK process() callback must be lock-free and non-blocking. Use queue.Queue for inter-thread communication.
+
+**Conventional Commits:** Use feat:, fix:, refactor:, perf:, docs:, test:, chore: prefixes for commit messages.

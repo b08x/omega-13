@@ -16,7 +16,7 @@ class DesktopNotifier:
         if not self.notify_send_path:
             logger.warning("notify-send not found. Desktop notifications will be disabled.")
 
-    def notify(self, title: str, message: str, urgency: str = "normal") -> None:
+    def notify(self, title: str, message: str, urgency: str = "normal", timeout: int = 2000) -> None:
         """
         Send a desktop notification.
         
@@ -24,6 +24,7 @@ class DesktopNotifier:
             title: The summary/title of the notification.
             message: The body of the notification.
             urgency: 'low', 'normal', or 'critical'.
+            timeout: Expiration time in milliseconds (default 2s).
         """
         if not self.notify_send_path:
             return
@@ -32,10 +33,12 @@ class DesktopNotifier:
             # Construct the command
             # -a app_name: Application name
             # -u urgency: Urgency level
+            # -t timeout: Expiration time in ms
             cmd = [
                 self.notify_send_path,
                 "-a", self.app_name,
                 "-u", urgency,
+                "-t", str(timeout),
                 title,
                 message
             ]

@@ -27,12 +27,9 @@ class GlobalHotkeyListener:
         self.resolved_hotkey_str = self._resolve_hotkey(hotkey_str)
 
     def _resolve_hotkey(self, hotkey: str) -> Optional[str]:
-        """
-        Resolve special keys to pynput-compatible format.
-        """
-        # 1. If it's a pynput format (<...> or + combination), assume valid.
-        if '<' in hotkey and '>' in hotkey:
-             return hotkey
+        # 1. Normalize by removing all brackets first, then we'll add them back consistently
+        # This prevents issues with mix formats like "<ctrl>+space"
+        normalized = hotkey.replace('<', '').replace('>', '')
 
         # 2. Handle common key names and resolve to pynput format
         key_aliases = {
@@ -55,32 +52,32 @@ class GlobalHotkeyListener:
             "page_down": "<page_down>",
         }
 
-        if '+' in hotkey:
-            parts = hotkey.split('+')
+        if '+' in normalized:
+            parts = normalized.split('+')
             resolved_parts = []
             for part in parts:
                 p = part.strip().lower()
                 if p in key_aliases:
                     resolved_parts.append(key_aliases[p])
-                elif len(p) > 1 and not (p.startswith('<') and p.endswith('>')):
+                elif len(p) > 1:
                     resolved_parts.append(f"<{p}>")
                 else:
                     resolved_parts.append(p)
             return "+".join(resolved_parts)
 
-        lower_hotkey = hotkey.strip().lower()
+        lower_hotkey = normalized.strip().lower()
         if lower_hotkey in key_aliases:
             return key_aliases[lower_hotkey]
 
         # 2.5 If it's a simple single character, assume valid.
-        if len(hotkey) == 1:
-            return hotkey
+        if len(lower_hotkey) == 1:
+            return lower_hotkey
 
-        if len(hotkey) > 1:
-            logger.error(f"Could not resolve special key '{hotkey}'. Global hotkey disabled.")
+        if len(lower_hotkey) > 1:
+            logger.error(f"Could not resolve special key '{lower_hotkey}'. Global hotkey disabled.")
             return None
         
-        return hotkey
+        return lower_hotkey
 
 
 

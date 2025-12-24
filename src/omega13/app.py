@@ -187,11 +187,15 @@ class Omega13App(App):
                     logging.getLogger(__name__).info(f"Hotkey listener started successfully with: {resolved}")
                     self.notify(f"Global hotkey active: {resolved}", timeout=5)
                 else:
-                    self.notify(f"Failed to activate hotkey: {global_hotkey_str}", severity="error", timeout=10)
+                    resolved = self.hotkey_listener.resolved_hotkey_str or "unresolved"
+                    self.notify(f"Failed to activate hotkey: {global_hotkey_str} (parsed as: {resolved})", severity="error", timeout=10)
 
             if TRANSCRIPTION_AVAILABLE:
                 try:
-                    self.transcription_service = TranscriptionService()
+                    self.transcription_service = TranscriptionService(
+                        server_url=self.config_manager.get_transcription_server_url(),
+                        notifier=self.notifier
+                    )
                     self.notify("Transcription ready (API)", severity="information", timeout=3)
                 except Exception as e:
                     self.transcription_service = None
@@ -338,10 +342,12 @@ class Omega13App(App):
                 status = "enabled" if event.value else "disabled"
                 self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
 
-    def action_toggle_record(self):
+    def action_toggle_record(self) -> None:
         status_bar = self.query_one("#status-bar")
         if self.engine.is_recording:
+            # Stop recording
             self.engine.stop_recording()
+            self._update_meter_visibility()
             
             # Notify recording stopped
             if self.notifier:
@@ -350,21 +356,46 @@ class Omega13App(App):
             status_bar.update("IDLE - Recording saved to session.")
             status_bar.remove_class("status-recording").add_class("status-idle")
 
-            if hasattr(self, '_current_recording_path'):
-                session = self.session_manager.get_current_session()
-                if session:
-                    session.register_recording(
-                        self._current_recording_path,
-                        duration_seconds=0.0,
-                        channels=self.engine.channels,
-                        samplerate=self.engine.samplerate
-                    )
-                    self._update_session_status()
-
-            if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
-                if last_file := self._get_last_recording_path():
-                    self._start_transcription(last_file)
+            # Register in session
+            last_path = self._get_last_recording_path()
+            if last_path and last_path.exists():
+                duration = 0.0
+                try:
+                    import soundfile as sf
+                    info = sf.info(last_path)
+                    duration = info.duration
+                except Exception:
+                    pass
+                
+                self.session_manager.current_session.register_recording(
+                    last_path,
+                    duration_seconds=duration,
+                    channels=self.engine.channels,
+                    samplerate=self.engine.samplerate
+                )
+                self._update_session_status()
+                
+                # Start transcription
+                if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
+                    self._start_transcription(last_path)
         else:
+            # Check for audio activity before starting
+            if not self.engine.has_audio_activity():
+                msg = (
+                    "No audio activity or connections detected.\n\n"
+                    "Please check:\n"
+                    "1. JACK/PipeWire connections (using QjackCtl or Helvum)\n"
+                    "2. Microphone mute status\n"
+                    "3. Input port configuration in OMEGA-13 (Press 'I')"
+                )
+                if self.notifier:
+                    self.notifier.notify("Capture Blocked", msg, urgency="critical")
+                
+                self.notify(msg, severity="error", timeout=10)
+                status_bar.update("CAPTURE BLOCKED - No Input Signal")
+                return
+
+            # Start recording
             session = self.session_manager.get_current_session()
             if not session:
                 self.notify("No active session", severity="error")
@@ -372,6 +403,7 @@ class Omega13App(App):
 
             recording_path = session.get_next_recording_path()
             result = self.engine.start_recording(recording_path)
+            self._update_meter_visibility()
 
             if result:
                 self._current_recording_path = result
@@ -394,7 +426,7 @@ class Omega13App(App):
             # Re-instantiate service if needed or create new one
             # Note: We should ideally persist the service, but if it's missing:
             self.transcription_service = TranscriptionService(
-                server_url=self.config_manager.config["transcription"]["server_url"],
+                server_url=self.config_manager.get_transcription_server_url(),
                 notifier=self.notifier
             )
 
@@ -564,7 +596,7 @@ def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler()]
+        handlers=[logging.FileHandler(log_file)]
     )
     logging.getLogger(__name__).info(f"Logging initialized: {log_file}")
 
