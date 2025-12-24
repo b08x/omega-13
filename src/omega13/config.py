@@ -25,13 +25,16 @@ class ConfigManager:
             "version": 2,
             "input_ports": None,
             "save_path": str(Path.cwd()),
+            "global_hotkey": "<ctrl>+<alt>+space",  # Default global shortcut updated to Ctrl+Alt+Space
             "transcription": {
                 "enabled": True,
                 "auto_transcribe": True,
                 "model_size": "large-v3-turbo",
                 "save_to_file": True,
+                "save_to_file": True,
                 "copy_to_clipboard": False
             },
+            "desktop_notifications": True,
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
@@ -48,6 +51,8 @@ class ConfigManager:
                         config["transcription"] = default_config["transcription"]
                     if "sessions" not in config:
                         config["sessions"] = default_config["sessions"]
+                    if "global_hotkey" not in config:
+                        config["global_hotkey"] = default_config["global_hotkey"]
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -82,6 +87,14 @@ class ConfigManager:
     def set_save_path(self, path: str | Path):
         self.config["save_path"] = str(path)
         self.save_config(self.config)
+        
+    def get_global_hotkey(self) -> str:
+        """Get the global hotkey combination string."""
+        return self.config.get("global_hotkey", "<ctrl>+<alt>+space")
+
+    def get_desktop_notifications_enabled(self) -> bool:
+        """Check if desktop notifications are enabled."""
+        return self.config.get("desktop_notifications", True)
 
     def validate_ports_exist(self, client: jack.Client) -> tuple[bool, list[str]]:
         saved_ports = self.get_input_ports()

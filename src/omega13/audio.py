@@ -41,7 +41,7 @@ class AudioEngine:
 
         # Recording state
         self.is_recording = False
-        self.record_queue = queue.Queue()
+        self.record_queue = queue.Queue(maxsize=200)  # ~4s buffer @ 48kHz
         self.writer_thread = None
         self.stop_event = threading.Event()
 
@@ -111,7 +111,13 @@ class AudioEngine:
 
             # Write to File Queue if recording
             if self.is_recording:
-                self.record_queue.put(data.copy())
+                try:
+                    # Non-blocking put to prevent JACK callback hang
+                    self.record_queue.put(data.copy(), block=False)
+                except queue.Full:
+                    # Queue full - log but don't block (rare case)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("Record queue full - frame dropped")
 
         except Exception as e:
             # Only log in debug mode (performance-sensitive callback)
@@ -159,20 +165,27 @@ class AudioEngine:
         if not self.is_recording:
             return
 
+        logger.info("Stopping recording...")
+        logger.info(f"Queue depth: {self.record_queue.qsize()} blocks")
+
         self.is_recording = False
         self.stop_event.set()
 
         if self.writer_thread and self.writer_thread.is_alive():
+            logger.info("Waiting for writer thread (5s timeout)...")
             # Wait up to 5 seconds for writer thread to finish
             self.writer_thread.join(timeout=5.0)
 
             if self.writer_thread.is_alive():
                 # Log the hang but continue cleanup
                 logger.warning(
-                    "Writer thread did not terminate within timeout. "
-                    "Audio file may be incomplete."
+                    f"Writer thread still alive. "
+                    f"Remaining queue: {self.record_queue.qsize()} blocks. "
+                    f"File may be incomplete."
                 )
                 # Thread will be forcibly terminated when process exits
+            else:
+                logger.info("Writer thread completed successfully")
 
         # Clear any remaining queue items
         try:

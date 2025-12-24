@@ -1,5 +1,7 @@
 import logging
 import signal
+import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -14,6 +16,9 @@ from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
 from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen
 from .session import SessionManager
+from .session import SessionManager
+from .hotkeys import GlobalHotkeyListener
+from .notifications import DesktopNotifier
 
 # Optional import for transcription
 try:
@@ -53,7 +58,6 @@ class Omega13App(App):
     """
 
     BINDINGS = [
-        Binding("space", "toggle_record", "Record/Stop", priority=True),
         Binding("i", "open_input_selector", "Select Inputs"),
         Binding("s", "save_session", "Save Session"),
         Binding("t", "manual_transcribe", "Transcribe"),
@@ -64,6 +68,9 @@ class Omega13App(App):
         super().__init__(*args, **kwargs)
         self._shutdown_initiated = False
         self._signal_handlers_registered = False
+        self._signal_handlers_registered = False
+        self.hotkey_listener: Optional[GlobalHotkeyListener] = None
+        self.notifier: Optional[DesktopNotifier] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -80,7 +87,7 @@ class Omega13App(App):
                         yield VUMeter(id="meter-1")
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
-                    yield Static("\n[dim]SPACE Capture | I Inputs | S Save | T Transcribe[/dim]", classes="help-text")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
@@ -88,77 +95,66 @@ class Omega13App(App):
                     yield Checkbox("Copy to clipboard", id="clipboard-toggle", classes="clipboard-checkbox")
 
             with Container(id="transcription-pane"):
-                # Note: config_manager will be set after on_mount
                 yield TranscriptionDisplay(id="transcription-display")
         yield Footer()
 
     def _register_signal_handlers(self) -> None:
-        """Register handlers for graceful shutdown on signals."""
         def signal_handler(signum, frame):
             signal_name = signal.Signals(signum).name
             logger = logging.getLogger(__name__)
             logger.info(f"Received signal {signal_name}, initiating graceful shutdown")
 
-            # Prevent multiple shutdown attempts
             if self._shutdown_initiated:
-                logger.warning("Shutdown already in progress")
                 return
 
             self._shutdown_initiated = True
-
-            # Post exit to main event loop (thread-safe)
             self.call_from_thread(self._graceful_shutdown)
 
-        # Register for common termination signals
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-
-        logger = logging.getLogger(__name__)
-        logger.debug("Signal handlers registered")
+        
+        # Add SIGUSR1 handler for external toggle triggering
+        if hasattr(signal, "SIGUSR1"):
+            signal.signal(signal.SIGUSR1, lambda s, f: self.call_later(self.action_toggle_record))
 
     def _graceful_shutdown(self) -> None:
-        """Perform graceful shutdown from signal handler."""
-        logger = logging.getLogger(__name__)
-        logger.info("Starting graceful shutdown sequence")
-
-        # Skip save prompt if shutdown via signal
-        # User pressed Ctrl+C, they want to quit NOW
         if hasattr(self, 'session_manager'):
             if not self.session_manager.is_saved() and self.session_manager.has_recordings():
-                logger.info("Discarding unsaved session due to signal termination")
                 self.session_manager.discard_session()
-
-        # Exit without further prompts
         self.exit()
 
     def on_mount(self):
-        # Register signal handlers AFTER Textual is ready
         if not self._signal_handlers_registered:
             self._register_signal_handlers()
             self._signal_handlers_registered = True
 
         try:
             self.config_manager = ConfigManager()
+            
+            # Initialize desktop notifier
+            if self.config_manager.get_desktop_notifications_enabled():
+                self.notifier = DesktopNotifier()
 
-            # Pass config_manager to TranscriptionDisplay widget
             transcription_display = self.query_one("#transcription-display", TranscriptionDisplay)
             transcription_display.config_manager = self.config_manager
-            # Re-initialize checkbox state now that config_manager is available
             if transcription_display.clipboard_checkbox:
                 initial_state = self.config_manager.get_copy_to_clipboard()
                 transcription_display.clipboard_checkbox.value = initial_state
 
-            # Initialize session manager
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
+            
+            # Update help text with configured hotkey
+            hotkey = self.config_manager.get_global_hotkey()
+            formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
+            
+            help_text = self.query_one("#help-text", Static)
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | S Save | T Transcribe[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
-            # Cleanup old sessions
             days = self.config_manager.get_auto_cleanup_days()
-            cleaned = self.session_manager.cleanup_old_sessions(days)
-            if cleaned > 0:
-                self.notify(f"Cleaned up {cleaned} old session(s)", severity="information", timeout=2)
+            self.session_manager.cleanup_old_sessions(days)
 
             saved_ports = self.config_manager.get_input_ports()
             num_channels = len(saved_ports) if saved_ports else DEFAULT_CHANNELS
@@ -166,8 +162,32 @@ class Omega13App(App):
             self.engine = AudioEngine(config_manager=self.config_manager, num_channels=num_channels)
             self.engine.start()
 
+            # Write PID file for CLI toggle support
+            try:
+                self._pid_file = Path.home() / ".local" / "share" / "omega13" / "omega13.pid"
+                self._pid_file.parent.mkdir(parents=True, exist_ok=True)
+                self._pid_file.write_text(str(os.getpid()))
+                logger = logging.getLogger(__name__)
+                logger.info(f"PID file written: {self._pid_file} (PID: {os.getpid()})")
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Failed to write PID file: {e}")
+
             self._load_and_connect_saved_inputs()
             self._update_meter_visibility()
+
+            # Initialize Global Hotkeys
+            global_hotkey_str = self.config_manager.get_global_hotkey()
+            if global_hotkey_str:
+                self.hotkey_listener = GlobalHotkeyListener(
+                    global_hotkey_str, 
+                    lambda: self.call_from_thread(self.action_toggle_record)
+                )
+                if self.hotkey_listener.start():
+                    resolved = self.hotkey_listener.resolved_hotkey_str
+                    logging.getLogger(__name__).info(f"Hotkey listener started successfully with: {resolved}")
+                    self.notify(f"Global hotkey active: {resolved}", timeout=5)
+                else:
+                    self.notify(f"Failed to activate hotkey: {global_hotkey_str}", severity="error", timeout=10)
 
             if TRANSCRIPTION_AVAILABLE:
                 try:
@@ -182,53 +202,73 @@ class Omega13App(App):
             self.exit(message=f"Failed to start: {e}")
 
     def on_unmount(self):
-        """Cleanup resources in correct order."""
         logger = logging.getLogger(__name__)
-        logger.info("Application unmounting, cleaning up resources")
+        logger.info("=== SHUTDOWN SEQUENCE STARTING ===")
 
-        # Step 1: Cancel interval timers FIRST to prevent callbacks during teardown
-        try:
-            # Textual automatically cancels timers, but be explicit
-            logger.debug("Canceling interval timers")
-        except Exception as e:
-            logger.error(f"Error canceling timers: {e}")
+        # Emergency deadline: 60 seconds total (data integrity priority)
+        shutdown_deadline = time.time() + 60.0
 
-        # Step 2: Stop recording and audio engine
+        # 1. Stop hotkey listener
+        if self.hotkey_listener:
+            try:
+                self.hotkey_listener.stop()
+                logger.info("Hotkey listener stopped")
+            except Exception as e:
+                logger.error(f"Hotkey stop error: {e}")
+
+        # 2. Stop audio engine
         if hasattr(self, 'engine'):
             try:
-                logger.debug("Stopping audio engine")
                 if self.engine.is_recording:
-                    logger.debug("Stopping active recording")
-                    self.engine.stop_recording()  # Now has timeout
-                self.engine.stop()  # Deactivate JACK client
-                logger.debug("Audio engine stopped")
+                    logger.info("Stopping active recording...")
+                    self.engine.stop_recording()
+                self.engine.stop()
+                logger.info("Audio engine stopped")
             except Exception as e:
-                logger.error(f"Error stopping audio engine: {e}")
+                logger.error(f"Audio engine error: {e}")
 
-        # Step 3: Stop transcription service
+        # Check deadline before transcription
+        if time.time() > shutdown_deadline:
+            logger.critical("EMERGENCY SHUTDOWN: Deadline exceeded before transcription")
+            return
+
+        # 3. Shutdown transcription service
         if hasattr(self, 'transcription_service') and self.transcription_service:
             try:
-                logger.debug("Shutting down transcription service")
-                self.transcription_service.shutdown(timeout=5.0)
-                logger.debug("Transcription service stopped")
-            except Exception as e:
-                logger.error(f"Error stopping transcription: {e}")
+                active = len([t for t in self.transcription_service.active_threads if t.is_alive()])
+                logger.info(f"Shutting down transcription ({active} active threads)")
 
-        # Step 4: Handle session cleanup
+                # Give more time for transcription (data integrity priority)
+                remaining_time = max(5.0, shutdown_deadline - time.time())
+                self.transcription_service.shutdown(timeout=min(remaining_time, 30.0))
+
+                # Check for orphaned threads
+                orphaned = [t for t in self.transcription_service.active_threads if t.is_alive()]
+                if orphaned:
+                    logger.warning(f"Orphaned threads: {[t.name for t in orphaned]}")
+                    logger.warning("Transcriptions may continue in background")
+            except Exception as e:
+                logger.error(f"Transcription shutdown error: {e}")
+
+        # 4. Session cleanup
         if hasattr(self, 'session_manager'):
             try:
                 if not self.session_manager.is_saved() and self.session_manager.has_recordings():
-                    # User will be prompted via action_quit override
-                    # If we got here via signal handler, session was already discarded
-                    logger.debug("Session cleanup will be handled by action_quit")
+                    logger.info("Leaving unsaved session intact")
                 else:
-                    # Auto-discard empty or saved sessions
-                    logger.debug("Auto-discarding empty/saved session")
                     self.session_manager.discard_session()
             except Exception as e:
-                logger.error(f"Error during session cleanup: {e}")
+                logger.error(f"Session cleanup error: {e}")
 
-        logger.info("Resource cleanup complete")
+        # 5. PID file cleanup
+        if hasattr(self, '_pid_file') and self._pid_file.exists():
+            try:
+                self._pid_file.unlink()
+            except Exception:
+                pass
+
+        total_time = time.time() - (shutdown_deadline - 60.0)
+        logger.info(f"=== SHUTDOWN COMPLETE: {total_time:.2f}s ===")
 
     def update_meters(self):
         peaks = self.engine.peaks
@@ -272,7 +312,6 @@ class Omega13App(App):
         self.query_one("#connection-status").update(txt)
 
     def _update_session_status(self):
-        """Update session status display in UI."""
         if not hasattr(self, 'session_manager'):
             return
 
@@ -293,7 +332,6 @@ class Omega13App(App):
         self.query_one("#session-status").update(text)
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        """Handle clipboard toggle state changes."""
         if event.checkbox.id == "clipboard-toggle":
             if hasattr(self, 'config_manager'):
                 self.config_manager.set_copy_to_clipboard(event.value)
@@ -304,16 +342,20 @@ class Omega13App(App):
         status_bar = self.query_one("#status-bar")
         if self.engine.is_recording:
             self.engine.stop_recording()
+            
+            # Notify recording stopped
+            if self.notifier:
+                self.notifier.notify("Recording Stopped", "Audio capture saved.")
+
             status_bar.update("IDLE - Recording saved to session.")
             status_bar.remove_class("status-recording").add_class("status-idle")
 
-            # Register recording with session
             if hasattr(self, '_current_recording_path'):
                 session = self.session_manager.get_current_session()
                 if session:
                     session.register_recording(
                         self._current_recording_path,
-                        duration_seconds=0.0,  # TODO: Calculate actual duration
+                        duration_seconds=0.0,
                         channels=self.engine.channels,
                         samplerate=self.engine.samplerate
                     )
@@ -323,7 +365,6 @@ class Omega13App(App):
                 if last_file := self._get_last_recording_path():
                     self._start_transcription(last_file)
         else:
-            # Get next recording path from session
             session = self.session_manager.get_current_session()
             if not session:
                 self.notify("No active session", severity="error")
@@ -335,6 +376,11 @@ class Omega13App(App):
             if result:
                 self._current_recording_path = result
                 filename = result.name
+                
+                # Notify recording started
+                if self.notifier:
+                    self.notifier.notify("Recording Started", f"Capturing to {filename}")
+
                 status_bar.update(f"RECORDING... \nFile: {filename}")
                 status_bar.remove_class("status-idle").add_class("status-recording")
 
@@ -344,10 +390,15 @@ class Omega13App(App):
         return None
 
     def _start_transcription(self, audio_file: Path):
-        if not TRANSCRIPTION_AVAILABLE or not self.transcription_service: return
+        if not self.transcription_service:
+            # Re-instantiate service if needed or create new one
+            # Note: We should ideally persist the service, but if it's missing:
+            self.transcription_service = TranscriptionService(
+                server_url=self.config_manager.config["transcription"]["server_url"],
+                notifier=self.notifier
+            )
 
         display = self.query_one("#transcription-display", TranscriptionDisplay)
-        # Don't clear here, we want to keep history
         display.status = "processing"
         display.progress = 0.0
 
@@ -355,7 +406,6 @@ class Omega13App(App):
         def on_progress(p): self.call_from_thread(lambda: setattr(display, 'progress', p))
         def on_clipboard_error(error_msg): self.call_from_thread(self._handle_clipboard_error, error_msg)
 
-        # Get clipboard configuration
         copy_enabled = self.config_manager.get_copy_to_clipboard()
 
         self.transcription_service.transcribe_async(
@@ -380,7 +430,6 @@ class Omega13App(App):
             display.show_error(result.error or "Unknown error")
 
     def _handle_clipboard_error(self, error_msg: str):
-        """Handle clipboard copy errors with UI notification."""
         self.notify(f"Clipboard copy failed: {error_msg}", severity="warning", timeout=4)
 
     def action_manual_transcribe(self):
@@ -417,7 +466,6 @@ class Omega13App(App):
             self.notify(str(e), severity="error")
 
     def action_save_session(self):
-        """Save current session to permanent storage."""
         if self.engine.is_recording:
             self.notify("Stop recording before saving session", severity="warning")
             return
@@ -428,8 +476,6 @@ class Omega13App(App):
             return
 
         if session.saved and session.save_location:
-            # Session was already saved, update the existing location (snapshot)
-            # save_session expects the parent directory of the session folder
             parent_dir = session.save_location.parent
             success = self.session_manager.save_session(parent_dir)
             if success:
@@ -453,65 +499,26 @@ class Omega13App(App):
         self.push_screen(DirectorySelectionScreen(default_location), handle)
 
     def action_quit(self) -> None:
-        """Override quit action to prompt for save if needed."""
-        # Check if we have unsaved recordings
         if hasattr(self, 'session_manager'):
             if not self.session_manager.is_saved() and self.session_manager.has_recordings():
                 self._prompt_save_before_quit()
                 return
-
-        # No unsaved work, quit normally
         self.exit()
 
     def _prompt_save_before_quit(self):
-        """Show modal to save, discard, or cancel quit."""
         from textual.screen import ModalScreen
         from textual.widgets import Button
         from textual.containers import Grid
 
         class SavePromptScreen(ModalScreen):
-            """Modal dialog prompting user to save before quitting."""
-
             CSS = """
-            SavePromptScreen {
-                align: center middle;
-            }
-
-            #dialog {
-                width: 60;
-                height: 15;
-                border: thick $accent;
-                background: $surface;
-                padding: 2;
-            }
-
-            #question {
-                width: 100%;
-                height: 3;
-                content-align: center middle;
-                text-style: bold;
-            }
-
-            #message {
-                width: 100%;
-                height: 3;
-                content-align: center middle;
-                color: $text-muted;
-            }
-
-            Grid {
-                width: 100%;
-                height: auto;
-                grid-size: 3 1;
-                grid-gutter: 1;
-                margin-top: 1;
-            }
-
-            Button {
-                width: 100%;
-            }
+            SavePromptScreen { align: center middle; }
+            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
+            #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
+            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
+            Button { width: 100%; }
             """
-
             def __init__(self, session_manager, config_manager):
                 super().__init__()
                 self.session_manager = session_manager
@@ -520,7 +527,6 @@ class Omega13App(App):
             def compose(self) -> ComposeResult:
                 session = self.session_manager.get_current_session()
                 count = len(session.recordings) if session else 0
-
                 with Container(id="dialog"):
                     yield Static("Save Session Before Quitting?", id="question")
                     yield Static(f"You have {count} unsaved recording(s)", id="message")
@@ -530,42 +536,27 @@ class Omega13App(App):
                         yield Button("Cancel", id="cancel")
 
             def on_button_pressed(self, event: Button.Pressed) -> None:
-                button_id = event.button.id
-                if button_id == "save":
-                    self.dismiss("save")
-                elif button_id == "discard":
-                    self.dismiss("discard")
-                else:  # cancel
-                    self.dismiss("cancel")
+                self.dismiss(event.button.id)
 
         def handle_choice(choice: str):
-            if choice == "cancel":
-                return  # Stay in app
-
+            if choice == "cancel": return
             if choice == "discard":
                 self.session_manager.discard_session()
                 self.exit()
                 return
-
             if choice == "save":
-                # Open directory selector for save location
                 def handle_save_location(location):
                     if location:
                         success = self.session_manager.save_session(location)
-                        if success:
-                            self.notify("Session saved successfully", severity="information")
-                        else:
-                            self.notify("Failed to save session", severity="error")
-                    # Exit after save attempt (or if user cancelled directory selection)
+                        if success: self.notify("Session saved successfully", severity="information")
+                        else: self.notify("Failed to save session", severity="error")
                     self.exit()
-
                 default_location = self.config_manager.get_default_save_location()
                 self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
 
         self.push_screen(SavePromptScreen(self.session_manager, self.config_manager), handle_choice)
 
 def configure_logging(level: str = "INFO") -> None:
-    """Configure application logging."""
     log_dir = Path.home() / ".local" / "share" / "omega13" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"omega13_{datetime.now().strftime('%Y%m%d')}.log"
@@ -573,16 +564,49 @@ def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()]
     )
-
-    logger = logging.getLogger(__name__)
-    logger.info(f"Logging initialized: {log_file}")
+    logging.getLogger(__name__).info(f"Logging initialized: {log_file}")
 
 def main():
-    configure_logging(level="INFO")  # Change to DEBUG for troubleshooting
+    import argparse
+    import sys
+    import os
+    
+    parser = argparse.ArgumentParser(description="Omega-13 retroactive audio recorder")
+    parser.add_argument("--toggle", action="store_true", help="Toggle recording on a running instance")
+    parser.add_argument("--log-level", default="INFO", help="Set logging level")
+    args = parser.parse_args()
+
+    if args.toggle:
+        # Find the PID of the running omega13 instance using the PID file
+        try:
+            pid_file = Path.home() / ".local" / "share" / "omega13" / "omega13.pid"
+            if not pid_file.exists():
+                print("No running Omega-13 instance found (PID file missing).")
+                sys.exit(1)
+            
+            try:
+                target_pid = int(pid_file.read_text().strip())
+            except ValueError:
+                print("Invalid PID file content.")
+                sys.exit(1)
+
+            # verify the process is actually running
+            try:
+                 # sending signal 0 does not actually kill the process but checks if it running (and we have permission)
+                os.kill(target_pid, 0)
+            except OSError:
+                 print(f"Stale PID file found. Process {target_pid} is not running.")
+                 sys.exit(1)
+
+            print(f"Sending toggle signal to Omega-13 (PID: {target_pid})...")
+            os.kill(target_pid, signal.SIGUSR1)
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error sending toggle signal: {e}")
+            sys.exit(1)
+
+    configure_logging(level=args.log_level)
     app = Omega13App()
     app.run()
