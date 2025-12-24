@@ -1,4 +1,4 @@
-## [unreleased]
+## [2.2.0] - 2025-12-24
 
 ### 🚀 Features
 
@@ -21,6 +21,7 @@
 - Add automatic startup for podman socket and whisper-server.
 - Introduce transcription server URL configuration, enhance logging, update transcription notifications, and remove various documentation files.
 - Add automatic session syncing, implement transcription request retries, and introduce pre-recording audio activity detection.
+- Add `CHANGELOG.md` and `cliff.toml` for automated changelog generation.
 
 ### 🐛 Bug Fixes
 
