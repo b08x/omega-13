@@ -197,7 +197,20 @@ class Omega13App(App):
                         server_url=self.config_manager.get_transcription_server_url(),
                         notifier=self.notifier
                     )
-                    self.notify("Transcription ready (API)", severity="information", timeout=3)
+                    
+                    # Perform startup health check
+                    alive, error = self.transcription_service.check_health()
+                    if alive:
+                        self.notify("Transcription ready (API)", severity="information", timeout=3)
+                    else:
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Transcription server health check failed: {error}")
+                        self.notify(f"Inference host offline: {error}", severity="warning", timeout=10)
+                        
+                        # Set initial UI status to error/offline
+                        display = self.query_one("#transcription-display", TranscriptionDisplay)
+                        display.status = "error"
+                        
                 except Exception as e:
                     self.transcription_service = None
                     self.notify(f"Transcription init failed: {e}", severity="warning")

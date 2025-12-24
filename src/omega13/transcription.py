@@ -50,10 +50,17 @@ class TranscriptionService:
         self._lock = threading.Lock()
         self._shutdown_event = threading.Event()  # Cooperative shutdown signal
 
-    def _check_server_health(self) -> tuple[bool, Optional[str]]:
+    def check_health(self) -> tuple[bool, Optional[str]]:
+        """Check if the whisper-server is reachable and responding."""
         try:
-            requests.get(self.server_url, timeout=5)
+            # Try to get the root or a basic health endpoint
+            response = requests.get(self.server_url, timeout=5)
+            response.raise_for_status()
             return True, None
+        except requests.exceptions.ConnectionError:
+            return False, "Could not connect to server (Connection Refused)"
+        except requests.exceptions.Timeout:
+            return False, "Server connection timed out"
         except Exception as e:
             return False, str(e)
 
