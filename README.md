@@ -158,4 +158,33 @@ Now, pressing this key combination will start/stop recording even if the termina
 
 ---
 
+## 🗺️ Roadmap
+
+### Q1 2025
+
+* ☐ **Wild Capture Inactivity Auto-stop** - Automatically stop recording after 20 seconds of inactivity
+* ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local Intel → Local Generic)
+* ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
+
+### Q2 2025  
+
+* ☐ **Start New Session from UI** - Trigger fresh sessions directly from the interface
+* ☐ **Load Saved Sessions** - Browse and load previously saved sessions
+* ☐ **3-Pane UI Layout Redesign** - Update to narrow controls, transcription buffer, and AI assistant panes
+* ☐ **Transcription Error Correction & Editing** - Support grammar files and UI editing of transcription chunks
+
+### Q3 2025
+
+* ☐ **OpenCode REST Service Integration** - Generate task lists and documentation from session data
+* ☐ **Live AI Assistant Integration** - Dedicated UI pane for live AI interaction
+* ☐ **Specialized Docker Images** - Create Intel-optimized and generic Docker images
+
+### Future Enhancements
+
+* ☐ **Transcription Buffer Formatting Cleanup** - Improve visual formatting for better readability
+* ☐ **Screenshot Capture & VLM Analysis** - Screenshot functionality with AI metadata analysis
+* ☐ **Screencast Support & Correlation** - Video recording with session metadata correlation
+
+---
+
 *Built with ❤️ for those who think faster than they can type.*

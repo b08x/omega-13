@@ -59,6 +59,7 @@ class Omega13App(App):
 
     BINDINGS = [
         Binding("i", "open_input_selector", "Select Inputs"),
+        Binding("n", "new_session", "New Session"),
         Binding("s", "save_session", "Save Session"),
         Binding("t", "manual_transcribe", "Transcribe"),
         Binding("q", "quit", "Quit"),
@@ -87,7 +88,7 @@ class Omega13App(App):
                         yield VUMeter(id="meter-1")
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
-                    yield Static("\n[dim]REC Key to Capture | I Inputs | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
@@ -149,7 +150,7 @@ class Omega13App(App):
             formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
             
             help_text = self.query_one("#help-text", Static)
-            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | S Save | T Transcribe[/dim]")
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
@@ -529,6 +530,80 @@ class Omega13App(App):
 
         default_location = self.config_manager.get_default_save_location()
         self.push_screen(DirectorySelectionScreen(default_location), handle)
+
+    def action_new_session(self):
+        if self.engine.is_recording:
+            self.notify("Stop recording before starting a new session", severity="warning")
+            return
+
+        session = self.session_manager.get_current_session()
+        if session and not session.saved and len(session.recordings) > 0:
+            self._prompt_new_session_confirmation()
+            return
+        
+        self._start_new_session()
+
+    def _start_new_session(self):
+        self.session_manager.create_session()
+        self._update_session_status()
+        
+        display = self.query_one("#transcription-display", TranscriptionDisplay)
+        display.clear()
+        
+        self.notify("New session started", severity="information")
+
+    def _prompt_new_session_confirmation(self):
+        from textual.screen import ModalScreen
+        from textual.widgets import Button
+        from textual.containers import Grid
+
+        class NewSessionPromptScreen(ModalScreen):
+            CSS = """
+            NewSessionPromptScreen { align: center middle; }
+            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
+            #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
+            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
+            Button { width: 100%; }
+            """
+            def __init__(self, session_manager):
+                super().__init__()
+                self.session_manager = session_manager
+
+            def compose(self) -> ComposeResult:
+                session = self.session_manager.get_current_session()
+                count = len(session.recordings) if session else 0
+                with Container(id="dialog"):
+                    yield Static("Start New Session?", id="question")
+                    yield Static(f"Current session has {count} unsaved recording(s)", id="message")
+                    with Grid():
+                        yield Button("Save & New", variant="primary", id="save")
+                        yield Button("Discard", variant="error", id="discard")
+                        yield Button("Cancel", id="cancel")
+
+            def on_button_pressed(self, event: Button.Pressed) -> None:
+                self.dismiss(event.button.id)
+
+        def handle_choice(choice: str):
+            if choice == "cancel": return
+            if choice == "discard":
+                self.session_manager.discard_session()
+                self._start_new_session()
+                return
+            if choice == "save":
+                def handle_save_location(location):
+                    if location:
+                        success = self.session_manager.save_session(location)
+                        if success:
+                            self.notify("Session saved successfully", severity="information")
+                            self._start_new_session()
+                        else:
+                            self.notify("Failed to save session", severity="error")
+                
+                default_location = self.config_manager.get_default_save_location()
+                self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
+
+        self.push_screen(NewSessionPromptScreen(self.session_manager), handle_choice)
 
     def action_quit(self) -> None:
         if hasattr(self, 'session_manager'):
