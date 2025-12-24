@@ -191,7 +191,10 @@ class Omega13App(App):
 
             if TRANSCRIPTION_AVAILABLE:
                 try:
-                    self.transcription_service = TranscriptionService()
+                    self.transcription_service = TranscriptionService(
+                        server_url=self.config_manager.get_transcription_server_url(),
+                        notifier=self.notifier
+                    )
                     self.notify("Transcription ready (API)", severity="information", timeout=3)
                 except Exception as e:
                     self.transcription_service = None
@@ -394,7 +397,7 @@ class Omega13App(App):
             # Re-instantiate service if needed or create new one
             # Note: We should ideally persist the service, but if it's missing:
             self.transcription_service = TranscriptionService(
-                server_url=self.config_manager.config["transcription"]["server_url"],
+                server_url=self.config_manager.get_transcription_server_url(),
                 notifier=self.notifier
             )
 
@@ -564,7 +567,7 @@ def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler()]
+        handlers=[logging.FileHandler(log_file)]
     )
     logging.getLogger(__name__).info(f"Logging initialized: {log_file}")
 

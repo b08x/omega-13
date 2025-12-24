@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Dict
 import jack
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- Type Aliases ---
 ConfigDict = Dict[str, Any]
@@ -29,6 +32,7 @@ class ConfigManager:
             "transcription": {
                 "enabled": True,
                 "auto_transcribe": True,
+                "server_url": "http://localhost:8080",
                 "model_size": "large-v3-turbo",
                 "save_to_file": True,
                 "save_to_file": True,
@@ -56,7 +60,7 @@ class ConfigManager:
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Failed to load config: {e}")
+            logger.warning(f"Failed to load config: {e}")
             return default_config
 
     def save_config(self, config: ConfigDict) -> bool:
@@ -66,7 +70,7 @@ class ConfigManager:
                 json.dump(config, f, indent=2)
             return True
         except IOError as e:
-            print(f"Error: Failed to save config: {e}")
+            logger.error(f"Failed to save config: {e}")
             return False
 
     def get_input_ports(self) -> list[str] | None:
@@ -123,6 +127,10 @@ class ConfigManager:
     def get_copy_to_clipboard(self) -> bool:
         """Get whether to copy transcription results to clipboard."""
         return self.config.get("transcription", {}).get("copy_to_clipboard", False)
+
+    def get_transcription_server_url(self) -> str:
+        """Get the whisper-server URL."""
+        return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
 
     def set_copy_to_clipboard(self, enabled: bool) -> None:
         """Set whether to copy transcription results to clipboard."""

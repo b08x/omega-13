@@ -175,8 +175,7 @@ class TranscriptionService:
             ))
 
             if self.notifier:
-                preview = transcribed_text[:50] + "..." if len(transcribed_text) > 50 else transcribed_text
-                self.notifier.notify("Transcription Complete", f"\"{preview}\"")
+                self.notifier.notify("Transcription Complete", "Audio successfully transcribed.")
 
         except Exception as e:
             logger.exception("Transcription failed")

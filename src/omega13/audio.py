@@ -59,7 +59,7 @@ class AudioEngine:
 
     def start(self) -> None:
         self.client.activate()
-        print(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
+        logger.info(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
 
     def stop(self) -> None:
         """Idempotent JACK client shutdown."""
@@ -206,13 +206,13 @@ class AudioEngine:
                         if not self.is_recording:
                             break
         except Exception as e:
-            print(f"File writer error: {e}")
+            logger.error(f"File writer error: {e}")
 
     def get_available_output_ports(self) -> list[jack.Port]:
         try:
             return self.client.get_ports(is_audio=True, is_output=True)
         except Exception as e:
-            print(f"Error getting ports: {e}")
+            logger.error(f"Error getting ports: {e}")
             return []
 
     def get_current_connections(self) -> list[str | None]:
@@ -233,7 +233,7 @@ class AudioEngine:
                 for source_port in connections:
                     self.client.disconnect(source_port, inport)
         except Exception as e:
-            print(f"Error disconnecting: {e}")
+            logger.error(f"Error disconnecting: {e}")
 
     def connect_inputs(self, source_ports: list[str]) -> bool:
         if self.is_recording:
