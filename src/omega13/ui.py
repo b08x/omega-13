@@ -3,7 +3,7 @@ import jack
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, DirectoryTree, Label, OptionList, RichLog, Static
+    Button, Checkbox, DirectoryTree, Label, OptionList, RichLog, Static
 )
 from textual.containers import Container, Horizontal, Vertical
 from textual.binding import Binding
@@ -37,21 +37,30 @@ class TranscriptionDisplay(Static):
     status = reactive("idle")
     progress = reactive(0.0)
 
-    def __init__(self, **kwargs):
+    def __init__(self, config_manager=None, **kwargs):
         super().__init__(**kwargs)
+        self.config_manager = config_manager
         self.text_log = None
         self.status_label = None
+        self.clipboard_checkbox = None
 
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("Transcription", classes="transcription-title")
-            yield Static("Ready", id="transcription-status", classes="status-idle")
             yield RichLog(id="transcription-log", wrap=True, highlight=True)
 
     def on_mount(self):
         self.text_log = self.query_one("#transcription-log", RichLog)
-        self.status_label = self.query_one("#transcription-status", Static)
+        # These are now external to this widget, queried from the app
+        self.status_label = self.app.query_one("#transcription-status", Static)
+        self.clipboard_checkbox = self.app.query_one("#clipboard-toggle", Checkbox)
         self.text_log.max_lines = 1000
+
+        # Initialize checkbox state from config
+        if self.config_manager:
+            initial_state = self.config_manager.get_copy_to_clipboard()
+            self.clipboard_checkbox.value = initial_state
+
 
     def watch_status(self, new_status: str) -> None:
         status_map = {

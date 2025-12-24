@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Dict
 import jack
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- Type Aliases ---
 ConfigDict = Dict[str, Any]
@@ -25,12 +28,17 @@ class ConfigManager:
             "version": 2,
             "input_ports": None,
             "save_path": str(Path.cwd()),
+            "global_hotkey": "<ctrl>+<alt>+space",  # Default global shortcut updated to Ctrl+Alt+Space
             "transcription": {
                 "enabled": True,
                 "auto_transcribe": True,
+                "server_url": "http://localhost:8080",
                 "model_size": "large-v3-turbo",
-                "save_to_file": True
+                "save_to_file": True,
+                "save_to_file": True,
+                "copy_to_clipboard": False
             },
+            "desktop_notifications": True,
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
@@ -47,10 +55,12 @@ class ConfigManager:
                         config["transcription"] = default_config["transcription"]
                     if "sessions" not in config:
                         config["sessions"] = default_config["sessions"]
+                    if "global_hotkey" not in config:
+                        config["global_hotkey"] = default_config["global_hotkey"]
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Warning: Failed to load config: {e}")
+            logger.warning(f"Failed to load config: {e}")
             return default_config
 
     def save_config(self, config: ConfigDict) -> bool:
@@ -60,7 +70,7 @@ class ConfigManager:
                 json.dump(config, f, indent=2)
             return True
         except IOError as e:
-            print(f"Error: Failed to save config: {e}")
+            logger.error(f"Failed to save config: {e}")
             return False
 
     def get_input_ports(self) -> list[str] | None:
@@ -81,6 +91,14 @@ class ConfigManager:
     def set_save_path(self, path: str | Path):
         self.config["save_path"] = str(path)
         self.save_config(self.config)
+        
+    def get_global_hotkey(self) -> str:
+        """Get the global hotkey combination string."""
+        return self.config.get("global_hotkey", "<ctrl>+<alt>+space")
+
+    def get_desktop_notifications_enabled(self) -> bool:
+        """Check if desktop notifications are enabled."""
+        return self.config.get("desktop_notifications", True)
 
     def validate_ports_exist(self, client: jack.Client) -> tuple[bool, list[str]]:
         saved_ports = self.get_input_ports()
@@ -105,6 +123,21 @@ class ConfigManager:
 
     def get_save_transcription_to_file(self) -> bool:
         return self.config.get("transcription", {}).get("save_to_file", True)
+
+    def get_copy_to_clipboard(self) -> bool:
+        """Get whether to copy transcription results to clipboard."""
+        return self.config.get("transcription", {}).get("copy_to_clipboard", False)
+
+    def get_transcription_server_url(self) -> str:
+        """Get the whisper-server URL."""
+        return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
+
+    def set_copy_to_clipboard(self, enabled: bool) -> None:
+        """Set whether to copy transcription results to clipboard."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["copy_to_clipboard"] = enabled
+        self.save_config(self.config)
 
     # Session Getters
     def get_session_temp_root(self) -> Path:

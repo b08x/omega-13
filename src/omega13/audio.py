@@ -1,6 +1,7 @@
 import logging
 import queue
 import threading
+import time
 from pathlib import Path
 import jack
 import numpy as np
@@ -41,7 +42,7 @@ class AudioEngine:
 
         # Recording state
         self.is_recording = False
-        self.record_queue = queue.Queue()
+        self.record_queue = queue.Queue(maxsize=200)  # ~4s buffer @ 48kHz
         self.writer_thread = None
         self.stop_event = threading.Event()
 
@@ -52,6 +53,10 @@ class AudioEngine:
         # Connection tracking
         self.connected_sources = [None] * self.channels
 
+        # Activity tracking
+        self.last_activity_time = 0.0
+        self.activity_threshold_db = -70.0  # Slightly more sensitive default
+
         # Shutdown state
         self._stopped = False
 
@@ -59,7 +64,34 @@ class AudioEngine:
 
     def start(self) -> None:
         self.client.activate()
-        print(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
+        logger.info(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
+
+    def has_audio_activity(self, window_seconds: float = 0.5) -> bool:
+        """
+        Check if there was any audio activity above threshold within the last window_seconds.
+        
+        Args:
+            window_seconds: Time window to look back for activity (default 0.5s)
+            
+        Returns:
+            True if activity was detected recently OR if ports are connected and engine is safe, 
+            False otherwise.
+        """
+        # 1. Check for recent signal peaks
+        if (time.time() - self.last_activity_time) < window_seconds:
+            return True
+        
+        # 2. Fallback: check if ports are actually connected
+        # If signal is very low but ports ARE connected, we might want to allow it
+        # or at least not be so aggressive if it's PipeWire.
+        connections = self.get_current_connections()
+        if any(c is not None for c in connections):
+            # If connected, maybe the signal is just quiet right now.
+            # Return true but maybe we should still log a warning?
+            # For now, if connected, we treat it as "active enough" to not block.
+            return True
+
+        return False
 
     def stop(self) -> None:
         """Idempotent JACK client shutdown."""
@@ -106,12 +138,22 @@ class AudioEngine:
             self.peaks = np.max(np.abs(data), axis=0).tolist()
             self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
 
+            # Update Activity Tracking
+            if any(db > self.activity_threshold_db for db in self.dbs):
+                self.last_activity_time = time.time()
+
             # Write to Ring Buffer
             self._write_to_ring_buffer(data, frames)
 
             # Write to File Queue if recording
             if self.is_recording:
-                self.record_queue.put(data.copy())
+                try:
+                    # Non-blocking put to prevent JACK callback hang
+                    self.record_queue.put(data.copy(), block=False)
+                except queue.Full:
+                    # Queue full - log but don't block (rare case)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("Record queue full - frame dropped")
 
         except Exception as e:
             # Only log in debug mode (performance-sensitive callback)
@@ -159,20 +201,27 @@ class AudioEngine:
         if not self.is_recording:
             return
 
+        logger.info("Stopping recording...")
+        logger.info(f"Queue depth: {self.record_queue.qsize()} blocks")
+
         self.is_recording = False
         self.stop_event.set()
 
         if self.writer_thread and self.writer_thread.is_alive():
+            logger.info("Waiting for writer thread (5s timeout)...")
             # Wait up to 5 seconds for writer thread to finish
             self.writer_thread.join(timeout=5.0)
 
             if self.writer_thread.is_alive():
                 # Log the hang but continue cleanup
                 logger.warning(
-                    "Writer thread did not terminate within timeout. "
-                    "Audio file may be incomplete."
+                    f"Writer thread still alive. "
+                    f"Remaining queue: {self.record_queue.qsize()} blocks. "
+                    f"File may be incomplete."
                 )
                 # Thread will be forcibly terminated when process exits
+            else:
+                logger.info("Writer thread completed successfully")
 
         # Clear any remaining queue items
         try:
@@ -193,13 +242,13 @@ class AudioEngine:
                         if not self.is_recording:
                             break
         except Exception as e:
-            print(f"File writer error: {e}")
+            logger.error(f"File writer error: {e}")
 
     def get_available_output_ports(self) -> list[jack.Port]:
         try:
             return self.client.get_ports(is_audio=True, is_output=True)
         except Exception as e:
-            print(f"Error getting ports: {e}")
+            logger.error(f"Error getting ports: {e}")
             return []
 
     def get_current_connections(self) -> list[str | None]:
@@ -220,7 +269,7 @@ class AudioEngine:
                 for source_port in connections:
                     self.client.disconnect(source_port, inport)
         except Exception as e:
-            print(f"Error disconnecting: {e}")
+            logger.error(f"Error disconnecting: {e}")
 
     def connect_inputs(self, source_ports: list[str]) -> bool:
         if self.is_recording:
