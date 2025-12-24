@@ -11,6 +11,7 @@ import threading
 import logging
 import requests
 import json
+import time
 
 from .clipboard import copy_to_clipboard
 
@@ -137,21 +138,41 @@ class TranscriptionService:
 
             if progress_callback: progress_callback(0.1)
 
-            try:
-                transcribed_text, language = self._transcribe_file(audio_path)
-            except requests.exceptions.Timeout:
-                # If timeout during shutdown, it's expected behavior
-                if self._shutdown_event.is_set():
-                    logger.info("Transcription timeout during shutdown (expected)")
-                    callback(TranscriptionResult(
-                        text="",
-                        status=TranscriptionStatus.ERROR,
-                        error="Timeout during shutdown"
-                    ))
-                    return
-                else:
-                    # Re-raise if not during shutdown
-                    raise
+            max_retries = 3
+            retry_count = 0
+            transcribed_text = ""
+            language = None
+            
+            while retry_count < max_retries:
+                try:
+                    transcribed_text, language = self._transcribe_file(audio_path)
+                    break
+                except requests.exceptions.Timeout:
+                    # If timeout during shutdown, it's expected behavior
+                    if self._shutdown_event.is_set():
+                        logger.info("Transcription timeout during shutdown (expected)")
+                        callback(TranscriptionResult(
+                            text="",
+                            status=TranscriptionStatus.ERROR,
+                            error="Timeout during shutdown"
+                        ))
+                        return
+                    
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        raise
+                    
+                    wait_time = 2 ** retry_count
+                    logger.warning(f"Transcription timeout. Retrying in {wait_time}s ({retry_count}/{max_retries})...")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        raise
+                    
+                    wait_time = 2 ** retry_count
+                    logger.warning(f"Transcription error: {e}. Retrying in {wait_time}s ({retry_count}/{max_retries})...")
+                    time.sleep(wait_time)
 
             if progress_callback: progress_callback(0.9)
 

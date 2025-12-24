@@ -108,6 +108,7 @@ class Session:
         )
         self.recordings.append(recording)
         self.save_metadata()
+        self._sync_to_save_location()
 
     def add_transcription(self, text: str) -> None:
         """
@@ -128,6 +129,7 @@ class Session:
         if not self.transcriptions:
             self.transcriptions.append(new_text)
             self.save_metadata()
+            self._sync_to_save_location()
             return
 
         # Join the last few transcriptions to check for overlap
@@ -149,10 +151,43 @@ class Session:
         if unique_segment:
             self.transcriptions.append(unique_segment)
             self.save_metadata()
+            self._sync_to_save_location()
 
     def get_metadata_path(self) -> Path:
         """Get path to session metadata file."""
         return self.session_dir / "session.json"
+
+    def _sync_to_save_location(self) -> None:
+        """Sync new recordings and metadata to permanent save location if session is 'saved'."""
+        if not self.saved or not self.save_location:
+            return
+
+        logger.debug(f"Syncing session {self.session_id} to {self.save_location}")
+        try:
+            # Sync metadata
+            shutil.copy2(self.get_metadata_path(), self.save_location / "session.json")
+
+            # Sync recordings
+            src_recordings = self.session_dir / "recordings"
+            dst_recordings = self.save_location / "recordings"
+            dst_recordings.mkdir(parents=True, exist_ok=True)
+            for f in src_recordings.iterdir():
+                if f.is_file():
+                    target = dst_recordings / f.name
+                    if not target.exists():
+                        shutil.copy2(f, target)
+
+            # Sync transcriptions (the .txt files per recording)
+            src_trans = self.session_dir / "transcriptions"
+            dst_trans = self.save_location / "transcriptions"
+            dst_trans.mkdir(parents=True, exist_ok=True)
+            for f in src_trans.iterdir():
+                if f.is_file():
+                    target = dst_trans / f.name
+                    if not target.exists():
+                        shutil.copy2(f, target)
+        except Exception as e:
+            logger.error(f"Failed to sync session to save location: {e}")
 
     def save_metadata(self) -> None:
         """Save session metadata to JSON file."""
