@@ -16,7 +16,6 @@ from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
 from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen
 from .session import SessionManager
-from .session import SessionManager
 from .hotkeys import GlobalHotkeyListener
 from .notifications import DesktopNotifier
 
