@@ -14,7 +14,7 @@ from textual.widgets import Header, Footer, Label, Static, Checkbox
 # Import refactored modules
 from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
-from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen
+from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen
 from .session import SessionManager
 from .session import SessionManager
 from .hotkeys import GlobalHotkeyListener
@@ -531,18 +531,22 @@ class Omega13App(App):
                 self.notify("Failed to update session snapshot", severity="error")
             return
 
-        def handle(result):
-            if result:
-                success = self.session_manager.save_session(result)
-                if success:
-                    self._update_session_status()
-                    save_loc = session.save_location
-                    self.notify(f"Session saved to: {save_loc}", severity="information", timeout=5)
-                else:
-                    self.notify("Failed to save session", severity="error")
+        def handle_directory(location):
+            if location:
+                def handle_title(title: Optional[str]):
+                    if title is not None:  # title could be empty string for "Skip"
+                        success = self.session_manager.save_session(location, title=title)
+                        if success:
+                            self._update_session_status()
+                            save_loc = session.save_location
+                            self.notify(f"Session saved to: {save_loc}", severity="information", timeout=5)
+                        else:
+                            self.notify("Failed to save session", severity="error")
+
+                self.push_screen(SessionTitleScreen(), handle_title)
 
         default_location = self.config_manager.get_default_save_location()
-        self.push_screen(DirectorySelectionScreen(default_location), handle)
+        self.push_screen(DirectorySelectionScreen(default_location), handle_directory)
 
     def action_new_session(self):
         if self.engine.is_recording:
@@ -606,12 +610,16 @@ class Omega13App(App):
             if choice == "save":
                 def handle_save_location(location):
                     if location:
-                        success = self.session_manager.save_session(location)
-                        if success:
-                            self.notify("Session saved successfully", severity="information")
-                            self._start_new_session()
-                        else:
-                            self.notify("Failed to save session", severity="error")
+                        def handle_title(title: Optional[str]):
+                            if title is not None:
+                                success = self.session_manager.save_session(location, title=title)
+                                if success:
+                                    self.notify("Session saved successfully", severity="information")
+                                    self._start_new_session()
+                                else:
+                                    self.notify("Failed to save session", severity="error")
+                        
+                        self.push_screen(SessionTitleScreen(), handle_title)
                 
                 default_location = self.config_manager.get_default_save_location()
                 self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
@@ -667,10 +675,14 @@ class Omega13App(App):
             if choice == "save":
                 def handle_save_location(location):
                     if location:
-                        success = self.session_manager.save_session(location)
-                        if success: self.notify("Session saved successfully", severity="information")
-                        else: self.notify("Failed to save session", severity="error")
-                    self.exit()
+                        def handle_title(title: Optional[str]):
+                            if title is not None:
+                                success = self.session_manager.save_session(location, title=title)
+                                if success: self.notify("Session saved successfully", severity="information")
+                                else: self.notify("Failed to save session", severity="error")
+                            self.exit()
+                        
+                        self.push_screen(SessionTitleScreen(), handle_title)
                 default_location = self.config_manager.get_default_save_location()
                 self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
 

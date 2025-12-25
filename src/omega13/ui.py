@@ -174,6 +174,43 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "cancel-btn": self.action_cancel()
         elif event.button.id == "confirm-btn": self.action_confirm()
+
+
+class SessionTitleScreen(ModalScreen[str | None]):
+    """Modal screen for entering a session title."""
+    CSS = """
+    SessionTitleScreen { align: center middle; }
+    #title-dialog { width: 50; height: 15; border: thick $accent; background: $surface; padding: 1 2; }
+    #title-input { margin: 1 0; }
+    #button-row { height: 3; align: center middle; margin-top: 1; }
+    #button-row Button { margin: 0 1; }
+    """
+    BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm")]
+
+    def compose(self) -> ComposeResult:
+        with Container(id="title-dialog"):
+            yield Label("Enter Session Title (Optional)", id="title")
+            from textual.widgets import Input
+            yield Input(placeholder="e.g. Brainstorming Session", id="title-input")
+            with Horizontal(id="button-row"):
+                yield Button("Skip", variant="default", id="skip-btn")
+                yield Button("Save", variant="primary", id="confirm-btn")
+
+    def on_mount(self):
+        self.query_one("#title-input").focus()
+
+    def action_confirm(self):
+        title = self.query_one("#title-input").value.strip()
+        self.dismiss(title if title else "")
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "skip-btn":
+            self.dismiss("")
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
         elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
         elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
 
