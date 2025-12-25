@@ -93,6 +93,7 @@ class Omega13App(App):
                     yield Label("Transcription Status", classes="transcription-title")
                     yield Static("Ready", id="transcription-status", classes="status-idle")
                     yield Checkbox("Copy to clipboard", id="clipboard-toggle", classes="clipboard-checkbox")
+                    yield Checkbox("Inject to active window", id="injection-toggle", classes="injection-checkbox")
 
             with Container(id="transcription-pane"):
                 yield TranscriptionDisplay(id="transcription-display")
@@ -140,6 +141,10 @@ class Omega13App(App):
             if transcription_display.clipboard_checkbox:
                 initial_state = self.config_manager.get_copy_to_clipboard()
                 transcription_display.clipboard_checkbox.value = initial_state
+            
+            if transcription_display.injection_checkbox:
+                initial_inject = self.config_manager.get_inject_to_active_window()
+                transcription_display.injection_checkbox.value = initial_inject
 
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
@@ -351,9 +356,13 @@ class Omega13App(App):
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if event.checkbox.id == "clipboard-toggle":
             if hasattr(self, 'config_manager'):
-                self.config_manager.set_copy_to_clipboard(event.value)
                 status = "enabled" if event.value else "disabled"
                 self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
+        elif event.checkbox.id == "injection-toggle":
+            if hasattr(self, 'config_manager'):
+                self.config_manager.set_inject_to_active_window(event.value)
+                status = "enabled" if event.value else "disabled"
+                self.notify(f"Text injection {status}", severity="information", timeout=2)
 
     def action_toggle_record(self) -> None:
         status_bar = self.query_one("#status-bar")
@@ -450,15 +459,19 @@ class Omega13App(App):
         def on_complete(result): self.call_from_thread(self._handle_result, result, audio_file)
         def on_progress(p): self.call_from_thread(lambda: setattr(display, 'progress', p))
         def on_clipboard_error(error_msg): self.call_from_thread(self._handle_clipboard_error, error_msg)
+        def on_injection_error(error_msg): self.call_from_thread(self._handle_injection_error, error_msg)
 
         copy_enabled = self.config_manager.get_copy_to_clipboard()
+        inject_enabled = self.config_manager.get_inject_to_active_window()
 
         self.transcription_service.transcribe_async(
             audio_file,
             on_complete,
             on_progress,
             copy_to_clipboard_enabled=copy_enabled,
-            clipboard_error_callback=on_clipboard_error
+            clipboard_error_callback=on_clipboard_error,
+            inject_to_active_window_enabled=inject_enabled,
+            injection_error_callback=on_injection_error
         )
 
     def _handle_result(self, result, audio_file):
@@ -476,6 +489,9 @@ class Omega13App(App):
 
     def _handle_clipboard_error(self, error_msg: str):
         self.notify(f"Clipboard copy failed: {error_msg}", severity="warning", timeout=4)
+
+    def _handle_injection_error(self, error_msg: str):
+        self.notify(f"Text injection failed: {error_msg}", severity="warning", timeout=4)
 
     def action_manual_transcribe(self):
         if last := self._get_last_recording_path():
