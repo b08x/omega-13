@@ -14,6 +14,7 @@ import json
 import time
 
 from .clipboard import copy_to_clipboard
+from .injection import inject_text
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,9 @@ class TranscriptionService:
         callback: Callable[[TranscriptionResult], None],
         progress_callback: Optional[Callable[[float], None]] = None,
         copy_to_clipboard_enabled: bool = False,
-        clipboard_error_callback: Optional[Callable[[str], None]] = None
+        clipboard_error_callback: Optional[Callable[[str], None]] = None,
+        inject_to_active_window_enabled: bool = False,
+        injection_error_callback: Optional[Callable[[str], None]] = None
     ) -> threading.Thread:
         """
         Start async transcription with proper cleanup support.
@@ -99,13 +102,23 @@ class TranscriptionService:
             progress_callback: Optional callback for progress updates (0.0 to 1.0)
             copy_to_clipboard_enabled: Whether to copy result to clipboard
             clipboard_error_callback: Optional callback for clipboard errors (receives error message)
+            inject_to_active_window_enabled: Whether to type result into active window
+            injection_error_callback: Optional callback for injection errors (receives error message)
 
         Returns:
             Thread object running the transcription
         """
         thread = threading.Thread(
             target=self._transcribe_worker,
-            args=(audio_path, callback, progress_callback, copy_to_clipboard_enabled, clipboard_error_callback),
+            args=(
+                audio_path, 
+                callback, 
+                progress_callback, 
+                copy_to_clipboard_enabled, 
+                clipboard_error_callback,
+                inject_to_active_window_enabled,
+                injection_error_callback
+            ),
             daemon=False,  # Changed from True
             name=f"transcription-{audio_path.stem}"  # Added name for debugging
         )
@@ -125,7 +138,9 @@ class TranscriptionService:
         callback: Callable[[TranscriptionResult], None],
         progress_callback: Optional[Callable[[float], None]],
         copy_to_clipboard_enabled: bool = False,
-        clipboard_error_callback: Optional[Callable[[str], None]] = None
+        clipboard_error_callback: Optional[Callable[[str], None]] = None,
+        inject_to_active_window_enabled: bool = False,
+        injection_error_callback: Optional[Callable[[str], None]] = None
     ):
         try:
             # Check cancellation before expensive operations
@@ -193,6 +208,13 @@ class TranscriptionService:
                 if not success and clipboard_error_callback:
                     # Invoke error callback if clipboard copy failed
                     clipboard_error_callback(error_msg)
+
+            # Inject to active window if enabled
+            if inject_to_active_window_enabled and transcribed_text:
+                success, error_msg = inject_text(transcribed_text)
+                if not success and injection_error_callback:
+                    # Invoke error callback if injection failed
+                    injection_error_callback(error_msg)
 
             if progress_callback: progress_callback(1.0)
 

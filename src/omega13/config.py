@@ -35,8 +35,8 @@ class ConfigManager:
                 "server_url": "http://localhost:8080",
                 "model_size": "large-v3-turbo",
                 "save_to_file": True,
-                "save_to_file": True,
-                "copy_to_clipboard": False
+                "copy_to_clipboard": False,
+                "inject_to_active_window": False
             },
             "desktop_notifications": True,
             "sessions": {
@@ -132,11 +132,22 @@ class ConfigManager:
         """Get the whisper-server URL."""
         return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
 
+    def get_inject_to_active_window(self) -> bool:
+        """Get whether to inject transcription results to the active window."""
+        return self.config.get("transcription", {}).get("inject_to_active_window", False)
+
     def set_copy_to_clipboard(self, enabled: bool) -> None:
         """Set whether to copy transcription results to clipboard."""
         if "transcription" not in self.config:
             self.config["transcription"] = {}
         self.config["transcription"]["copy_to_clipboard"] = enabled
+        self.save_config(self.config)
+
+    def set_inject_to_active_window(self, enabled: bool) -> None:
+        """Set whether to inject transcription results to the active window."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["inject_to_active_window"] = enabled
         self.save_config(self.config)
 
     # Session Getters
