@@ -41,9 +41,16 @@ class SilenceCountdown(Static):
     countdown = reactive(0.0)  # Seconds remaining until auto-stop
     visible = reactive(False)  # Whether to show the countdown
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_displayed_countdown = -1.0  # For debouncing
+
     def watch_countdown(self, value: float) -> None:
-        """Update display when countdown value changes."""
-        self.update_display()
+        """Update display when countdown value changes (with debouncing)."""
+        # Debounce: only update if change is > 0.3s to reduce UI overhead
+        if abs(value - self._last_displayed_countdown) > 0.3 or value == 0:
+            self._last_displayed_countdown = value
+            self.update_display()
 
     def watch_visible(self, is_visible: bool) -> None:
         """Update display when visibility changes."""

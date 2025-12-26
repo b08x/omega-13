@@ -75,14 +75,24 @@ class SignalDetector:
         self.rms_levels = [0.0] * channels
         self.rms_db = [-100.0] * channels
 
+        # Performance optimization: only calculate RMS every N frames to reduce CPU
+        self.rms_calc_interval = 10  # Calculate every 10th callback (~50ms at typical buffer sizes)
+        self.rms_calc_counter = 0
+
         # Silence tracking
         self.silence_start_time: Optional[float] = None
         self.is_currently_silent = True
 
+        # Sustained signal tracking (prevents false triggers from brief transients)
+        self.signal_sustain_duration = 0.5  # Require 0.5s of continuous signal
+        self.signal_start_time: Optional[float] = None
+        self.is_signal_sustained = False
+
         logger.info(
             f"SignalDetector initialized: "
             f"begin={begin_threshold_db}dB, end={end_threshold_db}dB, "
-            f"silence={silence_duration_sec}s, rms_window={rms_window_sec}s"
+            f"silence={silence_duration_sec}s, rms_window={rms_window_sec}s, "
+            f"sustain={self.signal_sustain_duration}s"
         )
 
     def update(self, audio_data: np.ndarray) -> Dict[str, Any]:
@@ -121,12 +131,32 @@ class SignalDetector:
             self.rms_write_pos = 0
             self.rms_buffer_filled = True
 
-        # Calculate RMS over the buffer
-        self._calculate_rms()
+        # Calculate RMS periodically (performance optimization)
+        self.rms_calc_counter += 1
+        if self.rms_calc_counter >= self.rms_calc_interval:
+            self._calculate_rms()
+            self.rms_calc_counter = 0
 
-        # Check thresholds
-        is_above_begin = any(db > self.begin_threshold_db for db in self.rms_db)
+        # Check instantaneous thresholds
+        is_above_begin_instantaneous = any(db > self.begin_threshold_db for db in self.rms_db)
         is_above_end = any(db > self.end_threshold_db for db in self.rms_db)
+
+        # Update sustained signal tracking (prevents false triggers from transients)
+        current_time = time.time()
+        if is_above_begin_instantaneous:
+            if self.signal_start_time is None:
+                # Signal just started
+                self.signal_start_time = current_time
+                self.is_signal_sustained = False
+            else:
+                # Check if signal has been sustained long enough
+                signal_duration = current_time - self.signal_start_time
+                if signal_duration >= self.signal_sustain_duration:
+                    self.is_signal_sustained = True
+        else:
+            # Signal dropped below threshold - reset sustain tracking
+            self.signal_start_time = None
+            self.is_signal_sustained = False
 
         # Update silence tracking
         if is_above_end:
@@ -136,13 +166,13 @@ class SignalDetector:
         else:
             # Below end threshold - count as silence
             if self.silence_start_time is None:
-                self.silence_start_time = time.time()
+                self.silence_start_time = current_time
             self.is_currently_silent = True
 
         return {
             'rms_levels': self.rms_levels.copy(),
             'rms_db': self.rms_db.copy(),
-            'is_above_begin': is_above_begin,
+            'is_above_begin': self.is_signal_sustained,  # Only true after sustain period
             'is_above_end': is_above_end,
             'silence_duration': self.get_silence_duration()
         }

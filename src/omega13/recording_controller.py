@@ -10,6 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
 import threading
+import numpy as np
+import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,9 @@ class RecordingController:
 
         # Current recording path (for cleanup)
         self._current_recording_path: Optional[Path] = None
+
+        # Energy-based validation threshold (average RMS must be above this)
+        self._minimum_avg_rms_db = -50.0  # Discard recordings with avg RMS below -50 dB
 
         # Event callback
         self._event_callback: Optional[Callable[[RecordingEvent, Dict[str, Any]], None]] = None
@@ -245,6 +250,50 @@ class RecordingController:
         self._stop_recording_internal(return_to_armed)
         return True
 
+    def _validate_recording_energy(self, file_path: Path) -> bool:
+        """
+        Validate recording has sufficient energy (not mostly silence).
+
+        Args:
+            file_path: Path to audio file to validate
+
+        Returns:
+            True if recording is valid, False if it should be discarded
+        """
+        try:
+            # Read the audio file
+            audio_data, samplerate = sf.read(file_path)
+
+            # Calculate average RMS across all channels
+            if audio_data.ndim == 1:
+                # Mono
+                rms = np.sqrt(np.mean(audio_data ** 2))
+            else:
+                # Stereo/multi-channel - average across channels
+                rms = np.sqrt(np.mean(audio_data ** 2))
+
+            # Convert to dB
+            if rms > 1e-5:
+                avg_rms_db = 20 * np.log10(rms)
+            else:
+                avg_rms_db = -100.0
+
+            # Check if average energy meets minimum threshold
+            is_valid = avg_rms_db > self._minimum_avg_rms_db
+
+            if not is_valid:
+                logger.info(
+                    f"Recording discarded: avg RMS {avg_rms_db:.1f} dB "
+                    f"below threshold {self._minimum_avg_rms_db:.1f} dB (likely false trigger)"
+                )
+
+            return is_valid
+
+        except Exception as e:
+            logger.error(f"Error validating recording energy: {e}")
+            # On error, keep the recording (fail-safe)
+            return True
+
     def _stop_recording_internal(self, return_to_armed: bool) -> None:
         """
         Internal method to stop recording and transition state.
@@ -257,17 +306,33 @@ class RecordingController:
         # Stop audio engine
         self.audio_engine.stop_recording()
 
-        # Fire appropriate event
-        if return_to_armed:
-            self._fire_event(RecordingEvent.AUTO_STOPPED, {
-                'path': str(self._current_recording_path) if self._current_recording_path else None
-            })
-            target_state = RecordingState.ARMED
-        else:
-            self._fire_event(RecordingEvent.MANUAL_STOPPED, {
-                'path': str(self._current_recording_path) if self._current_recording_path else None
-            })
-            target_state = RecordingState.IDLE
+        # Validate recording energy (discard if mostly silence)
+        recording_path = self._current_recording_path
+        is_valid = True
+        if recording_path and recording_path.exists():
+            is_valid = self._validate_recording_energy(recording_path)
+            if not is_valid:
+                # Silently discard invalid recording
+                try:
+                    recording_path.unlink()
+                    logger.debug(f"Deleted low-energy recording: {recording_path.name}")
+                    recording_path = None  # Don't fire event with this path
+                except Exception as e:
+                    logger.error(f"Failed to delete invalid recording: {e}")
+
+        # Fire appropriate event only if recording was valid
+        if is_valid and recording_path:
+            if return_to_armed:
+                self._fire_event(RecordingEvent.AUTO_STOPPED, {
+                    'path': str(recording_path)
+                })
+            else:
+                self._fire_event(RecordingEvent.MANUAL_STOPPED, {
+                    'path': str(recording_path)
+                })
+
+        # Determine target state
+        target_state = RecordingState.ARMED if return_to_armed else RecordingState.IDLE
 
         self._current_recording_path = None
         self.signal_detector.reset_silence_timer()

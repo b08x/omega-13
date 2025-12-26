@@ -238,7 +238,7 @@ class Omega13App(App):
                     self.notify(f"Transcription init failed: {e}", severity="warning")
 
             self.set_interval(0.05, self.update_meters)
-            self.set_interval(0.1, self.check_auto_triggers)  # 100ms for auto-record logic
+            self.set_interval(0.2, self.check_auto_triggers)  # 200ms for auto-record logic (reduced from 100ms for performance)
         except Exception as e:
             self.exit(message=f"Failed to start: {e}")
 
