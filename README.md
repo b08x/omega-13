@@ -4,9 +4,7 @@
 
 > *"It's a time machine... but it only goes back 13 seconds."*
 
-Omega-13 is a terminal-based tool for Linux that constantly buffers audio in memory. When you trigger a recording, it captures the **previous 13 seconds** of audio (plus whatever follows), saves it, and automatically transcribes it using a local AI model.
-
-It is designed for developers, writers, and power users who speak ideas out loud but often forget to hit "record" until *after* the thought has occurred.
+Omega-13 is a retroactive audio recording system designed to capture audio from the past (defaulting to 13 seconds) and process it into transcriptions. The system architecture relies on a JACK/PipeWire audio backend, a Python-based Textual TUI, and a containerized Whisper inference server. Installation involves a multi-stage setup: deploying the inference container, installing the Python package, and configuring system-level global hotkeys to bypass Wayland security constraints.
 
 <!-- ![Omega-13 Main Interface](images/01_main_interface.png)
 *(The main TUI showing audio levels and transcription status)* -->
@@ -186,25 +184,19 @@ Omega-13 includes an intelligent auto-record mode that automatically starts and 
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ Backlog
 
 ### Completed ✅
 
 * ✅ **Voice-Activated Auto-Record** - Automatic recording start on voice detection with intelligent silence-based termination (v2.3.0)
+* ✅ **Start New Session from UI** - Trigger fresh sessions directly from the interface
 
-### Q1 2025
-
-* ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local Intel → Local Generic)
+* ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local CPU → Cloud API)
 * ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
 
-### Q2 2025  
-
-* ☐ **Start New Session from UI** - Trigger fresh sessions directly from the interface
 * ☐ **Load Saved Sessions** - Browse and load previously saved sessions
 * ☐ **3-Pane UI Layout Redesign** - Update to narrow controls, transcription buffer, and AI assistant panes
 * ☐ **Transcription Error Correction & Editing** - Support grammar files and UI editing of transcription chunks
-
-### Q3 2025
 
 * ☐ **OpenCode REST Service Integration** - Generate task lists and documentation from session data
 * ☐ **Live AI Assistant Integration** - Dedicated UI pane for live AI interaction
