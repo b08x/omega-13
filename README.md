@@ -4,7 +4,7 @@
 
 > *"It's a time machine... but it only goes back 13 seconds."*
 
-Omega-13 is a terminal-based tool for Linux that constantly buffers audio in memory. When you trigger a recording, it captures the **previous 13 seconds** of audio (plus whatever follows), saves it, and automatically transcribes it using a local AI model.
+Omega-13 is a terminal-based tool for Linux that maintains a continuous audio buffer in memory. When you trigger a recording, it captures the **previous 13 seconds** of audio (plus whatever follows), saves it, and automatically transcribes it using a local AI model.
 
 It is designed for developers, writers, and power users who speak ideas out loud but often forget to hit "record" until *after* the thought has occurred.
 
@@ -148,23 +148,108 @@ Now, pressing this key combination will start/stop recording even if the termina
 * Check the Docker container: `docker logs -f whisper-server`.
 * Ensure your GPU is accessible to Docker (`nvidia-smi`).
 
+**Audio Dropouts / XRUNs**
+
+* If you hear glitches or the VU meter shows gaps, your system may be under high load.
+* Close unnecessary applications to free up CPU resources.
+* Consider increasing JACK's buffer size if the problem persists.
+
+**Backend Not Responding**
+
+* Omega-13 assumes the `whisper-server` Docker container is running.
+* Verify with: `docker ps | grep whisper-server`
+* If stopped, restart with: `docker compose up -d`
+
 ---
 
-## 🏗️ Architecture
+## ⚠️ Known Limitations
 
-* **Frontend:** Python `Textual` app handling the Ring Buffer (NumPy) and UI.
-* **Audio Backend:** `JACK` Client. It maintains a rolling float32 buffer array. When triggered, it stitches the pre-buffer (past) with the active queue (present) and writes to `SoundFile`.
-* **Transcription:** The app sends the resulting `.wav` file via HTTP POST to the local Docker container running `whisper-server`.
+Omega-13 is actively developed. The following technical limitations are known and being addressed:
+
+### Real-Time Safety
+
+> [!WARNING]  
+> The JACK `process` callback currently performs memory allocation (NumPy array creation) and logging, which can trigger Python's Garbage Collector and cause audio dropouts under high system load.
+
+**Impact:** Potential audio glitches (XRUNs) during recording  
+**Mitigation:** Close resource-intensive applications while recording  
+**Roadmap:** Planned refactor to use pre-allocated buffers (Q1 2025)
+
+### External Dependency Management
+
+> [!CAUTION]  
+> The application assumes the `whisper-server` Docker container is pre-provisioned and running. There's currently no startup health check or automatic orchestration.
+
+**Impact:** Silent failures or hangs if the backend is unavailable  
+**Mitigation:** Manually verify Docker container status before recording  
+**Roadmap:** **Inference Host Startup Validation** (Q1 2025)
+
+### Deployment Friction
+
+> [!NOTE]  
+> Manual configuration of JACK/PipeWire routing and Docker significantly raises the barrier to entry for new users.
+
+**Impact:** "No audio" support tickets, confusion during setup  
+**Mitigation:** Follow the detailed setup guide above  
+**Future Enhancement:** Automated setup scripts and better onboarding UX
+
+---
+
+## 🏗️ Architecture Overview
+
+Omega-13 employs a **hybrid architecture** that effectively bridges multiple layers:
+
+* **Frontend:** Python `Textual` TUI app providing a rich, keyboard-centric terminal interface
+* **Audio Backend:** `JACK`/`PipeWire` client maintaining a real-time ring buffer (NumPy float32 array)
+* **Transcription Backend:** Containerized `whisper.cpp` server with CUDA acceleration for local AI processing
+
+### System Flow
+
+```mermaid
+graph LR
+    A[Microphone] -->|JACK/PipeWire| B[Audio Engine]
+    B -->|Ring Buffer| C[NumPy Array]
+    B -->|Live Queue| D[File Writer Thread]
+    E[Global Hotkey] -->|SIGUSR1| F[Textual TUI]
+    F -->|Toggle Command| B
+    D -->|WAV File| G[Transcription Service]
+    G -->|HTTP POST| H[whisper-server Docker]
+    H -->|Transcribed Text| F
+    F -->|Clipboard| I[System Clipboard]
+```
+
+### Key Design Principles
+
+**🔒 Privacy-Centric Design**  
+All audio processing and transcription happens locally. By delegating transcription to a local Docker container, no audio data ever leaves your machine, ensuring complete privacy.
+
+**⚡ Real-Time Performance**  
+The audio callback runs in JACK's real-time thread, requiring careful thread safety and lock-free operations to avoid audio dropouts (XRUNs).
+
+**🌊 Wayland Compatibility**  
+Modern Linux desktops (Wayland) block applications from monitoring global keystrokes for security. Omega-13 uses a clever workaround: a PID-based signal handling mechanism (`SIGUSR1`) where the system shortcut sends signals to the running instance via `omega13 --toggle`.
+
+**🔀 Modular Separation**  
+The system maintains clear boundaries between components:
+
+* Audio capture (real-time thread)
+* File I/O (separate thread)
+* UI updates (async event loop)
+* AI inference (external service)
 
 ---
 
 ## 🗺️ Roadmap
 
+> [!TIP]  
+> Items marked with 🔧 directly address known limitations from the design review.
+
 ### Q1 2025
 
 * ☐ **Wild Capture Inactivity Auto-stop** - Automatically stop recording after 20 seconds of inactivity
 * ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local Intel → Local Generic)
-* ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
+* ☐ 🔧 **Inference Host Startup Validation** - Health checks for whisper-server during startup *(addresses External Dependency Management)*
+* ☐ 🔧 **Optimize Audio Callback** - Refactor to use pre-allocated buffers, remove allocations from hot path *(addresses Real-Time Safety)*
 
 ### Q2 2025  
 

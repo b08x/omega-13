@@ -132,68 +132,203 @@ setup_project() {
     log_success "Python environment ready."
 }
 
-# --- 5. Build Whisper Image ---
-build_whisper_image() {
-    log_info "Building whisper-server CUDA image."
+# --- 5. GPU Detection ---
 
-    # Configuration
-    local IMAGE_NAME="whisper-server-cuda"
-    local IMAGE_TAG="latest"
-    local FULL_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
+detect_gpu() {
+    if command -v nvidia-smi &> /dev/null; then
+        if nvidia-smi &> /dev/null; then
+            echo "cuda"
+            return 0
+        fi
+    fi
+    echo "cpu"
+    return 1
+}
 
-    # Build arguments
-    local WHISPER_VERSION="${WHISPER_VERSION:-master}"
-    # Default: support RTX 20xx/30xx/40xx, A100, H100
-    # Customize with: CUDA_ARCHITECTURES="86" ./bootstrap.sh
-    local CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-75;80;86;89;90}"
+# --- 6. Build Container Images (Multi-Variant) ---
+
+build_whisper_cpu() {
+    log_info "Building whisper-server-cpu image..."
+    podman build \
+        -t whisper-server-cpu:latest \
+        -f Containerfile.cpu \
+        .
+    log_success "whisper-server-cpu image built successfully."
+}
+
+build_whisper_cuda() {
+    log_info "Building whisper-server-cuda image..."
+    local CUDA_ARCH="${CUDA_ARCH:-75;80;86;89;90}"
 
     echo ""
-    log_info "Build Configuration:"
-    echo "  Image:              ${FULL_IMAGE}"
-    echo "  Whisper version:      ${WHISPER_VERSION}"
-    echo "  CUDA architectures:   ${CUDA_ARCHITECTURES}"
-    echo ""
-    log_info "Reference for CUDA architectures:"
+    log_info "CUDA Build Configuration:"
+    echo "  CUDA architectures: ${CUDA_ARCH}"
     echo "  75: RTX 20xx (Turing)   80: A100 (Ampere)"
     echo "  86: RTX 30xx (Ampere)   89: RTX 40xx (Ada)"
     echo "  90: H100 (Hopper)"
     echo ""
 
-    # Build the image
-    log_info "Starting build (this may take a while)..."
     podman build \
-        --tag "${FULL_IMAGE}" \
-        --build-arg WHISPER_VERSION="${WHISPER_VERSION}" \
-        --build-arg CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
-        --file Containerfile \
+        --build-arg CUDA_ARCHITECTURES="${CUDA_ARCH}" \
+        -t whisper-server-cuda:latest \
+        -f Containerfile \
         .
-    
-    log_success "Image '${FULL_IMAGE}' built successfully."
-    echo ""
-    log_info "To run the server, use:"
-    log_info "  podman-compose up -d"
-
+    log_success "whisper-server-cuda image built successfully."
 }
 
-# --- 6. Whisper Server Setup (Optional) ---
+build_spacy_cpu() {
+    log_info "Building spacy-nlp-cpu image..."
+    podman build \
+        -t spacy-nlp-cpu:latest \
+        -f containers/spacy-nlp/Containerfile.cpu \
+        containers/spacy-nlp/
+    log_success "spacy-nlp-cpu image built successfully."
+}
 
-setup_whisper() {
+build_spacy_cuda() {
+    log_info "Building spacy-nlp-cuda image..."
+    podman build \
+        -t spacy-nlp-cuda:latest \
+        -f containers/spacy-nlp/Containerfile.cuda \
+        containers/spacy-nlp/
+    log_success "spacy-nlp-cuda image built successfully."
+}
+
+build_images() {
+    local gpu_mode=$(detect_gpu)
+
     echo ""
-    log_info "--- Whisper Transcription Server Setup ---"
-    read -p "Do you want to build the CUDA-enabled Whisper Server image now? (y/N) " -n 1 -r
+    log_info "=== Container Image Build ==="
+    log_info "Detected mode: ${gpu_mode}"
+    echo ""
+
+    if [ "$gpu_mode" = "cuda" ]; then
+        log_info "Building GPU-accelerated images..."
+
+        log_info "Building whisper-server-cuda image..."
+        if build_whisper_cuda; then
+            echo "✓ Whisper CUDA build successful"
+        else
+            log_warn "Whisper CUDA build failed, falling back to CPU..."
+            build_whisper_cpu
+        fi
+
+        log_info "Building spacy-nlp-cuda image..."
+        if build_spacy_cuda; then
+            echo "✓ SpaCy CUDA build successful"
+        else
+            log_warn "SpaCy CUDA build failed, falling back to CPU..."
+            build_spacy_cpu
+        fi
+    else
+        log_info "No GPU detected or nvidia-smi not available. Building CPU-only images..."
+        build_whisper_cpu
+        build_spacy_cpu
+    fi
+
+    echo ""
+    log_success "All images built successfully!"
+    echo ""
+    log_info "To start services:"
+    log_info "  podman compose -f compose-dev.yml up -d    # GPU variant"
+    log_info "  podman compose -f compose-dev.cpu.yml up -d # CPU variant"
+}
+
+# --- 7. Command-Line Interface ---
+
+show_usage() {
+    echo "Usage: $0 [OPTION]"
+    echo ""
+    echo "Options:"
+    echo "  --all          Build all images (auto-detect GPU, fallback to CPU)"
+    echo "  --cpu          Force CPU-only builds"
+    echo "  --cuda         Force CUDA builds (requires GPU)"
+    echo "  --whisper-only Build whisper image only (auto-detect)"
+    echo "  --whisper-cpu  Build whisper CPU variant"
+    echo "  --whisper-cuda Build whisper CUDA variant"
+    echo "  --spacy-only   Build spaCy image only (auto-detect)"
+    echo "  --spacy-cpu    Build spaCy CPU variant"
+    echo "  --spacy-cuda   Build spaCy CUDA variant"
+    echo "  --help         Show this help message"
+    echo ""
+}
+
+handle_build_command() {
+    case "${1:-}" in
+        --whisper-only)
+            gpu_mode=$(detect_gpu)
+            if [ "$gpu_mode" = "cuda" ]; then
+                build_whisper_cuda || build_whisper_cpu
+            else
+                build_whisper_cpu
+            fi
+            ;;
+        --whisper-cpu)
+            build_whisper_cpu
+            ;;
+        --whisper-cuda)
+            build_whisper_cuda
+            ;;
+        --spacy-only)
+            gpu_mode=$(detect_gpu)
+            if [ "$gpu_mode" = "cuda" ]; then
+                build_spacy_cuda || build_spacy_cpu
+            else
+                build_spacy_cpu
+            fi
+            ;;
+        --spacy-cpu)
+            build_spacy_cpu
+            ;;
+        --spacy-cuda)
+            build_spacy_cuda
+            ;;
+        --cpu)
+            log_info "Building CPU-only images..."
+            build_whisper_cpu
+            build_spacy_cpu
+            ;;
+        --cuda)
+            log_info "Building CUDA images..."
+            build_whisper_cuda
+            build_spacy_cuda
+            ;;
+        --all|"")
+            build_images
+            ;;
+        --help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+# --- 8. Interactive Container Setup (Optional) ---
+
+setup_containers() {
+    echo ""
+    log_info "--- Container Image Setup ---"
+    read -p "Do you want to build container images now? (y/N) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Check for NVIDIA drivers
         if command -v nvidia-smi >/dev/null 2>&1; then
-            log_info "NVIDIA GPU detected."
+            log_info "NVIDIA GPU detected - will build CUDA variants."
         else
-            log_warn "NVIDIA GPU not detected. The container may require NVIDIA drivers for CUDA support."
+            log_warn "NVIDIA GPU not detected - will build CPU variants."
         fi
 
-        build_whisper_image
-        
+        build_images
     else
-        log_info "Skipping Whisper Server build."
+        log_info "Skipping container builds."
+        echo ""
+        log_info "You can build images later with:"
+        log_info "  ./bootstrap.sh --all"
     fi
 }
 
@@ -203,12 +338,12 @@ main() {
     echo "=========================================="
     echo "   Omega-13 Installer & Bootstrap"
     echo "=========================================="
-    
+
     detect_pkg_manager
     install_system_deps
     install_uv
     setup_project
-    setup_whisper
+    setup_containers
 
     echo ""
     echo "=========================================="
@@ -218,4 +353,11 @@ main() {
     echo "=========================================="
 }
 
-main
+# Check if script was called with build arguments
+if [ $# -gt 0 ]; then
+    # Build-only mode (skip system setup)
+    handle_build_command "$1"
+else
+    # Full installation mode
+    main
+fi

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git -C /home/b08x/Workspace/omega-13 log --oneline --all)"
     ]
   }
 }

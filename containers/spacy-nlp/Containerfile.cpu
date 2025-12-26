@@ -1,0 +1,53 @@
+# Multi-stage build for spaCy NLP service (CPU-only fallback)
+FROM ubuntu:22.04 AS builder
+
+# Install Python build dependencies
+RUN apt-get update && apt-get install -y \
+    python3.12 \
+    python3.12-dev \
+    python3-pip \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install spaCy (CPU-only, no CUDA)
+RUN pip3 install --no-cache-dir \
+    spacy==3.7.2
+
+# Download spaCy models
+RUN python3 -m spacy download en_core_web_sm && \
+    python3 -m spacy download en_core_web_md && \
+    python3 -m spacy download en_core_web_lg && \
+    python3 -m spacy download en_core_web_trf
+
+# Stage 2: Runtime
+FROM ubuntu:22.04
+
+# Install Python runtime
+RUN apt-get update && apt-get install -y \
+    python3.12 \
+    python3-pip \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy spaCy installation and models from builder
+COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/python3.12/dist-packages
+COPY --from=builder /root/.local/share/spacy /root/.local/share/spacy
+
+# Install Flask for HTTP API
+RUN pip3 install --no-cache-dir flask==3.0.0
+
+# Create app directory
+WORKDIR /app
+
+# Copy NLP service application
+COPY nlp_service.py /app/
+
+# Expose HTTP port
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Run service
+CMD ["python3", "nlp_service.py"]

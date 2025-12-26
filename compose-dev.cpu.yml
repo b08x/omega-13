@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  whisper-server:
+    image: whisper-server-cpu:latest
+    container_name: omega13-whisper
+    build:
+      context: .
+      dockerfile: Containerfile.cpu  # CPU variant
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${HOME}/LLMOS/whisper.cpp/models:/app/models:ro,Z
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Reduced from 12G (no GPU overhead)
+          cpus: '4.0'  # CPU limit instead of GPU
+    networks:
+      - omega13-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  spacy-nlp:
+    image: spacy-nlp-cpu:latest
+    container_name: omega13-spacy
+    build:
+      context: ./containers/spacy-nlp
+      dockerfile: Containerfile.cpu  # CPU variant
+    ports:
+      - "8081:8081"
+    volumes:
+      - spacy-models:/root/.local/share/spacy:Z
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Reduced from 8G (no GPU overhead)
+          cpus: '2.0'  # CPU limit instead of GPU
+    networks:
+      - omega13-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Development container for omega-13 TUI (optional)
+  omega13-dev:
+    image: fedora:40
+    container_name: omega13-dev
+    privileged: true  # Required for JACK/PipeWire access
+    volumes:
+      - .:/workspace:Z
+      - /run/user/${UID}/pipewire-0:/run/user/1000/pipewire-0  # PipeWire socket
+      - /dev/snd:/dev/snd  # Audio devices
+    environment:
+      - PIPEWIRE_RUNTIME_DIR=/run/user/1000
+      - XDG_RUNTIME_DIR=/run/user/1000
+    network_mode: host  # Required for JACK discovery
+    working_dir: /workspace
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+networks:
+  omega13-net:
+    driver: bridge
+
+volumes:
+  spacy-models:
+    driver: local

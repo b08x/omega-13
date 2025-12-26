@@ -1,0 +1,52 @@
+# Multi-stage build for whisper.cpp server (CPU-only fallback)
+FROM ubuntu:22.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone whisper.cpp
+WORKDIR /app
+RUN git clone https://github.com/ggerganov/whisper.cpp.git .
+
+# Build whisper.cpp server (CPU-only, no CUDA)
+RUN cmake -B build -DWHISPER_BUILD_SERVER=ON
+RUN cmake --build build --config Release -j$(nproc)
+
+# Stage 2: Runtime
+FROM ubuntu:22.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy whisper-server binary
+WORKDIR /app
+COPY --from=builder /app/build/bin/whisper-server /app/whisper-server
+COPY --from=builder /app/build/bin/libwhisper.so /usr/local/lib/
+
+# Update library cache
+RUN ldconfig
+
+# Metadata labels
+LABEL org.opencontainers.image.title="Whisper.cpp CPU Server"
+LABEL org.opencontainers.image.description="CPU-only whisper.cpp transcription service"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/ggerganov/whisper.cpp"
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080 || exit 1
+
+# Run server
+ENTRYPOINT ["/app/whisper-server"]
+CMD ["--host", "0.0.0.0", "--port", "8080"]
