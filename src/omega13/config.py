@@ -43,6 +43,12 @@ class ConfigManager:
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
                 "auto_cleanup_days": 7
+            },
+            "auto_record": {
+                "enabled": False,
+                "begin_threshold_db": -35.0,
+                "end_threshold_db": -35.0,
+                "silence_duration_seconds": 10.0
             }
         }
         
@@ -57,6 +63,8 @@ class ConfigManager:
                         config["sessions"] = default_config["sessions"]
                     if "global_hotkey" not in config:
                         config["global_hotkey"] = default_config["global_hotkey"]
+                    if "auto_record" not in config:
+                        config["auto_record"] = default_config["auto_record"]
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -170,3 +178,27 @@ class ConfigManager:
     def get_auto_cleanup_days(self) -> int:
         """Get number of days before auto-cleanup of temp sessions."""
         return self.config.get("sessions", {}).get("auto_cleanup_days", 7)
+
+    # Auto-Record Getters/Setters
+    def get_auto_record_enabled(self) -> bool:
+        """Get whether auto-record mode is enabled."""
+        return self.config.get("auto_record", {}).get("enabled", False)
+
+    def set_auto_record_enabled(self, enabled: bool) -> None:
+        """Set whether auto-record mode is enabled."""
+        if "auto_record" not in self.config:
+            self.config["auto_record"] = {}
+        self.config["auto_record"]["enabled"] = enabled
+        self.save_config(self.config)
+
+    def get_auto_record_begin_threshold(self) -> float:
+        """Get auto-record begin threshold in dB."""
+        return self.config.get("auto_record", {}).get("begin_threshold_db", -35.0)
+
+    def get_auto_record_end_threshold(self) -> float:
+        """Get auto-record end (silence) threshold in dB."""
+        return self.config.get("auto_record", {}).get("end_threshold_db", -35.0)
+
+    def get_auto_record_silence_duration(self) -> float:
+        """Get auto-record silence duration in seconds."""
+        return self.config.get("auto_record", {}).get("silence_duration_seconds", 10.0)

@@ -6,8 +6,9 @@ from pathlib import Path
 import jack
 import numpy as np
 import soundfile as sf
-from typing import Optional
+from typing import Optional, Dict, Any
 from .config import ConfigManager
+from .signal_detector import SignalDetector
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,31 @@ class AudioEngine:
         self.writer_thread = None
         self.stop_event = threading.Event()
 
-        # Metering
+        # Metering (peak-based for VU meters)
         self.peaks = [0.0] * self.channels
         self.dbs = [-100.0] * self.channels
+
+        # RMS metering (energy-based for intelligent recording)
+        self.rms_levels = [0.0] * self.channels
+        self.rms_db = [-100.0] * self.channels
+
+        # Signal detector for auto-record
+        begin_threshold = config_manager.get_auto_record_begin_threshold() if config_manager else -35.0
+        end_threshold = config_manager.get_auto_record_end_threshold() if config_manager else -35.0
+        silence_duration = config_manager.get_auto_record_silence_duration() if config_manager else 10.0
+
+        self.signal_detector = SignalDetector(
+            samplerate=self.samplerate,
+            channels=self.channels,
+            begin_threshold_db=begin_threshold,
+            end_threshold_db=end_threshold,
+            silence_duration_sec=silence_duration
+        )
 
         # Connection tracking
         self.connected_sources = [None] * self.channels
 
-        # Activity tracking
+        # Activity tracking (legacy - kept for backward compatibility)
         self.last_activity_time = 0.0
         self.activity_threshold_db = -70.0  # Slightly more sensitive default
 
@@ -134,11 +152,16 @@ class AudioEngine:
             input_arrays = [port.get_array() for port in self.input_ports]
             data = np.stack(input_arrays, axis=-1)
 
-            # Update Meters
+            # Update Peak Meters (for VU display)
             self.peaks = np.max(np.abs(data), axis=0).tolist()
             self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
 
-            # Update Activity Tracking
+            # Update RMS Meters (for intelligent recording decisions)
+            signal_metrics = self.signal_detector.update(data)
+            self.rms_levels = signal_metrics['rms_levels']
+            self.rms_db = signal_metrics['rms_db']
+
+            # Update Activity Tracking (legacy - kept for backward compatibility)
             if any(db > self.activity_threshold_db for db in self.dbs):
                 self.last_activity_time = time.time()
 

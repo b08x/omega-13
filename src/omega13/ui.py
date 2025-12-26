@@ -32,6 +32,46 @@ class VUMeter(Static):
         db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
         self.update(f"[{color}]{level_bar_display:50s}[/] [bold]{db_str}[/]")
 
+class SilenceCountdown(Static):
+    """
+    Displays countdown timer when silence is detected during recording.
+
+    Shows remaining time before auto-stop is triggered.
+    """
+    countdown = reactive(0.0)  # Seconds remaining until auto-stop
+    visible = reactive(False)  # Whether to show the countdown
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_displayed_countdown = -1.0  # For debouncing
+
+    def watch_countdown(self, value: float) -> None:
+        """Update display when countdown value changes (with debouncing)."""
+        # Debounce: only update if change is > 0.3s to reduce UI overhead
+        if abs(value - self._last_displayed_countdown) > 0.3 or value == 0:
+            self._last_displayed_countdown = value
+            self.update_display()
+
+    def watch_visible(self, is_visible: bool) -> None:
+        """Update display when visibility changes."""
+        self.update_display()
+
+    def update_display(self) -> None:
+        """Render the countdown display."""
+        if self.visible and self.countdown > 0:
+            # Show countdown with visual emphasis
+            bar_width = 30
+            filled = int((self.countdown / 10.0) * bar_width)  # Assuming 10s max
+            bar = "█" * filled + "░" * (bar_width - filled)
+            self.update(f"[yellow]Silence:[/yellow] {self.countdown:.1f}s [{bar}]")
+        elif self.visible:
+            # Silence detected but countdown not active
+            self.update("[dim]Monitoring silence...[/dim]")
+        else:
+            # Hide countdown
+            self.update("")
+
+
 class TranscriptionDisplay(Static):
     """Widget for displaying transcription status and results."""
     status = reactive("idle")
