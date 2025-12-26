@@ -14,11 +14,12 @@ from textual.widgets import Header, Footer, Label, Static, Checkbox
 # Import refactored modules
 from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
-from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen
-from .session import SessionManager
+from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen, SilenceCountdown
 from .session import SessionManager
 from .hotkeys import GlobalHotkeyListener
 from .notifications import DesktopNotifier
+from .signal_detector import SignalDetector
+from .recording_controller import RecordingController, RecordingState, RecordingEvent
 
 # Optional import for transcription
 try:
@@ -59,6 +60,7 @@ class Omega13App(App):
 
     BINDINGS = [
         Binding("i", "open_input_selector", "Select Inputs"),
+        Binding("n", "new_session", "New Session"),
         Binding("s", "save_session", "Save Session"),
         Binding("t", "manual_transcribe", "Transcribe"),
         Binding("q", "quit", "Quit"),
@@ -87,12 +89,15 @@ class Omega13App(App):
                         yield VUMeter(id="meter-1")
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
-                    yield Static("\n[dim]REC Key to Capture | I Inputs | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
+                    yield SilenceCountdown(id="silence-countdown")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
                     yield Static("Ready", id="transcription-status", classes="status-idle")
+                    yield Checkbox("Auto-record mode", id="auto-record-toggle", classes="auto-record-checkbox")
                     yield Checkbox("Copy to clipboard", id="clipboard-toggle", classes="clipboard-checkbox")
+                    yield Checkbox("Inject to active window", id="injection-toggle", classes="injection-checkbox")
 
             with Container(id="transcription-pane"):
                 yield TranscriptionDisplay(id="transcription-display")
@@ -140,6 +145,10 @@ class Omega13App(App):
             if transcription_display.clipboard_checkbox:
                 initial_state = self.config_manager.get_copy_to_clipboard()
                 transcription_display.clipboard_checkbox.value = initial_state
+            
+            if transcription_display.injection_checkbox:
+                initial_inject = self.config_manager.get_inject_to_active_window()
+                transcription_display.injection_checkbox.value = initial_inject
 
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
@@ -149,7 +158,7 @@ class Omega13App(App):
             formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
             
             help_text = self.query_one("#help-text", Static)
-            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | S Save | T Transcribe[/dim]")
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
@@ -161,6 +170,20 @@ class Omega13App(App):
 
             self.engine = AudioEngine(config_manager=self.config_manager, num_channels=num_channels)
             self.engine.start()
+
+            # Initialize recording controller
+            self.recording_controller = RecordingController(
+                audio_engine=self.engine,
+                signal_detector=self.engine.signal_detector,
+                config_manager=self.config_manager
+            )
+            self.recording_controller.set_event_callback(self._handle_recording_event)
+
+            # Initialize auto-record checkbox state from config
+            auto_record_checkbox = self.query_one("#auto-record-toggle", Checkbox)
+            auto_record_checkbox.value = self.config_manager.get_auto_record_enabled()
+            if auto_record_checkbox.value:
+                self.recording_controller.enable_auto_record()
 
             # Write PID file for CLI toggle support
             try:
@@ -196,12 +219,26 @@ class Omega13App(App):
                         server_url=self.config_manager.get_transcription_server_url(),
                         notifier=self.notifier
                     )
-                    self.notify("Transcription ready (API)", severity="information", timeout=3)
+                    
+                    # Perform startup health check
+                    alive, error = self.transcription_service.check_health()
+                    if alive:
+                        self.notify("Transcription ready (API)", severity="information", timeout=3)
+                    else:
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Transcription server health check failed: {error}")
+                        self.notify(f"Inference host offline: {error}", severity="warning", timeout=10)
+                        
+                        # Set initial UI status to error/offline
+                        display = self.query_one("#transcription-display", TranscriptionDisplay)
+                        display.status = "error"
+                        
                 except Exception as e:
                     self.transcription_service = None
                     self.notify(f"Transcription init failed: {e}", severity="warning")
 
             self.set_interval(0.05, self.update_meters)
+            self.set_interval(0.2, self.check_auto_triggers)  # 200ms for auto-record logic (reduced from 100ms for performance)
         except Exception as e:
             self.exit(message=f"Failed to start: {e}")
 
@@ -285,10 +322,35 @@ class Omega13App(App):
             meter_2.level = peaks[1]
             meter_2.db_level = self.engine.dbs[1]
 
-        if not self.engine.is_recording:
+        # Update buffer info display
+        state = self.recording_controller.get_state()
+        if state == RecordingState.ARMED:
+            # Show armed status when monitoring
+            fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
+            if self.engine.buffer_filled: fill_pct = 100
+            self.query_one("#buffer-info").update(f"[green]ARMED[/green] - Buffer: {fill_pct:.1f}%")
+        elif not self.recording_controller.is_recording():
+            # Show normal buffer fill when idle
             fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
             if self.engine.buffer_filled: fill_pct = 100
             self.query_one("#buffer-info").update(f"Pre-Record Buffer: {fill_pct:.1f}%")
+
+    def check_auto_triggers(self):
+        """Periodically check for auto-record triggers and silence detection."""
+        if not hasattr(self, 'recording_controller'):
+            return
+
+        # Get current signal metrics (already calculated in JACK callback)
+        signal_metrics = {
+            'rms_levels': self.engine.rms_levels,
+            'rms_db': self.engine.rms_db,
+            'is_above_begin': any(db > self.engine.signal_detector.begin_threshold_db for db in self.engine.rms_db),
+            'is_above_end': any(db > self.engine.signal_detector.end_threshold_db for db in self.engine.rms_db),
+            'silence_duration': self.engine.signal_detector.get_silence_duration()
+        }
+
+        # Let controller handle state transitions
+        self.recording_controller.check_auto_triggers(signal_metrics)
 
     def _update_meter_visibility(self):
         is_stereo = self.engine.channels == 2
@@ -335,49 +397,126 @@ class Omega13App(App):
 
         self.query_one("#session-status").update(text)
 
-    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        if event.checkbox.id == "clipboard-toggle":
-            if hasattr(self, 'config_manager'):
-                self.config_manager.set_copy_to_clipboard(event.value)
-                status = "enabled" if event.value else "disabled"
-                self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
-
-    def action_toggle_record(self) -> None:
+    def _handle_recording_event(self, event: RecordingEvent, data: dict) -> None:
+        """Handle events from the recording controller."""
         status_bar = self.query_one("#status-bar")
-        if self.engine.is_recording:
-            # Stop recording
-            self.engine.stop_recording()
-            self._update_meter_visibility()
-            
-            # Notify recording stopped
+        countdown_widget = self.query_one("#silence-countdown", SilenceCountdown)
+
+        if event == RecordingEvent.SIGNAL_DETECTED:
+            # Auto-record triggered by signal
+            session = self.session_manager.get_current_session()
+            if session:
+                recording_path = session.get_next_recording_path()
+                self.recording_controller.manual_start_recording(recording_path)
+
+        elif event == RecordingEvent.AUTO_STARTED:
+            # Recording started automatically
+            path = Path(data.get('path', ''))
+            filename = path.name if path else 'unknown'
+            status_bar.update(f"[yellow]AUTO-REC[/yellow]... \nFile: {filename}")
+            status_bar.remove_class("status-idle").add_class("status-recording")
+            self._current_recording_path = path
+            countdown_widget.visible = False
+
+            if self.notifier:
+                self.notifier.notify("Auto-Recording Started", f"Signal detected, capturing to {filename}")
+
+        elif event == RecordingEvent.MANUAL_STARTED:
+            # Recording started manually
+            path = Path(data.get('path', ''))
+            filename = path.name if path else 'unknown'
+            status_bar.update(f"RECORDING... \nFile: {filename}")
+            status_bar.remove_class("status-idle").add_class("status-recording")
+            self._current_recording_path = path
+            countdown_widget.visible = False
+
+        elif event == RecordingEvent.SILENCE_DETECTED:
+            # Silence detected during recording - update countdown
+            remaining = data.get('remaining', 0)
+            countdown_widget.countdown = remaining
+            countdown_widget.visible = True
+
+        elif event in (RecordingEvent.AUTO_STOPPED, RecordingEvent.MANUAL_STOPPED):
+            # Recording stopped
+            countdown_widget.visible = False
+            path = Path(data.get('path', '')) if data.get('path') else None
+
+            # Update status bar
+            if self.recording_controller.get_state() == RecordingState.ARMED:
+                status_bar.update("[green]ARMED[/green] - Monitoring for signal")
+            else:
+                status_bar.update("IDLE - Recording saved to session.")
+            status_bar.remove_class("status-recording").add_class("status-idle")
+
+            # Notify
             if self.notifier:
                 self.notifier.notify("Recording Stopped", "Audio capture saved.")
 
-            status_bar.update("IDLE - Recording saved to session.")
-            status_bar.remove_class("status-recording").add_class("status-idle")
+            # Register and transcribe
+            if path and path.exists():
+                self._register_and_transcribe_recording(path)
 
-            # Register in session
-            last_path = self._get_last_recording_path()
-            if last_path and last_path.exists():
-                duration = 0.0
-                try:
-                    import soundfile as sf
-                    info = sf.info(last_path)
-                    duration = info.duration
-                except Exception:
-                    pass
-                
-                self.session_manager.current_session.register_recording(
-                    last_path,
-                    duration_seconds=duration,
-                    channels=self.engine.channels,
-                    samplerate=self.engine.samplerate
-                )
-                self._update_session_status()
-                
-                # Start transcription
-                if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
-                    self._start_transcription(last_path)
+        elif event == RecordingEvent.STATE_CHANGED:
+            # State transition occurred - update UI if needed
+            new_state = data.get('new_state')
+            if new_state == 'armed':
+                status_bar.update("[green]ARMED[/green] - Monitoring for signal")
+                status_bar.remove_class("status-recording").add_class("status-idle")
+            elif new_state == 'idle':
+                status_bar.update("IDLE - Ready to Capture")
+                status_bar.remove_class("status-recording").add_class("status-idle")
+
+    def _register_and_transcribe_recording(self, path: Path) -> None:
+        """Register recording in session and start transcription."""
+        duration = 0.0
+        try:
+            import soundfile as sf
+            info = sf.info(path)
+            duration = info.duration
+        except Exception:
+            pass
+
+        self.session_manager.current_session.register_recording(
+            path,
+            duration_seconds=duration,
+            channels=self.engine.channels,
+            samplerate=self.engine.samplerate
+        )
+        self._update_session_status()
+
+        # Start transcription if enabled
+        if TRANSCRIPTION_AVAILABLE and self.config_manager.get_auto_transcribe():
+            self._start_transcription(path)
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if event.checkbox.id == "auto-record-toggle":
+            if hasattr(self, 'recording_controller'):
+                if event.value:
+                    success = self.recording_controller.enable_auto_record()
+                    if success:
+                        self.notify("Auto-record mode enabled", severity="information", timeout=2)
+                    else:
+                        event.checkbox.value = False
+                        self.notify("Cannot enable auto-record while recording", severity="warning", timeout=3)
+                else:
+                    self.recording_controller.disable_auto_record()
+                    self.notify("Auto-record mode disabled", severity="information", timeout=2)
+        elif event.checkbox.id == "clipboard-toggle":
+            if hasattr(self, 'config_manager'):
+                status = "enabled" if event.value else "disabled"
+                self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
+        elif event.checkbox.id == "injection-toggle":
+            if hasattr(self, 'config_manager'):
+                self.config_manager.set_inject_to_active_window(event.value)
+                status = "enabled" if event.value else "disabled"
+                self.notify(f"Text injection {status}", severity="information", timeout=2)
+
+    def action_toggle_record(self) -> None:
+        """Toggle recording on/off (manual control)."""
+        if self.recording_controller.is_recording():
+            # Stop recording via controller
+            self.recording_controller.manual_stop_recording()
+            self._update_meter_visibility()
         else:
             # Check for audio activity before starting
             if not self.engine.has_audio_activity():
@@ -390,31 +529,24 @@ class Omega13App(App):
                 )
                 if self.notifier:
                     self.notifier.notify("Capture Blocked", msg, urgency="critical")
-                
+
                 self.notify(msg, severity="error", timeout=10)
+                status_bar = self.query_one("#status-bar")
                 status_bar.update("CAPTURE BLOCKED - No Input Signal")
                 return
 
-            # Start recording
+            # Start recording via controller
             session = self.session_manager.get_current_session()
             if not session:
                 self.notify("No active session", severity="error")
                 return
 
             recording_path = session.get_next_recording_path()
-            result = self.engine.start_recording(recording_path)
+            success = self.recording_controller.manual_start_recording(recording_path)
             self._update_meter_visibility()
 
-            if result:
-                self._current_recording_path = result
-                filename = result.name
-                
-                # Notify recording started
-                if self.notifier:
-                    self.notifier.notify("Recording Started", f"Capturing to {filename}")
-
-                status_bar.update(f"RECORDING... \nFile: {filename}")
-                status_bar.remove_class("status-idle").add_class("status-recording")
+            if not success:
+                self.notify("Failed to start recording", severity="error")
 
     def _get_last_recording_path(self) -> Optional[Path]:
         if hasattr(self, '_current_recording_path'):
@@ -437,15 +569,19 @@ class Omega13App(App):
         def on_complete(result): self.call_from_thread(self._handle_result, result, audio_file)
         def on_progress(p): self.call_from_thread(lambda: setattr(display, 'progress', p))
         def on_clipboard_error(error_msg): self.call_from_thread(self._handle_clipboard_error, error_msg)
+        def on_injection_error(error_msg): self.call_from_thread(self._handle_injection_error, error_msg)
 
         copy_enabled = self.config_manager.get_copy_to_clipboard()
+        inject_enabled = self.config_manager.get_inject_to_active_window()
 
         self.transcription_service.transcribe_async(
             audio_file,
             on_complete,
             on_progress,
             copy_to_clipboard_enabled=copy_enabled,
-            clipboard_error_callback=on_clipboard_error
+            clipboard_error_callback=on_clipboard_error,
+            inject_to_active_window_enabled=inject_enabled,
+            injection_error_callback=on_injection_error
         )
 
     def _handle_result(self, result, audio_file):
@@ -463,6 +599,9 @@ class Omega13App(App):
 
     def _handle_clipboard_error(self, error_msg: str):
         self.notify(f"Clipboard copy failed: {error_msg}", severity="warning", timeout=4)
+
+    def _handle_injection_error(self, error_msg: str):
+        self.notify(f"Text injection failed: {error_msg}", severity="warning", timeout=4)
 
     def action_manual_transcribe(self):
         if last := self._get_last_recording_path():
@@ -517,18 +656,100 @@ class Omega13App(App):
                 self.notify("Failed to update session snapshot", severity="error")
             return
 
-        def handle(result):
-            if result:
-                success = self.session_manager.save_session(result)
-                if success:
-                    self._update_session_status()
-                    save_loc = session.save_location
-                    self.notify(f"Session saved to: {save_loc}", severity="information", timeout=5)
-                else:
-                    self.notify("Failed to save session", severity="error")
+        def handle_directory(location):
+            if location:
+                def handle_title(title: Optional[str]):
+                    if title is not None:  # title could be empty string for "Skip"
+                        success = self.session_manager.save_session(location, title=title)
+                        if success:
+                            self._update_session_status()
+                            save_loc = session.save_location
+                            self.notify(f"Session saved to: {save_loc}", severity="information", timeout=5)
+                        else:
+                            self.notify("Failed to save session", severity="error")
+
+                self.push_screen(SessionTitleScreen(), handle_title)
 
         default_location = self.config_manager.get_default_save_location()
-        self.push_screen(DirectorySelectionScreen(default_location), handle)
+        self.push_screen(DirectorySelectionScreen(default_location), handle_directory)
+
+    def action_new_session(self):
+        if self.engine.is_recording:
+            self.notify("Stop recording before starting a new session", severity="warning")
+            return
+
+        session = self.session_manager.get_current_session()
+        if session and not session.saved and len(session.recordings) > 0:
+            self._prompt_new_session_confirmation()
+            return
+        
+        self._start_new_session()
+
+    def _start_new_session(self):
+        self.session_manager.create_session()
+        self._update_session_status()
+        
+        display = self.query_one("#transcription-display", TranscriptionDisplay)
+        display.clear()
+        
+        self.notify("New session started", severity="information")
+
+    def _prompt_new_session_confirmation(self):
+        from textual.screen import ModalScreen
+        from textual.widgets import Button
+        from textual.containers import Grid
+
+        class NewSessionPromptScreen(ModalScreen):
+            CSS = """
+            NewSessionPromptScreen { align: center middle; }
+            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
+            #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
+            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
+            Button { width: 100%; }
+            """
+            def __init__(self, session_manager):
+                super().__init__()
+                self.session_manager = session_manager
+
+            def compose(self) -> ComposeResult:
+                session = self.session_manager.get_current_session()
+                count = len(session.recordings) if session else 0
+                with Container(id="dialog"):
+                    yield Static("Start New Session?", id="question")
+                    yield Static(f"Current session has {count} unsaved recording(s)", id="message")
+                    with Grid():
+                        yield Button("Save & New", variant="primary", id="save")
+                        yield Button("Discard", variant="error", id="discard")
+                        yield Button("Cancel", id="cancel")
+
+            def on_button_pressed(self, event: Button.Pressed) -> None:
+                self.dismiss(event.button.id)
+
+        def handle_choice(choice: str):
+            if choice == "cancel": return
+            if choice == "discard":
+                self.session_manager.discard_session()
+                self._start_new_session()
+                return
+            if choice == "save":
+                def handle_save_location(location):
+                    if location:
+                        def handle_title(title: Optional[str]):
+                            if title is not None:
+                                success = self.session_manager.save_session(location, title=title)
+                                if success:
+                                    self.notify("Session saved successfully", severity="information")
+                                    self._start_new_session()
+                                else:
+                                    self.notify("Failed to save session", severity="error")
+                        
+                        self.push_screen(SessionTitleScreen(), handle_title)
+                
+                default_location = self.config_manager.get_default_save_location()
+                self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
+
+        self.push_screen(NewSessionPromptScreen(self.session_manager), handle_choice)
 
     def action_quit(self) -> None:
         if hasattr(self, 'session_manager'):
@@ -579,10 +800,14 @@ class Omega13App(App):
             if choice == "save":
                 def handle_save_location(location):
                     if location:
-                        success = self.session_manager.save_session(location)
-                        if success: self.notify("Session saved successfully", severity="information")
-                        else: self.notify("Failed to save session", severity="error")
-                    self.exit()
+                        def handle_title(title: Optional[str]):
+                            if title is not None:
+                                success = self.session_manager.save_session(location, title=title)
+                                if success: self.notify("Session saved successfully", severity="information")
+                                else: self.notify("Failed to save session", severity="error")
+                            self.exit()
+                        
+                        self.push_screen(SessionTitleScreen(), handle_title)
                 default_location = self.config_manager.get_default_save_location()
                 self.push_screen(DirectorySelectionScreen(default_location), handle_save_location)
 

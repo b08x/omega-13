@@ -32,6 +32,46 @@ class VUMeter(Static):
         db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
         self.update(f"[{color}]{level_bar_display:50s}[/] [bold]{db_str}[/]")
 
+class SilenceCountdown(Static):
+    """
+    Displays countdown timer when silence is detected during recording.
+
+    Shows remaining time before auto-stop is triggered.
+    """
+    countdown = reactive(0.0)  # Seconds remaining until auto-stop
+    visible = reactive(False)  # Whether to show the countdown
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_displayed_countdown = -1.0  # For debouncing
+
+    def watch_countdown(self, value: float) -> None:
+        """Update display when countdown value changes (with debouncing)."""
+        # Debounce: only update if change is > 0.3s to reduce UI overhead
+        if abs(value - self._last_displayed_countdown) > 0.3 or value == 0:
+            self._last_displayed_countdown = value
+            self.update_display()
+
+    def watch_visible(self, is_visible: bool) -> None:
+        """Update display when visibility changes."""
+        self.update_display()
+
+    def update_display(self) -> None:
+        """Render the countdown display."""
+        if self.visible and self.countdown > 0:
+            # Show countdown with visual emphasis
+            bar_width = 30
+            filled = int((self.countdown / 10.0) * bar_width)  # Assuming 10s max
+            bar = "█" * filled + "░" * (bar_width - filled)
+            self.update(f"[yellow]Silence:[/yellow] {self.countdown:.1f}s [{bar}]")
+        elif self.visible:
+            # Silence detected but countdown not active
+            self.update("[dim]Monitoring silence...[/dim]")
+        else:
+            # Hide countdown
+            self.update("")
+
+
 class TranscriptionDisplay(Static):
     """Widget for displaying transcription status and results."""
     status = reactive("idle")
@@ -43,6 +83,7 @@ class TranscriptionDisplay(Static):
         self.text_log = None
         self.status_label = None
         self.clipboard_checkbox = None
+        self.injection_checkbox = None
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -54,12 +95,16 @@ class TranscriptionDisplay(Static):
         # These are now external to this widget, queried from the app
         self.status_label = self.app.query_one("#transcription-status", Static)
         self.clipboard_checkbox = self.app.query_one("#clipboard-toggle", Checkbox)
+        self.injection_checkbox = self.app.query_one("#injection-toggle", Checkbox)
         self.text_log.max_lines = 1000
 
         # Initialize checkbox state from config
         if self.config_manager:
             initial_state = self.config_manager.get_copy_to_clipboard()
             self.clipboard_checkbox.value = initial_state
+            
+            initial_inject = self.config_manager.get_inject_to_active_window()
+            self.injection_checkbox.value = initial_inject
 
 
     def watch_status(self, new_status: str) -> None:
@@ -174,6 +219,43 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "cancel-btn": self.action_cancel()
         elif event.button.id == "confirm-btn": self.action_confirm()
+
+
+class SessionTitleScreen(ModalScreen[str | None]):
+    """Modal screen for entering a session title."""
+    CSS = """
+    SessionTitleScreen { align: center middle; }
+    #title-dialog { width: 50; height: 15; border: thick $accent; background: $surface; padding: 1 2; }
+    #title-input { margin: 1 0; }
+    #button-row { height: 3; align: center middle; margin-top: 1; }
+    #button-row Button { margin: 0 1; }
+    """
+    BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm")]
+
+    def compose(self) -> ComposeResult:
+        with Container(id="title-dialog"):
+            yield Label("Enter Session Title (Optional)", id="title")
+            from textual.widgets import Input
+            yield Input(placeholder="e.g. Brainstorming Session", id="title-input")
+            with Horizontal(id="button-row"):
+                yield Button("Skip", variant="default", id="skip-btn")
+                yield Button("Save", variant="primary", id="confirm-btn")
+
+    def on_mount(self):
+        self.query_one("#title-input").focus()
+
+    def action_confirm(self):
+        title = self.query_one("#title-input").value.strip()
+        self.dismiss(title if title else "")
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "skip-btn":
+            self.dismiss("")
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
         elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
         elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
 

@@ -35,14 +35,20 @@ class ConfigManager:
                 "server_url": "http://localhost:8080",
                 "model_size": "large-v3-turbo",
                 "save_to_file": True,
-                "save_to_file": True,
-                "copy_to_clipboard": False
+                "copy_to_clipboard": False,
+                "inject_to_active_window": False
             },
             "desktop_notifications": True,
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
                 "auto_cleanup_days": 7
+            },
+            "auto_record": {
+                "enabled": False,
+                "begin_threshold_db": -35.0,
+                "end_threshold_db": -35.0,
+                "silence_duration_seconds": 10.0
             }
         }
         
@@ -57,6 +63,8 @@ class ConfigManager:
                         config["sessions"] = default_config["sessions"]
                     if "global_hotkey" not in config:
                         config["global_hotkey"] = default_config["global_hotkey"]
+                    if "auto_record" not in config:
+                        config["auto_record"] = default_config["auto_record"]
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -132,11 +140,22 @@ class ConfigManager:
         """Get the whisper-server URL."""
         return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
 
+    def get_inject_to_active_window(self) -> bool:
+        """Get whether to inject transcription results to the active window."""
+        return self.config.get("transcription", {}).get("inject_to_active_window", False)
+
     def set_copy_to_clipboard(self, enabled: bool) -> None:
         """Set whether to copy transcription results to clipboard."""
         if "transcription" not in self.config:
             self.config["transcription"] = {}
         self.config["transcription"]["copy_to_clipboard"] = enabled
+        self.save_config(self.config)
+
+    def set_inject_to_active_window(self, enabled: bool) -> None:
+        """Set whether to inject transcription results to the active window."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["inject_to_active_window"] = enabled
         self.save_config(self.config)
 
     # Session Getters
@@ -159,3 +178,27 @@ class ConfigManager:
     def get_auto_cleanup_days(self) -> int:
         """Get number of days before auto-cleanup of temp sessions."""
         return self.config.get("sessions", {}).get("auto_cleanup_days", 7)
+
+    # Auto-Record Getters/Setters
+    def get_auto_record_enabled(self) -> bool:
+        """Get whether auto-record mode is enabled."""
+        return self.config.get("auto_record", {}).get("enabled", False)
+
+    def set_auto_record_enabled(self, enabled: bool) -> None:
+        """Set whether auto-record mode is enabled."""
+        if "auto_record" not in self.config:
+            self.config["auto_record"] = {}
+        self.config["auto_record"]["enabled"] = enabled
+        self.save_config(self.config)
+
+    def get_auto_record_begin_threshold(self) -> float:
+        """Get auto-record begin threshold in dB."""
+        return self.config.get("auto_record", {}).get("begin_threshold_db", -35.0)
+
+    def get_auto_record_end_threshold(self) -> float:
+        """Get auto-record end (silence) threshold in dB."""
+        return self.config.get("auto_record", {}).get("end_threshold_db", -35.0)
+
+    def get_auto_record_silence_duration(self) -> float:
+        """Get auto-record silence duration in seconds."""
+        return self.config.get("auto_record", {}).get("silence_duration_seconds", 10.0)

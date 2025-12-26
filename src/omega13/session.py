@@ -287,7 +287,7 @@ class SessionManager:
         """Get the current active session."""
         return self.current_session
 
-    def save_session(self, destination: Path) -> bool:
+    def save_session(self, destination: Path, title: Optional[str] = None) -> bool:
         """
         Save session to permanent storage.
 
@@ -296,6 +296,7 @@ class SessionManager:
 
         Args:
             destination: Parent directory where session will be saved
+            title: Optional title to include in the session directory name
 
         Returns:
             True if save successful, False otherwise
@@ -312,6 +313,13 @@ class SessionManager:
             # Create timestamped directory name for better organization
             timestamp = self.current_session.created_at.strftime("%Y-%m-%d_%H-%M-%S")
             session_name = f"omega13_session_{timestamp}"
+            
+            if title:
+                # Sanitize title (replace non-alphanumeric with underscores)
+                import re
+                sanitized_title = re.sub(r'[^a-zA-Z0-9]', '_', title)
+                session_name = f"{session_name}_{sanitized_title}"
+            
             final_destination = destination / session_name
 
             # Copy entire session directory

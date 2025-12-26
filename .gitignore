@@ -10,3 +10,5 @@ omega-13.code-workspace
 *session-ses_4b60*
 *.cache/
 docs/omega13*
+.code-packager/
+.claude/exports/

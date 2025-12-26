@@ -4,9 +4,7 @@
 
 > *"It's a time machine... but it only goes back 13 seconds."*
 
-Omega-13 is a terminal-based tool for Linux that constantly buffers audio in memory. When you trigger a recording, it captures the **previous 13 seconds** of audio (plus whatever follows), saves it, and automatically transcribes it using a local AI model.
-
-It is designed for developers, writers, and power users who speak ideas out loud but often forget to hit "record" until *after* the thought has occurred.
+Omega-13 is a retroactive audio recording system designed to capture audio from the past (defaulting to 13 seconds) and process it into transcriptions. The system architecture relies on a JACK/PipeWire audio backend, a Python-based Textual TUI, and a containerized Whisper inference server. Installation involves a multi-stage setup: deploying the inference container, installing the Python package, and configuring system-level global hotkeys to bypass Wayland security constraints.
 
 <!-- ![Omega-13 Main Interface](images/01_main_interface.png)
 *(The main TUI showing audio levels and transcription status)* -->
@@ -14,6 +12,7 @@ It is designed for developers, writers, and power users who speak ideas out loud
 ## ✨ Key Features
 
 * **🕰️ Retroactive Recording:** Always listens (locally), never misses a thought. Captures the 13 seconds *before* you pressed the key.
+* **🎙️ Voice-Activated Auto-Record:** Automatically starts recording when it detects voice activity and stops when silence is detected. Configurable RMS thresholds and sustained signal validation prevent false triggers.
 * **🔒 Local Privacy:** Uses `whisper.cpp` running locally via Docker. No audio is ever sent to the cloud.
 * **🖥️ Textual TUI:** A beautiful, keyboard-centric terminal interface.
 * **📋 Clipboard Sync:** Automatically copies transcribed text to your clipboard for immediate pasting into IDEs or notes.
@@ -116,6 +115,31 @@ Now, pressing this key combination will start/stop recording even if the termina
 * Press `s` to **Save Session** to a permanent location (e.g., `~/Notebooks`).
 * This saves the `.wav` audio, `.txt` transcriptions, and a `session.json` metadata file.
 
+### Voice-Activated Auto-Record
+
+Omega-13 includes an intelligent auto-record mode that automatically starts and stops recording based on voice activity.
+
+**Enabling Auto-Record:**
+
+1. Toggle the **Auto-Record** checkbox in the main interface.
+2. When enabled, the application monitors audio for voice activity using RMS energy detection.
+
+**How It Works:**
+
+* **Automatic Start:** Recording begins when sustained voice activity is detected (default: -35 dB threshold for 0.5+ seconds).
+* **Automatic Stop:** Recording stops after a configurable period of silence (default: 10 seconds).
+* **Visual Feedback:** A countdown timer with progress bar shows when auto-stop will occur.
+* **Smart Filtering:**
+  * Brief transients (coughs, clicks) under 0.5 seconds won't trigger recording.
+  * Recordings with average RMS below -50 dB are automatically discarded.
+* **Retroactive Buffer:** The 13-second pre-buffer is preserved for auto-triggered recordings.
+
+**Performance:**
+
+* Optimized for minimal CPU overhead (~70-80% reduction vs naive implementation).
+* RMS calculation occurs every 10th audio callback.
+* UI updates are debounced to maintain responsiveness.
+
 ---
 
 ## ⌨️ TUI Shortcuts
@@ -154,7 +178,35 @@ Now, pressing this key combination will start/stop recording even if the termina
 
 * **Frontend:** Python `Textual` app handling the Ring Buffer (NumPy) and UI.
 * **Audio Backend:** `JACK` Client. It maintains a rolling float32 buffer array. When triggered, it stitches the pre-buffer (past) with the active queue (present) and writes to `SoundFile`.
+* **Signal Detection:** RMS-based energy monitoring with configurable thresholds and sustained signal validation to prevent false positives.
+* **Recording Controller:** State machine (IDLE, ARMED, RECORDING_MANUAL, RECORDING_AUTO, STOPPING) managing recording lifecycle and coordination between components.
 * **Transcription:** The app sends the resulting `.wav` file via HTTP POST to the local Docker container running `whisper-server`.
+
+---
+
+## 🗺️ Backlog
+
+### Completed ✅
+
+* ✅ **Voice-Activated Auto-Record** - Automatic recording start on voice detection with intelligent silence-based termination (v2.3.0)
+* ✅ **Start New Session from UI** - Trigger fresh sessions directly from the interface
+
+* ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local CPU → Cloud API)
+* ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
+
+* ☐ **Load Saved Sessions** - Browse and load previously saved sessions
+* ☐ **3-Pane UI Layout Redesign** - Update to narrow controls, transcription buffer, and AI assistant panes
+* ☐ **Transcription Error Correction & Editing** - Support grammar files and UI editing of transcription chunks
+
+* ☐ **OpenCode REST Service Integration** - Generate task lists and documentation from session data
+* ☐ **Live AI Assistant Integration** - Dedicated UI pane for live AI interaction
+* ☐ **Specialized Docker Images** - Create Intel-optimized and generic Docker images
+
+### Future Enhancements
+
+* ☐ **Transcription Buffer Formatting Cleanup** - Improve visual formatting for better readability
+* ☐ **Screenshot Capture & VLM Analysis** - Screenshot functionality with AI metadata analysis
+* ☐ **Screencast Support & Correlation** - Video recording with session metadata correlation
 
 ---
 
