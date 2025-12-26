@@ -11,3 +11,4 @@ omega-13.code-workspace
 *.cache/
 docs/omega13*
 .code-packager/
+.claude/exports/
