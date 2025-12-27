@@ -84,7 +84,7 @@ class SignalDetector:
         self.is_currently_silent = True
 
         # Sustained signal tracking (prevents false triggers from brief transients)
-        self.signal_sustain_duration = 0.5  # Require 0.5s of continuous signal
+        self.signal_sustain_duration = 1.25  # Require 0.5s of continuous signal
         self.signal_start_time: Optional[float] = None
         self.is_signal_sustained = False
 
