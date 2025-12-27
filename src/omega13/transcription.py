@@ -43,7 +43,7 @@ class TranscriptionService:
         notifier: Optional[Any] = None
     ):
         self.server_url = server_url.rstrip('/')
-        self.inference_path = inference_path
+        self.inference_path = inference_path if inference_path.startswith('/') else f"/{inference_path}"
         self.timeout = timeout
         self.notifier = notifier
         self.endpoint = f"{self.server_url}{self.inference_path}"

@@ -16,7 +16,7 @@ from textual.css.query import NoMatches
 # Import refactored modules
 from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
-from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen, SilenceCountdown
+from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen, SilenceCountdown, TranscriptionSettingsScreen
 from .session import SessionManager
 from .hotkeys import GlobalHotkeyListener
 from .notifications import DesktopNotifier
@@ -68,6 +68,7 @@ class Omega13App(App):
         Binding("a", "toggle_auto_record", "Toggle Auto-record"),
         Binding("c", "toggle_clipboard", "Toggle Clipboard"),
         Binding("j", "toggle_injection", "Toggle Injection"),
+        Binding("p", "open_settings", "Settings"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -99,7 +100,7 @@ class Omega13App(App):
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
                     yield SilenceCountdown(id="silence-countdown")
-                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject[/dim]", id="help-text", classes="help-text")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | P Settings[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
@@ -162,7 +163,7 @@ class Omega13App(App):
             formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
             
             help_text = self.query_one("#help-text", Static)
-            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject[/dim]")
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | P Settings[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
@@ -219,6 +220,7 @@ class Omega13App(App):
                 try:
                     self.transcription_service = TranscriptionService(
                         server_url=self.config_manager.get_transcription_server_url(),
+                        inference_path=self.config_manager.get_transcription_inference_path(),
                         notifier=self.notifier
                     )
                     
@@ -571,6 +573,7 @@ class Omega13App(App):
             # Note: We should ideally persist the service, but if it's missing:
             self.transcription_service = TranscriptionService(
                 server_url=self.config_manager.get_transcription_server_url(),
+                inference_path=self.config_manager.get_transcription_inference_path(),
                 notifier=self.notifier
             )
 
@@ -632,6 +635,45 @@ class Omega13App(App):
             self._start_transcription(last)
         else:
             self.notify("No recording to transcribe", severity="warning")
+
+    def action_open_settings(self):
+        """Open transcription settings modal."""
+        current_url = self.config_manager.get_transcription_server_url()
+        current_path = self.config_manager.get_transcription_inference_path()
+        
+        def handle_settings(result):
+            if not result:
+                return
+            
+            new_url = result["server_url"]
+            new_path = result["inference_path"]
+            
+            # Save to config
+            self.config_manager.set_transcription_server_url(new_url)
+            self.config_manager.set_transcription_inference_path(new_path)
+            
+            # Update transcription service
+            if TRANSCRIPTION_AVAILABLE:
+                self.transcription_service = TranscriptionService(
+                    server_url=new_url,
+                    inference_path=new_path,
+                    notifier=self.notifier
+                )
+                
+                # Check health of new configuration
+                alive, error = self.transcription_service.check_health()
+                if alive:
+                    self.notify(f"Settings saved. Transcription service online.", severity="information")
+                    # Clear error status if it was set
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    if display.status == "error":
+                        display.status = "idle"
+                else:
+                    self.notify(f"Settings saved, but service offline: {error}", severity="warning", timeout=10)
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    display.status = "error"
+            
+        self.push_screen(TranscriptionSettingsScreen(current_url, current_path), handle_settings)
 
     def action_open_input_selector(self):
         if self.engine.is_recording:
