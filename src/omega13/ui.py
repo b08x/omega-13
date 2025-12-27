@@ -94,17 +94,7 @@ class TranscriptionDisplay(Static):
         self.text_log = self.query_one("#transcription-log", RichLog)
         # These are now external to this widget, queried from the app
         self.status_label = self.app.query_one("#transcription-status", Static)
-        self.clipboard_checkbox = self.app.query_one("#clipboard-toggle", Checkbox)
-        self.injection_checkbox = self.app.query_one("#injection-toggle", Checkbox)
         self.text_log.max_lines = 1000
-
-        # Initialize checkbox state from config
-        if self.config_manager:
-            initial_state = self.config_manager.get_copy_to_clipboard()
-            self.clipboard_checkbox.value = initial_state
-            
-            initial_inject = self.config_manager.get_inject_to_active_window()
-            self.injection_checkbox.value = initial_inject
 
 
     def watch_status(self, new_status: str) -> None:
