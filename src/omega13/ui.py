@@ -209,6 +209,8 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "cancel-btn": self.action_cancel()
         elif event.button.id == "confirm-btn": self.action_confirm()
+        elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
+        elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
 
 class TranscriptionSettingsScreen(ModalScreen[dict | None]):
     """Modal screen for configuring transcription server settings."""
@@ -298,8 +300,6 @@ class SessionTitleScreen(ModalScreen[str | None]):
             self.dismiss("")
         elif event.button.id == "confirm-btn":
             self.action_confirm()
-        elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
-        elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
 
 class DirectorySelectionScreen(ModalScreen[Path | None]):
     CSS = """
