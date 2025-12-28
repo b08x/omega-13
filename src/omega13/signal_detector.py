@@ -79,12 +79,14 @@ class SignalDetector:
         self.rms_calc_interval = 10  # Calculate every 10th callback (~50ms at typical buffer sizes)
         self.rms_calc_counter = 0
 
-        # Silence tracking
+        # Silence tracking (with noise immunity)
         self.silence_start_time: Optional[float] = None
         self.is_currently_silent = True
+        self.noise_start_time: Optional[float] = None
+        self.noise_sustain_duration = 0.2  # Ignore noises < 0.2s
 
-        # Sustained signal tracking (prevents false triggers from brief transients)
-        self.signal_sustain_duration = 1.25  # Require 0.5s of continuous signal
+        # Sustained signal tracking (start trigger)
+        self.signal_sustain_duration = 0.2  # Trigger after 0.2s of signal
         self.signal_start_time: Optional[float] = None
         self.is_signal_sustained = False
 
@@ -92,7 +94,8 @@ class SignalDetector:
             f"SignalDetector initialized: "
             f"begin={begin_threshold_db}dB, end={end_threshold_db}dB, "
             f"silence={silence_duration_sec}s, rms_window={rms_window_sec}s, "
-            f"sustain={self.signal_sustain_duration}s"
+            f"signal_sustain={self.signal_sustain_duration}s, "
+            f"noise_sustain={self.noise_sustain_duration}s"
         )
 
     def update(self, audio_data: np.ndarray) -> Dict[str, Any]:
@@ -139,41 +142,44 @@ class SignalDetector:
 
         # Check instantaneous thresholds
         is_above_begin_instantaneous = any(db > self.begin_threshold_db for db in self.rms_db)
-        is_above_end = any(db > self.end_threshold_db for db in self.rms_db)
+        is_above_end_instantaneous = any(db > self.end_threshold_db for db in self.rms_db)
 
-        # Update sustained signal tracking (prevents false triggers from transients)
         current_time = time.time()
+
+        # 1. Update sustained signal tracking (Trigger Start)
         if is_above_begin_instantaneous:
             if self.signal_start_time is None:
-                # Signal just started
                 self.signal_start_time = current_time
-                self.is_signal_sustained = False
-            else:
-                # Check if signal has been sustained long enough
-                signal_duration = current_time - self.signal_start_time
-                if signal_duration >= self.signal_sustain_duration:
-                    self.is_signal_sustained = True
+            if current_time - self.signal_start_time >= self.signal_sustain_duration:
+                self.is_signal_sustained = True
         else:
-            # Signal dropped below threshold - reset sustain tracking
             self.signal_start_time = None
             self.is_signal_sustained = False
 
-        # Update silence tracking
-        if is_above_end:
-            # Signal detected - reset silence timer
-            self.reset_silence_timer()
-            self.is_currently_silent = False
+        # 2. Update silence tracking (Trigger Stop / UI Timer)
+        # We want silence_duration to start immediately, but only reset if noise/speech is sustained.
+        if is_above_end_instantaneous:
+            # Potential noise or start of talking
+            if self.noise_start_time is None:
+                self.noise_start_time = current_time
+            
+            # If noise is sustained, reset the silence timer
+            if current_time - self.noise_start_time >= self.noise_sustain_duration:
+                self.reset_silence_timer()
+                self.is_currently_silent = False
         else:
-            # Below end threshold - count as silence
+            # Back into confirmed silence
+            self.noise_start_time = None
             if self.silence_start_time is None:
+                # Start the clock immediately when it becomes quiet
                 self.silence_start_time = current_time
             self.is_currently_silent = True
 
         return {
             'rms_levels': self.rms_levels.copy(),
             'rms_db': self.rms_db.copy(),
-            'is_above_begin': self.is_signal_sustained,  # Only true after sustain period
-            'is_above_end': is_above_end,
+            'is_above_begin': self.is_signal_sustained,
+            'is_above_end': is_above_end_instantaneous,
             'silence_duration': self.get_silence_duration()
         }
 
@@ -206,6 +212,7 @@ class SignalDetector:
     def reset_silence_timer(self) -> None:
         """Reset the silence duration counter."""
         self.silence_start_time = None
+        self.noise_start_time = None
         self.is_currently_silent = False
 
     def get_silence_duration(self) -> float:

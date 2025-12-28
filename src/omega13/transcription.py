@@ -198,7 +198,16 @@ class TranscriptionService:
 
             if progress_callback: progress_callback(0.9)
 
-            output_path = audio_path.with_suffix('.txt')
+            # Determine correct path for transcription text file
+            # If part of an omega13 session, put in transcriptions/ folder
+            if "recordings" in str(audio_path):
+                trans_dir = audio_path.parent.parent / "transcriptions"
+                trans_dir.mkdir(parents=True, exist_ok=True)
+                output_path = trans_dir / f"{audio_path.stem}.txt"
+            else:
+                output_path = audio_path.with_suffix('.txt')
+
+            logger.info(f"Saving transcription to {output_path}")
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(transcribed_text)
 

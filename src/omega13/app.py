@@ -330,31 +330,28 @@ class Omega13App(App):
             pass
 
         # Update buffer info display
-        state = self.recording_controller.get_state()
-        if state == RecordingState.ARMED:
-            # Show armed status when monitoring
-            fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
-            if self.engine.buffer_filled: fill_pct = 100
-            self.query_one("#buffer-info").update(f"[green]ARMED[/green] - Buffer: {fill_pct:.1f}%")
-        elif not self.recording_controller.is_recording():
-            # Show normal buffer fill when idle
-            fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
-            if self.engine.buffer_filled: fill_pct = 100
-            self.query_one("#buffer-info").update(f"Pre-Record Buffer: {fill_pct:.1f}%")
+        try:
+            state = self.recording_controller.get_state()
+            if state == RecordingState.ARMED:
+                # Show armed status when monitoring
+                fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
+                if self.engine.buffer_filled: fill_pct = 100
+                self.query_one("#buffer-info").update(f"[green]ARMED[/green] - Buffer: {fill_pct:.1f}%")
+            elif not self.recording_controller.is_recording():
+                # Show normal buffer fill when idle
+                fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
+                if self.engine.buffer_filled: fill_pct = 100
+                self.query_one("#buffer-info").update(f"Pre-Record Buffer: {fill_pct:.1f}%")
+        except NoMatches:
+            pass
 
     def check_auto_triggers(self):
         """Periodically check for auto-record triggers and silence detection."""
         if not hasattr(self, 'recording_controller'):
             return
 
-        # Get current signal metrics (already calculated in JACK callback)
-        signal_metrics = {
-            'rms_levels': self.engine.rms_levels,
-            'rms_db': self.engine.rms_db,
-            'is_above_begin': any(db > self.engine.signal_detector.begin_threshold_db for db in self.engine.rms_db),
-            'is_above_end': any(db > self.engine.signal_detector.end_threshold_db for db in self.engine.rms_db),
-            'silence_duration': self.engine.signal_detector.get_silence_duration()
-        }
+        # Get current signal metrics (calculated in JACK callback, respects sustain logic)
+        signal_metrics = self.engine.last_signal_metrics
 
         # Let controller handle state transitions
         self.recording_controller.check_auto_triggers(signal_metrics)

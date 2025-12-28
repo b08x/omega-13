@@ -211,6 +211,8 @@ class RecordingController:
             logger.warning("Cannot start while stopping previous recording")
             return False
 
+        logger.info(f"Manual start: {output_path} (State: {state.value})")
+
         # Start recording via audio engine
         result = self.audio_engine.start_recording(output_path)
         if result is None:
@@ -247,6 +249,7 @@ class RecordingController:
 
         # Determine return state
         return_to_armed = (state == RecordingState.RECORDING_AUTO and self._auto_record_enabled)
+        logger.info(f"Manual stop (return_to_armed={return_to_armed})")
         self._stop_recording_internal(return_to_armed)
         return True
 
@@ -364,18 +367,23 @@ class RecordingController:
         # RECORDING states: check for silence-based auto-stop
         elif state in (RecordingState.RECORDING_MANUAL, RecordingState.RECORDING_AUTO):
             silence_duration = signal_metrics['silence_duration']
+            threshold = self.signal_detector.silence_duration_sec
 
             if silence_duration > 0:
+                # Debug logging for silence tracking
+                if int(silence_duration) > 0 and int(silence_duration) % 2 == 0:
+                    logger.debug(f"Silence tracking: {silence_duration:.1f}s / {threshold}s")
+
                 # Fire silence detected event for UI countdown
                 self._fire_event(RecordingEvent.SILENCE_DETECTED, {
                     'silence_duration': silence_duration,
-                    'silence_threshold': self.signal_detector.silence_duration_sec,
-                    'remaining': max(0, self.signal_detector.silence_duration_sec - silence_duration)
+                    'silence_threshold': threshold,
+                    'remaining': max(0, threshold - silence_duration)
                 })
 
                 # Check if silence threshold exceeded
                 if self.signal_detector.is_silence_threshold_exceeded():
-                    logger.info("Silence threshold exceeded - auto-stopping recording")
+                    logger.info(f"Silence threshold {threshold}s exceeded - auto-stopping recording")
                     return_to_armed = (state == RecordingState.RECORDING_AUTO and self._auto_record_enabled)
                     self._stop_recording_internal(return_to_armed)
 

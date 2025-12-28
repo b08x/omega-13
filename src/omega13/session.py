@@ -148,10 +148,14 @@ class Session:
         # Extract only the unique part
         unique_segment = " ".join(new_words[max_overlap:])
         
+        logger.info(f"Transcription overlap: {max_overlap} words. New segment length: {len(unique_segment.split())} words")
+
         if unique_segment:
             self.transcriptions.append(unique_segment)
             self.save_metadata()
             self._sync_to_save_location()
+        else:
+            logger.info("Transcription skipped (100% overlap with history)")
 
     def get_metadata_path(self) -> Path:
         """Get path to session metadata file."""
