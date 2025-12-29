@@ -3,7 +3,7 @@ import jack
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, Checkbox, DirectoryTree, Label, OptionList, RichLog, Static
+    Button, Checkbox, DirectoryTree, Input, Label, OptionList, RichLog, Static
 )
 from textual.containers import Container, Horizontal, Vertical
 from textual.binding import Binding
@@ -94,17 +94,7 @@ class TranscriptionDisplay(Static):
         self.text_log = self.query_one("#transcription-log", RichLog)
         # These are now external to this widget, queried from the app
         self.status_label = self.app.query_one("#transcription-status", Static)
-        self.clipboard_checkbox = self.app.query_one("#clipboard-toggle", Checkbox)
-        self.injection_checkbox = self.app.query_one("#injection-toggle", Checkbox)
         self.text_log.max_lines = 1000
-
-        # Initialize checkbox state from config
-        if self.config_manager:
-            initial_state = self.config_manager.get_copy_to_clipboard()
-            self.clipboard_checkbox.value = initial_state
-            
-            initial_inject = self.config_manager.get_inject_to_active_window()
-            self.injection_checkbox.value = initial_inject
 
 
     def watch_status(self, new_status: str) -> None:
@@ -219,6 +209,61 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "cancel-btn": self.action_cancel()
         elif event.button.id == "confirm-btn": self.action_confirm()
+        elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
+        elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
+
+class TranscriptionSettingsScreen(ModalScreen[dict | None]):
+    """Modal screen for configuring transcription server settings."""
+    CSS = """
+    TranscriptionSettingsScreen { align: center middle; }
+    #settings-dialog { width: 60; height: auto; border: thick $accent; background: $surface; padding: 1 2; }
+    .settings-input { margin: 1 0; }
+    .settings-label { margin-top: 1; text-style: bold; }
+    #button-row { height: 3; align: center middle; margin-top: 1; }
+    #button-row Button { margin: 0 1; }
+    """
+    BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Save")]
+
+    def __init__(self, server_url: str, inference_path: str):
+        super().__init__()
+        self.server_url = server_url
+        self.inference_path = inference_path
+
+    def compose(self) -> ComposeResult:
+        with Container(id="settings-dialog"):
+            yield Label("Transcription Server Settings", id="title", classes="settings-title")
+            
+            yield Label("Server URL:", classes="settings-label")
+            yield Input(value=self.server_url, placeholder="http://localhost:8080", id="server-url-input", classes="settings-input")
+            
+            yield Label("Inference Path:", classes="settings-label")
+            yield Input(value=self.inference_path, placeholder="/inference", id="inference-path-input", classes="settings-input")
+            
+            with Horizontal(id="button-row"):
+                yield Button("Cancel", variant="error", id="cancel-btn")
+                yield Button("Save", variant="primary", id="confirm-btn")
+
+    def on_mount(self):
+        self.query_one("#server-url-input").focus()
+
+    def action_confirm(self):
+        url = self.query_one("#server-url-input").value.strip()
+        path = self.query_one("#inference-path-input").value.strip()
+        
+        if not url:
+            self.app.notify("Server URL cannot be empty", severity="error")
+            return
+            
+        self.dismiss({"server_url": url, "inference_path": path or "/inference"})
+
+    def action_cancel(self):
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "cancel-btn":
+            self.action_cancel()
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
 
 
 class SessionTitleScreen(ModalScreen[str | None]):
@@ -235,7 +280,6 @@ class SessionTitleScreen(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Container(id="title-dialog"):
             yield Label("Enter Session Title (Optional)", id="title")
-            from textual.widgets import Input
             yield Input(placeholder="e.g. Brainstorming Session", id="title-input")
             with Horizontal(id="button-row"):
                 yield Button("Skip", variant="default", id="skip-btn")
@@ -256,8 +300,6 @@ class SessionTitleScreen(ModalScreen[str | None]):
             self.dismiss("")
         elif event.button.id == "confirm-btn":
             self.action_confirm()
-        elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
-        elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
 
 class DirectorySelectionScreen(ModalScreen[Path | None]):
     CSS = """

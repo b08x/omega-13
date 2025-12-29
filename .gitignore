@@ -12,3 +12,4 @@ omega-13.code-workspace
 docs/omega13*
 .code-packager/
 .claude/exports/
+.pytest_cache/
