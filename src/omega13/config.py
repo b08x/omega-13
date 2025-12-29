@@ -33,6 +33,7 @@ class ConfigManager:
                 "enabled": True,
                 "auto_transcribe": True,
                 "server_url": "http://localhost:8080",
+                "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
                 "save_to_file": True,
                 "copy_to_clipboard": False,
@@ -65,6 +66,11 @@ class ConfigManager:
                         config["global_hotkey"] = default_config["global_hotkey"]
                     if "auto_record" not in config:
                         config["auto_record"] = default_config["auto_record"]
+                    
+                    # Ensure inference_path exists if transcription exists
+                    if "transcription" in config and "inference_path" not in config["transcription"]:
+                        config["transcription"]["inference_path"] = default_config["transcription"]["inference_path"]
+                        
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -139,6 +145,24 @@ class ConfigManager:
     def get_transcription_server_url(self) -> str:
         """Get the whisper-server URL."""
         return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
+
+    def set_transcription_server_url(self, url: str) -> None:
+        """Set the whisper-server URL."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["server_url"] = url
+        self.save_config(self.config)
+
+    def get_transcription_inference_path(self) -> str:
+        """Get the whisper-server inference path."""
+        return self.config.get("transcription", {}).get("inference_path", "/inference")
+
+    def set_transcription_inference_path(self, path: str) -> None:
+        """Set the whisper-server inference path."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["inference_path"] = path
+        self.save_config(self.config)
 
     def get_inject_to_active_window(self) -> bool:
         """Get whether to inject transcription results to the active window."""

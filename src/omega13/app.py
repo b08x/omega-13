@@ -16,7 +16,7 @@ from textual.css.query import NoMatches
 # Import refactored modules
 from .config import ConfigManager
 from .audio import AudioEngine, DEFAULT_CHANNELS
-from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen, SilenceCountdown
+from .ui import VUMeter, TranscriptionDisplay, InputSelectionScreen, DirectorySelectionScreen, SessionTitleScreen, SilenceCountdown, TranscriptionSettingsScreen
 from .session import SessionManager
 from .hotkeys import GlobalHotkeyListener
 from .notifications import DesktopNotifier
@@ -68,6 +68,7 @@ class Omega13App(App):
         Binding("a", "toggle_auto_record", "Toggle Auto-record"),
         Binding("c", "toggle_clipboard", "Toggle Clipboard"),
         Binding("j", "toggle_injection", "Toggle Injection"),
+        Binding("p", "open_settings", "Settings"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -99,7 +100,7 @@ class Omega13App(App):
                         yield Label("Channel 2", id="label-2")
                         yield VUMeter(id="meter-2")
                     yield SilenceCountdown(id="silence-countdown")
-                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject[/dim]", id="help-text", classes="help-text")
+                    yield Static("\n[dim]REC Key to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | P Settings[/dim]", id="help-text", classes="help-text")
 
                 with Vertical(id="transcription-controls"):
                     yield Label("Transcription Status", classes="transcription-title")
@@ -162,7 +163,7 @@ class Omega13App(App):
             formatted_hotkey = hotkey.replace("<", "").replace(">", "").replace("+", " + ").title()
             
             help_text = self.query_one("#help-text", Static)
-            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject[/dim]")
+            help_text.update(f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | P Settings[/dim]")
             self.session_manager.create_session()
             self._update_session_status()
 
@@ -219,6 +220,7 @@ class Omega13App(App):
                 try:
                     self.transcription_service = TranscriptionService(
                         server_url=self.config_manager.get_transcription_server_url(),
+                        inference_path=self.config_manager.get_transcription_inference_path(),
                         notifier=self.notifier
                     )
                     
@@ -328,31 +330,28 @@ class Omega13App(App):
             pass
 
         # Update buffer info display
-        state = self.recording_controller.get_state()
-        if state == RecordingState.ARMED:
-            # Show armed status when monitoring
-            fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
-            if self.engine.buffer_filled: fill_pct = 100
-            self.query_one("#buffer-info").update(f"[green]ARMED[/green] - Buffer: {fill_pct:.1f}%")
-        elif not self.recording_controller.is_recording():
-            # Show normal buffer fill when idle
-            fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
-            if self.engine.buffer_filled: fill_pct = 100
-            self.query_one("#buffer-info").update(f"Pre-Record Buffer: {fill_pct:.1f}%")
+        try:
+            state = self.recording_controller.get_state()
+            if state == RecordingState.ARMED:
+                # Show armed status when monitoring
+                fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
+                if self.engine.buffer_filled: fill_pct = 100
+                self.query_one("#buffer-info").update(f"[green]ARMED[/green] - Buffer: {fill_pct:.1f}%")
+            elif not self.recording_controller.is_recording():
+                # Show normal buffer fill when idle
+                fill_pct = (self.engine.write_ptr / self.engine.ring_size) * 100
+                if self.engine.buffer_filled: fill_pct = 100
+                self.query_one("#buffer-info").update(f"Pre-Record Buffer: {fill_pct:.1f}%")
+        except NoMatches:
+            pass
 
     def check_auto_triggers(self):
         """Periodically check for auto-record triggers and silence detection."""
         if not hasattr(self, 'recording_controller'):
             return
 
-        # Get current signal metrics (already calculated in JACK callback)
-        signal_metrics = {
-            'rms_levels': self.engine.rms_levels,
-            'rms_db': self.engine.rms_db,
-            'is_above_begin': any(db > self.engine.signal_detector.begin_threshold_db for db in self.engine.rms_db),
-            'is_above_end': any(db > self.engine.signal_detector.end_threshold_db for db in self.engine.rms_db),
-            'silence_duration': self.engine.signal_detector.get_silence_duration()
-        }
+        # Get current signal metrics (calculated in JACK callback, respects sustain logic)
+        signal_metrics = self.engine.last_signal_metrics
 
         # Let controller handle state transitions
         self.recording_controller.check_auto_triggers(signal_metrics)
@@ -571,6 +570,7 @@ class Omega13App(App):
             # Note: We should ideally persist the service, but if it's missing:
             self.transcription_service = TranscriptionService(
                 server_url=self.config_manager.get_transcription_server_url(),
+                inference_path=self.config_manager.get_transcription_inference_path(),
                 notifier=self.notifier
             )
 
@@ -632,6 +632,45 @@ class Omega13App(App):
             self._start_transcription(last)
         else:
             self.notify("No recording to transcribe", severity="warning")
+
+    def action_open_settings(self):
+        """Open transcription settings modal."""
+        current_url = self.config_manager.get_transcription_server_url()
+        current_path = self.config_manager.get_transcription_inference_path()
+        
+        def handle_settings(result):
+            if not result:
+                return
+            
+            new_url = result["server_url"]
+            new_path = result["inference_path"]
+            
+            # Save to config
+            self.config_manager.set_transcription_server_url(new_url)
+            self.config_manager.set_transcription_inference_path(new_path)
+            
+            # Update transcription service
+            if TRANSCRIPTION_AVAILABLE:
+                self.transcription_service = TranscriptionService(
+                    server_url=new_url,
+                    inference_path=new_path,
+                    notifier=self.notifier
+                )
+                
+                # Check health of new configuration
+                alive, error = self.transcription_service.check_health()
+                if alive:
+                    self.notify(f"Settings saved. Transcription service online.", severity="information")
+                    # Clear error status if it was set
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    if display.status == "error":
+                        display.status = "idle"
+                else:
+                    self.notify(f"Settings saved, but service offline: {error}", severity="warning", timeout=10)
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    display.status = "error"
+            
+        self.push_screen(TranscriptionSettingsScreen(current_url, current_path), handle_settings)
 
     def action_open_input_selector(self):
         if self.engine.is_recording:

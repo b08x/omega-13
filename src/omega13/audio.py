@@ -68,6 +68,15 @@ class AudioEngine:
             silence_duration_sec=silence_duration
         )
 
+        # Signal detector metrics (last update result)
+        self.last_signal_metrics: Dict[str, Any] = {
+            'rms_levels': [0.0] * self.channels,
+            'rms_db': [-100.0] * self.channels,
+            'is_above_begin': False,
+            'is_above_end': False,
+            'silence_duration': 0.0
+        }
+
         # Connection tracking
         self.connected_sources = [None] * self.channels
 
@@ -157,9 +166,9 @@ class AudioEngine:
             self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
 
             # Update RMS Meters (for intelligent recording decisions)
-            signal_metrics = self.signal_detector.update(data)
-            self.rms_levels = signal_metrics['rms_levels']
-            self.rms_db = signal_metrics['rms_db']
+            self.last_signal_metrics = self.signal_detector.update(data)
+            self.rms_levels = self.last_signal_metrics['rms_levels']
+            self.rms_db = self.last_signal_metrics['rms_db']
 
             # Update Activity Tracking (legacy - kept for backward compatibility)
             if any(db > self.activity_threshold_db for db in self.dbs):
