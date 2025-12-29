@@ -180,9 +180,20 @@ build_whisper_image() {
 setup_whisper() {
     echo ""
     log_info "--- Whisper Transcription Server Setup ---"
-    read -p "Do you want to build the CUDA-enabled Whisper Server image now? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+
+    local build_image=false
+
+    if [ "$BUILD_WHISPER" = true ]; then
+        build_image=true
+    else
+        read -p "Do you want to build the CUDA-enabled Whisper Server image now? (y/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            build_image=true
+        fi
+    fi
+
+    if [ "$build_image" = true ]; then
         # Check for NVIDIA drivers
         if command -v nvidia-smi >/dev/null 2>&1; then
             log_info "NVIDIA GPU detected."
@@ -191,7 +202,6 @@ setup_whisper() {
         fi
 
         build_whisper_image
-        
     else
         log_info "Skipping Whisper Server build."
     fi
@@ -200,6 +210,24 @@ setup_whisper() {
 # --- Main Execution ---
 
 main() {
+    BUILD_WHISPER=false
+
+    # Simple argument parsing
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            -b|--build) BUILD_WHISPER=true ;;
+            -h|--help)
+                echo "Usage: $0 [OPTIONS]"
+                echo "Options:"
+                echo "  -b, --build    Build the Whisper server image automatically"
+                echo "  -h, --help     Show this help message"
+                exit 0
+                ;;
+            *) log_error "Unknown parameter: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
     echo "=========================================="
     echo "   Omega-13 Installer & Bootstrap"
     echo "=========================================="
@@ -218,4 +246,4 @@ main() {
     echo "=========================================="
 }
 
-main
+main "$@"

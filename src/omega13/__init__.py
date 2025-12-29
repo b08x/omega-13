@@ -10,6 +10,6 @@ from .transcription import TranscriptionService
 # in case someone wants to run it via code: omega13.main()
 from .app import main
 
-__version__ = "2.0.0"
+__version__ = "2.3.0"
 
 __all__ = ["Omega13App", "TranscriptionService", "main"]

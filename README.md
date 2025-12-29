@@ -21,18 +21,80 @@ Omega-13 is a retroactive audio recording system designed to capture audio from 
 
 ---
 
-## 🛠️ Prerequisites
+## 🚀 Quick Start (Recommended)
 
-To run Omega-13, your system needs:
+### Prerequisites
 
-1. **Linux** (Tested on Ubuntu/Fedora with GNOME & Wayland).
-2. **Audio System:** PipeWire (with `pipewire-jack` installed) or a native JACK server.
-3. **Docker & NVIDIA GPU:** Required for the hardware-accelerated transcription backend.
-4. **Python 3.12+**.
+- **Linux** (Tested on Fedora, Ubuntu, Arch, OpenSUSE)
+- **Python 3.12+**
+- **Docker/Podman**
+- **[Optional]** NVIDIA GPU with CUDA support for accelerated transcription
+
+### Automated Installation
+
+The `bootstrap.sh` script automates the entire setup process:
+
+1. **Detects your Linux distribution** and installs system dependencies
+2. **Sets up Python environment** using modern `uv` package manager (with pip fallback)
+3. **Optionally builds the Whisper transcription server** with CUDA support
+
+```bash
+# Clone the repository
+cd omega-13
+
+# Run the installer (interactive mode)
+./bootstrap.sh
+
+# Or auto-build the Whisper server
+./bootstrap.sh --build
+```
+
+**What bootstrap.sh does:**
+- Installs: Python 3.12+, development headers, libsndfile, JACK/PipeWire libraries, build tools, Podman
+- Supports package managers: `dnf` (Fedora), `apt` (Debian/Ubuntu), `pacman` (Arch), `zypper` (OpenSUSE)
+- Creates Python virtual environment using `uv sync`
+- Optionally builds the `whisper-server-cuda` Docker image
+
+### Custom CUDA Architecture (Optional)
+
+For optimal GPU performance, you can specify your GPU architecture during the build:
+
+```bash
+# RTX 30xx series (Ampere)
+CUDA_ARCHITECTURES="86" ./bootstrap.sh --build
+
+# RTX 40xx series (Ada Lovelace)
+CUDA_ARCHITECTURES="89" ./bootstrap.sh --build
+
+# Multiple architectures (default: 75;80;86;89;90)
+CUDA_ARCHITECTURES="86;89" ./bootstrap.sh --build
+```
+
+**CUDA Architecture Reference:**
+- `75`: RTX 20xx (Turing)
+- `80`: A100 (Ampere)
+- `86`: RTX 30xx (Ampere)
+- `89`: RTX 40xx (Ada Lovelace)
+- `90`: H100 (Hopper)
+
+See [NVIDIA CUDA GPU Architectures](https://developer.nvidia.com/cuda-gpus) for your specific GPU.
+
+### Start the Application
+
+```bash
+# Using uv (recommended by bootstrap)
+uv run python -m omega13
+
+# Or activate venv manually
+source .venv/bin/activate
+omega13
+```
 
 ---
 
-## 📦 Installation
+## 📦 Manual Installation (Alternative)
+
+For advanced users who prefer manual control:
 
 ### 1. Set up the Backend (Whisper Server)
 
@@ -52,7 +114,11 @@ Omega-13 delegates heavy AI lifting to a Docker container to keep the TUI snappy
 Install the Python package locally:
 
 ```bash
+# Using pip
 pip install .
+
+# Or using uv (faster)
+uv pip install -e .
 ```
 
 ---
@@ -67,7 +133,7 @@ Run the application from your terminal:
 omega13
 ```
 
-### 2. selecting Audio Inputs
+### 2. Selecting Audio Inputs
 
 By default, Omega-13 listens to nothing. You must connect it to an audio source.
 
@@ -154,6 +220,28 @@ Omega-13 includes an intelligent auto-record mode that automatically starts and 
 
 ---
 
+## 🔧 Development
+
+Quick start for developers:
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run tests
+python -m pytest tests/
+
+# Run with debug logging
+omega13 --log-level DEBUG
+
+# Toggle recording (hotkey simulation)
+omega13 --toggle
+```
+
+For comprehensive development documentation including architecture details, thread safety considerations, testing strategies, and conventional commit standards, see [CLAUDE.md](CLAUDE.md).
+
+---
+
 ## 🔧 Troubleshooting
 
 **"Capture Blocked - No Input Signal"**
@@ -172,6 +260,23 @@ Omega-13 includes an intelligent auto-record mode that automatically starts and 
 * Check the Docker container: `docker logs -f whisper-server`.
 * Ensure your GPU is accessible to Docker (`nvidia-smi`).
 
+**bootstrap.sh fails to detect package manager**
+
+* Supported: `dnf`, `apt`, `pacman`, `zypper`
+* Manually install system dependencies for unsupported distros
+* See `bootstrap.sh` lines 56-91 for required packages
+
+**uv installation fails**
+
+* The bootstrap script automatically falls back to standard `pip` and `venv`
+* You can manually use: `python3 -m venv .venv && source .venv/bin/activate && pip install -e .`
+
+**Whisper build fails with OOM (Out of Memory)**
+
+* Reduce CUDA architectures: `CUDA_ARCHITECTURES="86" ./bootstrap.sh --build` (single architecture)
+* Use the pre-built image from Docker Hub (if available)
+* Increase Docker memory limits in `compose.yml`
+
 ---
 
 ## 🏗️ Architecture
@@ -182,28 +287,30 @@ Omega-13 includes an intelligent auto-record mode that automatically starts and 
 * **Recording Controller:** State machine (IDLE, ARMED, RECORDING_MANUAL, RECORDING_AUTO, STOPPING) managing recording lifecycle and coordination between components.
 * **Transcription:** The app sends the resulting `.wav` file via HTTP POST to the local Docker container running `whisper-server`.
 
+For deep architectural insights, see [CLAUDE.md](CLAUDE.md).
+
 ---
 
-## 🗺️ Backlog
+## 🗺️ Roadmap
 
 ### Completed ✅
 
 * ✅ **Voice-Activated Auto-Record** - Automatic recording start on voice detection with intelligent silence-based termination (v2.3.0)
 * ✅ **Start New Session from UI** - Trigger fresh sessions directly from the interface
 
+### In Progress
+
 * ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local CPU → Cloud API)
 * ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
+
+### Future Enhancements
 
 * ☐ **Load Saved Sessions** - Browse and load previously saved sessions
 * ☐ **3-Pane UI Layout Redesign** - Update to narrow controls, transcription buffer, and AI assistant panes
 * ☐ **Transcription Error Correction & Editing** - Support grammar files and UI editing of transcription chunks
-
 * ☐ **OpenCode REST Service Integration** - Generate task lists and documentation from session data
 * ☐ **Live AI Assistant Integration** - Dedicated UI pane for live AI interaction
 * ☐ **Specialized Docker Images** - Create Intel-optimized and generic Docker images
-
-### Future Enhancements
-
 * ☐ **Transcription Buffer Formatting Cleanup** - Improve visual formatting for better readability
 * ☐ **Screenshot Capture & VLM Analysis** - Screenshot functionality with AI metadata analysis
 * ☐ **Screencast Support & Correlation** - Video recording with session metadata correlation

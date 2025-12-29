@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "mcp__filesystem__list_directory",
+      "Bash(head:*)"
     ]
   }
 }
