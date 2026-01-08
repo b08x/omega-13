@@ -4,8 +4,9 @@
 **/results/
 **__pycache__
 *.venv
-.code-packager-config
+.code-packager-*
 omega-13.json
+omega-13.csv
 omega-13.code-workspace
 *session-ses_4b60*
 *.cache/

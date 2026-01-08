@@ -25,10 +25,10 @@ Omega-13 is a retroactive audio recording system designed to capture audio from 
 
 ### Prerequisites
 
-- **Linux** (Tested on Fedora, Ubuntu, Arch, OpenSUSE)
-- **Python 3.12+**
-- **Docker/Podman**
-- **[Optional]** NVIDIA GPU with CUDA support for accelerated transcription
+* **Linux** (Tested on Fedora, Ubuntu, Arch, OpenSUSE)
+* **Python 3.12+**
+* **Docker/Podman**
+* **[Optional]** NVIDIA GPU with CUDA support for accelerated transcription
 
 ### Automated Installation
 
@@ -50,10 +50,10 @@ cd omega-13
 ```
 
 **What bootstrap.sh does:**
-- Installs: Python 3.12+, development headers, libsndfile, JACK/PipeWire libraries, build tools, Podman
-- Supports package managers: `dnf` (Fedora), `apt` (Debian/Ubuntu), `pacman` (Arch), `zypper` (OpenSUSE)
-- Creates Python virtual environment using `uv sync`
-- Optionally builds the `whisper-server-cuda` Docker image
+* Installs: Python 3.12+, development headers, libsndfile, JACK/PipeWire libraries, build tools, Podman
+* Supports package managers: `dnf` (Fedora), `apt` (Debian/Ubuntu), `pacman` (Arch), `zypper` (OpenSUSE)
+* Creates Python virtual environment using `uv sync`
+* Optionally builds the `whisper-server-cuda` Docker image
 
 ### Custom CUDA Architecture (Optional)
 
@@ -71,11 +71,11 @@ CUDA_ARCHITECTURES="86;89" ./bootstrap.sh --build
 ```
 
 **CUDA Architecture Reference:**
-- `75`: RTX 20xx (Turing)
-- `80`: A100 (Ampere)
-- `86`: RTX 30xx (Ampere)
-- `89`: RTX 40xx (Ada Lovelace)
-- `90`: H100 (Hopper)
+* `75`: RTX 20xx (Turing)
+* `80`: A100 (Ampere)
+* `86`: RTX 30xx (Ampere)
+* `89`: RTX 40xx (Ada Lovelace)
+* `90`: H100 (Hopper)
 
 See [NVIDIA CUDA GPU Architectures](https://developer.nvidia.com/cuda-gpus) for your specific GPU.
 
@@ -179,7 +179,7 @@ Now, pressing this key combination will start/stop recording even if the termina
 
 * **Sessions** are temporary by default (`/tmp/omega13`).
 * Press `s` to **Save Session** to a permanent location (e.g., `~/Notebooks`).
-* This saves the `.wav` audio, `.txt` transcriptions, and a `session.json` metadata file.
+* This saves the `.wav` audio, `.md` transcriptions, and a `session.json` metadata file.
 
 ### Voice-Activated Auto-Record
 

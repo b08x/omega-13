@@ -181,7 +181,7 @@ class Session:
                     if not target.exists():
                         shutil.copy2(f, target)
 
-            # Sync transcriptions (the .txt files per recording)
+            # Sync transcriptions (the .md files per recording)
             src_trans = self.session_dir / "transcriptions"
             dst_trans = self.save_location / "transcriptions"
             dst_trans.mkdir(parents=True, exist_ok=True)
