@@ -203,9 +203,9 @@ class TranscriptionService:
             if "recordings" in str(audio_path):
                 trans_dir = audio_path.parent.parent / "transcriptions"
                 trans_dir.mkdir(parents=True, exist_ok=True)
-                output_path = trans_dir / f"{audio_path.stem}.txt"
+                output_path = trans_dir / f"{audio_path.stem}.md"
             else:
-                output_path = audio_path.with_suffix('.txt')
+                output_path = audio_path.with_suffix('.md')
 
             logger.info(f"Saving transcription to {output_path}")
             with open(output_path, 'w', encoding='utf-8') as f:

@@ -9,6 +9,28 @@ Omega-13 is a retroactive audio recording system designed to capture audio from 
 <!-- ![Omega-13 Main Interface](images/01_main_interface.png)
 *(The main TUI showing audio levels and transcription status)* -->
 
+## 🤖 About This Project
+
+This is a **personal workflow tool** built through **Natural Language Programming**. Not "AI-assisted development"—actual programming where natural language is the source code and AI is the compiler.
+
+**The Development Process:**
+I had a problem: wanting to capture fleeting thoughts retroactively. Instead of learning audio programming, threading, or JACK APIs, I described what I needed in English. The language models translated those requirements into working code. When something broke, I described the problem. They debugged it. When I wanted new features, I explained them. They implemented them.
+
+**The Toolchain:**
+- **Claude** (Anthropic) - Primary compiler: requirements → architecture → implementation
+- **Gemini** (Google) - Secondary compiler: feature specs → code
+- **GLM-4** (Zhipu AI) - Experimental runtime for specialized features
+- **Development Environments:**
+  - `claude-code` - IDE for natural language programming
+  - `gemini-cli` - Rapid iteration interface
+  - `opencode` with `oh-my-opencode` - Advanced NLP workflows, automated refactoring
+
+**Why this matters:** This isn't a toy project. It's a fully functional real-time audio system with ring buffers, JACK integration, multi-threaded transcription, Docker orchestration, and Wayland IPC workarounds. The entire system—including the gnarly bits like real-time audio constraints and thread-safe ring buffer wrapping—was specified in natural language and compiled to Python by AI.
+
+**Programming paradigm shift:** Traditional programming: human writes code → computer executes. Natural Language Programming: human writes requirements → AI writes code → computer executes. The human is still the programmer. The language just changed from Python to English.
+
+The extensive documentation below? Also written by AI. Do I read it? Never. It's for the *next* AI session that works on this codebase.
+
 ## ✨ Key Features
 
 * **🕰️ Retroactive Recording:** Always listens (locally), never misses a thought. Captures the 13 seconds *before* you pressed the key.
@@ -21,14 +43,24 @@ Omega-13 is a retroactive audio recording system designed to capture audio from 
 
 ---
 
-## 🚀 Quick Start (Recommended)
+## 📚 Documentation (For the AI, Mostly)
+
+The sections below are absurdly detailed for a personal tool. But they're not really for me—they're for the AI assistants that maintain this. When Claude needs to add a feature or fix a bug, it reads this. When Gemini picks up where Claude left off, it needs context. This is AI-to-AI documentation.
+
+That said, if you're a human who stumbled here and wants to try it, the instructions actually work.
+
+---
+
+## 🚀 Quick Start
+
+*(Meticulously documented by AI. Will I ever run these commands again? Doubtful. But the next AI assistant will appreciate it.)*
 
 ### Prerequisites
 
-- **Linux** (Tested on Fedora, Ubuntu, Arch, OpenSUSE)
-- **Python 3.12+**
-- **Docker/Podman**
-- **[Optional]** NVIDIA GPU with CUDA support for accelerated transcription
+* **Linux** (Tested on Fedora, Ubuntu, Arch, OpenSUSE)
+* **Python 3.12+**
+* **Docker/Podman**
+* **[Optional]** NVIDIA GPU with CUDA support for accelerated transcription
 
 ### Automated Installation
 
@@ -50,10 +82,10 @@ cd omega-13
 ```
 
 **What bootstrap.sh does:**
-- Installs: Python 3.12+, development headers, libsndfile, JACK/PipeWire libraries, build tools, Podman
-- Supports package managers: `dnf` (Fedora), `apt` (Debian/Ubuntu), `pacman` (Arch), `zypper` (OpenSUSE)
-- Creates Python virtual environment using `uv sync`
-- Optionally builds the `whisper-server-cuda` Docker image
+* Installs: Python 3.12+, development headers, libsndfile, JACK/PipeWire libraries, build tools, Podman
+* Supports package managers: `dnf` (Fedora), `apt` (Debian/Ubuntu), `pacman` (Arch), `zypper` (OpenSUSE)
+* Creates Python virtual environment using `uv sync`
+* Optionally builds the `whisper-server-cuda` Docker image
 
 ### Custom CUDA Architecture (Optional)
 
@@ -71,11 +103,11 @@ CUDA_ARCHITECTURES="86;89" ./bootstrap.sh --build
 ```
 
 **CUDA Architecture Reference:**
-- `75`: RTX 20xx (Turing)
-- `80`: A100 (Ampere)
-- `86`: RTX 30xx (Ampere)
-- `89`: RTX 40xx (Ada Lovelace)
-- `90`: H100 (Hopper)
+* `75`: RTX 20xx (Turing)
+* `80`: A100 (Ampere)
+* `86`: RTX 30xx (Ampere)
+* `89`: RTX 40xx (Ada Lovelace)
+* `90`: H100 (Hopper)
 
 See [NVIDIA CUDA GPU Architectures](https://developer.nvidia.com/cuda-gpus) for your specific GPU.
 
@@ -179,7 +211,7 @@ Now, pressing this key combination will start/stop recording even if the termina
 
 * **Sessions** are temporary by default (`/tmp/omega13`).
 * Press `s` to **Save Session** to a permanent location (e.g., `~/Notebooks`).
-* This saves the `.wav` audio, `.txt` transcriptions, and a `session.json` metadata file.
+* This saves the `.wav` audio, `.md` transcriptions, and a `session.json` metadata file.
 
 ### Voice-Activated Auto-Record
 
@@ -222,7 +254,7 @@ Omega-13 includes an intelligent auto-record mode that automatically starts and 
 
 ## 🔧 Development
 
-Quick start for developers:
+If you're an AI agent working on this codebase:
 
 ```bash
 # Activate virtual environment
@@ -238,7 +270,7 @@ omega13 --log-level DEBUG
 omega13 --toggle
 ```
 
-For comprehensive development documentation including architecture details, thread safety considerations, testing strategies, and conventional commit standards, see [CLAUDE.md](CLAUDE.md).
+**For AI assistants:** See [AGENTS.md](AGENTS.md) for critical implementation details. Don't skip the "ANTI-PATTERNS" section—those are mistakes previous AIs made. Learn from them. Also note the threading constraints: the JACK callback is real-time and will punish you for blocking.
 
 ---
 
@@ -279,42 +311,69 @@ For comprehensive development documentation including architecture details, thre
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Natural Language Specification → Implementation)
 
-* **Frontend:** Python `Textual` app handling the Ring Buffer (NumPy) and UI.
-* **Audio Backend:** `JACK` Client. It maintains a rolling float32 buffer array. When triggered, it stitches the pre-buffer (past) with the active queue (present) and writes to `SoundFile`.
-* **Signal Detection:** RMS-based energy monitoring with configurable thresholds and sustained signal validation to prevent false positives.
-* **Recording Controller:** State machine (IDLE, ARMED, RECORDING_MANUAL, RECORDING_AUTO, STOPPING) managing recording lifecycle and coordination between components.
-* **Transcription:** The app sends the resulting `.wav` file via HTTP POST to the local Docker container running `whisper-server`.
+**What I specified in natural language:**
+- "Terminal UI, keyboard-driven"
+- "Always recording in memory, save the past 13 seconds when triggered"
+- "Detect voice activity automatically"
+- "Transcribe locally, no cloud"
+- "Work from anywhere in the OS, even on Wayland"
 
-For deep architectural insights, see [CLAUDE.md](CLAUDE.md).
+**What the AI compiled it into:**
+* **Frontend:** Python `Textual` TUI - because terminals are timeless
+* **Audio Backend:** `JACK` Client with ring buffer - real-time audio is hard, JACK handles it
+* **Signal Detection:** RMS-based energy monitoring - math that actually works
+* **Recording Controller:** State machine with 5 states - finite state machines prevent chaos
+* **Transcription:** Local Docker whisper.cpp - privacy over convenience
+* **IPC:** PID files + SIGUSR1 signals - Wayland workaround that actually works
 
----
+**The implementation detail I never had to learn:** When you press record, it's already been recording in memory for 13 seconds. The ring buffer uses modulo wrapping. The write pointer continuously advances. On trigger, it reconstructs the temporal sequence from the pre-buffer (past) and live queue (present) into a linear WAV file. Then ships it to whisper.cpp.
 
-## 🗺️ Roadmap
+I specified *what*. The AI figured out *how*.
 
-### Completed ✅
-
-* ✅ **Voice-Activated Auto-Record** - Automatic recording start on voice detection with intelligent silence-based termination (v2.3.0)
-* ✅ **Start New Session from UI** - Trigger fresh sessions directly from the interface
-
-### In Progress
-
-* ☐ **Redundant Failover Inference Strategy** - Failover logic for transcription (Local GPU → Local CPU → Cloud API)
-* ☐ **Inference Host Startup Validation** - Health checks for whisper-server during startup
-
-### Future Enhancements
-
-* ☐ **Load Saved Sessions** - Browse and load previously saved sessions
-* ☐ **3-Pane UI Layout Redesign** - Update to narrow controls, transcription buffer, and AI assistant panes
-* ☐ **Transcription Error Correction & Editing** - Support grammar files and UI editing of transcription chunks
-* ☐ **OpenCode REST Service Integration** - Generate task lists and documentation from session data
-* ☐ **Live AI Assistant Integration** - Dedicated UI pane for live AI interaction
-* ☐ **Specialized Docker Images** - Create Intel-optimized and generic Docker images
-* ☐ **Transcription Buffer Formatting Cleanup** - Improve visual formatting for better readability
-* ☐ **Screenshot Capture & VLM Analysis** - Screenshot functionality with AI metadata analysis
-* ☐ **Screencast Support & Correlation** - Video recording with session metadata correlation
+**For AI agents:** [AGENTS.md](AGENTS.md) has the deep technical details. Ring buffer wrapping, thread safety, IPC via SIGUSR1—all the sharp edges are documented there.
 
 ---
 
-*Built with ❤️ for those who think faster than they can type.*
+## 💭 Things I Thought Might Be Cool (Maybe)
+
+**Stuff that actually got built:**
+* ✅ Voice-activated auto-record (turned out pretty useful)
+* ✅ New session button (obvious in hindsight)
+
+**Ideas that seemed good at 2am:**
+* Load old sessions (do I ever actually go back and read things? no.)
+* Fancy 3-pane layout with AI assistant (scope creep detected)
+* Edit transcriptions in the UI (or just... re-record?)
+* OpenCode integration for task lists (meta: AI writing tasks for AI)
+* Live AI chat pane (at that point just use the AI directly?)
+* Screenshot capture + vision model analysis (because why not add computer vision to an audio tool)
+* Screencast recording (feature creep intensifies)
+
+**Probably actually useful:**
+* Transcription failover: GPU → CPU → Cloud (when the CUDA gods are angry)
+* Health checks so it doesn't silently fail on startup
+* Better formatting in the transcription buffer (it's a bit ugly)
+
+Will any of these happen? Ask an AI to decide. That's how this works now.
+
+---
+
+## 🎭 The Bigger Picture
+
+This project is an existence proof for **Natural Language Programming as a viable paradigm**. Not just CRUD apps or toy examples—actual systems programming with real-time constraints, threading, IPC, and all the gnarly bits. All specified in English.
+
+**What this demonstrates:**
+- **You don't need to know the implementation language.** I didn't write Python. I wrote requirements.
+- **The AI is the compiler, not the programmer.** I'm still the programmer. I just program in English instead of Python.
+- **Complex systems can be specified declaratively.** "I need a 13-second ring buffer for retroactive recording" → working JACK integration with modulo wrapping.
+- **Iteration happens at the requirement level.** Bugs are described, not debugged. Features are specified, not implemented.
+
+Is the generated code perfect? Probably not. Do I understand every line? Definitely not. Do I *need* to? No. Does it work? Yes. Did it solve my problem? Absolutely.
+
+**The future of personal software:** You shouldn't need to learn programming languages to have custom software. You should just describe what you need. Natural Language Programming isn't the future—it's the present, running in a terminal near you.
+
+---
+
+*Programmed in English. Compiled by AI. Built for a human who thinks faster than they can type.*
