@@ -1,12 +1,13 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from omega13.transcription import TranscriptionService
+from omega13.transcription import TranscriptionService, LocalTranscriptionProvider
 import requests
 
 def test_custom_inference_path():
-    service = TranscriptionService(server_url="http://my-whisper-server", inference_path="/my-custom-path")
+    provider = LocalTranscriptionProvider(server_url="http://my-whisper-server", inference_path="/my-custom-path")
+    service = TranscriptionService(provider=provider)
     
-    assert service.endpoint == "http://my-whisper-server/my-custom-path"
+    assert provider.endpoint == "http://my-whisper-server/my-custom-path"
     
     with patch('requests.get') as mock_get:
         mock_response = MagicMock()
@@ -21,11 +22,9 @@ def test_custom_inference_path():
 
 def test_inference_path_slash_handling():
     # Test that it adds a leading slash if missing
-    service = TranscriptionService(server_url="http://localhost:8080", inference_path="inference")
-    assert service.inference_path == "/inference"
-    assert service.endpoint == "http://localhost:8080/inference"
+    provider = LocalTranscriptionProvider(server_url="http://localhost:8080", inference_path="inference")
+    assert provider.endpoint == "http://localhost:8080/inference"
     
     # Test that it doesn't double slash
-    service = TranscriptionService(server_url="http://localhost:8080", inference_path="/inference")
-    assert service.inference_path == "/inference"
-    assert service.endpoint == "http://localhost:8080/inference"
+    provider = LocalTranscriptionProvider(server_url="http://localhost:8080", inference_path="/inference")
+    assert provider.endpoint == "http://localhost:8080/inference"
