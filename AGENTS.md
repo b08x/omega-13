@@ -1,7 +1,7 @@
 # AGENTS.md
 
-**Generated:** Wed Jan 07 2026 21:22:01  
-**Commit:** 4674c1f  
+**Generated:** Thu Feb 05 2026 08:41:33  
+**Commit:** fa8d1c0  
 **Branch:** development
 
 ## OVERVIEW
