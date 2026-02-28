@@ -17,11 +17,13 @@
 ### 🚜 Refactor
 
 - Reorder mono/stereo button handlers in TranscriptionSettingsScreen.
+- Implement real-time safety, D-Bus IPC, and MP3 processing pipeline
 
 ### 📚 Documentation
 
 - Consolidate agent documentation and remove obsolete files
 - *(README)* Refactor project overview and architecture
+- Consolidate agent documentation and add module-specific guides
 ## [2.3.0] - 2025-12-26
 
 ### 🚀 Features
