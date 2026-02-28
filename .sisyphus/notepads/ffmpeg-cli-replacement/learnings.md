@@ -83,7 +83,6 @@
 - Error handling: Test invalid inputs and missing files
 - Regression testing: Compare new measurements against baseline
 
-
 ## Task 5: Subprocess Wrapper and Command Builder Utilities
 
 ### Patterns Discovered
@@ -142,7 +141,6 @@
 - Type checking: Verify type hints with mypy/pyright
 - Edge cases: Empty filters, None values, special characters
 
-
 ## Task 6: Audio Metadata Extraction Implementation
 
 ### Patterns Discovered
@@ -197,3 +195,44 @@
 - Edge cases: Empty files, very short audio, unusual sample rates
 - Regression tests: Verify metadata structure matches original implementation
 
+## Task 8: Audio Resampling Implementation
+
+### Patterns Discovered
+
+- **FFmpeg filter configuration**: Used aresample filter with swr resampler for quality settings
+  - Fast: linear_interp=0
+  - Medium: linear_interp=1
+  - High quality: linear_interp=1:cutoff=0.98
+- **Subprocess execution**: Replaced ffmpeg-python library with subprocess calls using run_command()
+- **Command building**: Used build_ffmpeg_command() with filters and codec arguments
+- **Quality preservation**: Output codec set to pcm_s16le with target sample rate and channel count
+
+### Conventions
+
+- Method signature preserved: downsample(input_path, output_path, target_rate, filter_type, channels)
+- Quality settings: 'fast', 'medium', 'high_quality' with corresponding filter configurations
+- Error handling: Maintained existing exception types (FileNotFoundError, ValueError, CommandExecutionError)
+- Return type: Path to downsampled audio file (unchanged)
+
+### Gotchas
+
+- FFmpeg filter chain must be properly formatted as list of strings
+- Sample rate must be specified in codec_args as 'ar' parameter
+- Output file verification requires calling get_audio_info() to check actual sample rate
+- Thread safety maintained through existing RLock implementation
+
+### Successful Approaches
+
+- Replaced ffmpeg-python dependency with subprocess calls for better control
+- Used existing command building and execution utilities (run_command, build_ffmpeg_command)
+- Maintained same API and behavior while improving implementation
+- Verified with baseline measurements showing successful resampling
+- Preserved all quality settings with appropriate filter configurations
+
+### Testing Recommendations
+
+- Unit tests: Test each quality setting with various audio files
+- Integration tests: Test downsample operation in preprocessing pipeline
+- Performance tests: Measure resampling times for different quality settings
+- Error handling: Test invalid inputs, missing files, unsupported formats
+- Regression tests: Compare output files with baseline measurements

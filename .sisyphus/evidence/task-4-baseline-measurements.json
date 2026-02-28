@@ -22,7 +22,7 @@
         "size_bytes": 88244,
         "format": "wav"
       },
-      "processing_time_ms": 148.87380599975586,
+      "processing_time_ms": 168.78938674926758,
       "success": true,
       "error": null
     },
@@ -46,7 +46,7 @@
         "size_bytes": 384044,
         "format": "wav"
       },
-      "processing_time_ms": 180.75323104858398,
+      "processing_time_ms": 191.08343124389648,
       "success": true,
       "error": null
     },
@@ -70,7 +70,7 @@
         "size_bytes": 96044,
         "format": "wav"
       },
-      "processing_time_ms": 152.76145935058594,
+      "processing_time_ms": 165.6496524810791,
       "success": true,
       "error": null
     },
@@ -92,7 +92,7 @@
         "duration": 1.75,
         "size_bytes": 154394
       },
-      "processing_time_ms": 1.5447139739990234,
+      "processing_time_ms": 2.165079116821289,
       "success": true,
       "error": null
     },
@@ -114,7 +114,7 @@
         "duration": 1.75,
         "size_bytes": 336044
       },
-      "processing_time_ms": 2.3386478424072266,
+      "processing_time_ms": 3.8607120513916016,
       "success": true,
       "error": null
     },
@@ -136,7 +136,7 @@
         "duration": 1.0,
         "size_bytes": 32078
       },
-      "processing_time_ms": 493.0140972137451,
+      "processing_time_ms": 495.12290954589844,
       "success": true,
       "error": null
     },
@@ -158,7 +158,7 @@
         "duration": 2.0,
         "size_bytes": 64078
       },
-      "processing_time_ms": 495.2390193939209,
+      "processing_time_ms": 527.9874801635742,
       "success": true,
       "error": null
     },
@@ -180,7 +180,7 @@
         "duration": 1.0,
         "size_bytes": 17876
       },
-      "processing_time_ms": 332.0343494415283,
+      "processing_time_ms": 332.98230171203613,
       "success": true,
       "error": null
     },
@@ -202,7 +202,7 @@
         "duration": 1.0,
         "size_bytes": 32078
       },
-      "processing_time_ms": 499.73583221435547,
+      "processing_time_ms": 508.7552070617676,
       "success": true,
       "error": null
     }

@@ -530,29 +530,28 @@ class AudioProcessor:
 
             # Configure resampling filter based on quality
             filter_configs = {
-                'fast': 'aresample=resampler=swr:linear_interp=0',
-                'medium': 'aresample=resampler=swr:linear_interp=1', 
-                'high_quality': 'aresample=resampler=swr:linear_interp=1:cutoff=0.98'
+                'fast': ['aresample=resampler=swr:linear_interp=0'],
+                'medium': ['aresample=resampler=swr:linear_interp=1'], 
+                'high_quality': ['aresample=resampler=swr:linear_interp=1:cutoff=0.98']
             }
 
-            filter_config = filter_configs.get(filter_type, filter_configs['high_quality'])
-            logger.debug(f"Using filter: {filter_config}")
+            filters = filter_configs.get(filter_type, filter_configs['high_quality'])
+            logger.debug(f"Using filters: {filters}")
 
             try:
-                # Build FFmpeg pipeline for resampling
-                stream = ffmpeg.input(str(input_path))
-                stream = ffmpeg.filter(stream, 'aresample', resampler='swr', **{
-                    'sample_rate': target_rate,
-                    'linear_interp': 1 if filter_type != 'fast' else 0,
-                    'cutoff': 0.98 if filter_type == 'high_quality' else 0.9
-                })
-                # Force output codec and channels
-                stream = ffmpeg.output(stream, str(output_path), acodec='pcm_s16le', ac=channels)
+                # Build FFmpeg command for resampling using subprocess
+                codec_args = {'acodec': 'pcm_s16le', 'ar': target_rate, 'ac': channels}
+                command = build_ffmpeg_command(
+                    str(input_path),
+                    str(output_path),
+                    filters=filters,
+                    codec_args=codec_args
+                )
 
-                # Run resampling
+                # Run resampling using subprocess
                 logger.debug(f"Running FFmpeg resampling: {current_rate}Hz -> {target_rate}Hz")
-                ffmpeg.run(stream, overwrite_output=True, quiet=True)
-                
+                run_command(command, timeout=300, description="Audio resampling")
+
                 # Verify output
                 output_info = self.get_audio_info(output_path)
                 actual_rate = output_info['sample_rate']
@@ -562,7 +561,7 @@ class AudioProcessor:
                 logger.info(f"Downsampling completed: {current_rate}Hz -> {actual_rate}Hz")
                 return output_path
 
-            except ffmpeg.Error as e:
+            except CommandExecutionError as e:
                 logger.error(f"FFmpeg resampling failed: {e}")
                 raise
             except Exception as e:
