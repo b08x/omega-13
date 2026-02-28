@@ -31,7 +31,7 @@ class SignalDetector:
         begin_threshold_db: float = -35.0,
         end_threshold_db: float = -35.0,
         silence_duration_sec: float = 10.0,
-        rms_window_sec: float = 0.1  # 100ms window
+        rms_window_sec: float = 0.1,  # 100ms window
     ) -> None:
         """
         Initialize signal detector.
@@ -50,13 +50,21 @@ class SignalDetector:
         if channels <= 0:
             raise ValueError(f"Invalid channels: {channels}")
         if begin_threshold_db < -100 or begin_threshold_db > 0:
-            logger.warning(f"Begin threshold {begin_threshold_db} dB is outside typical range (-100 to 0 dB)")
+            logger.warning(
+                f"Begin threshold {begin_threshold_db} dB is outside typical range (-100 to 0 dB)"
+            )
         if end_threshold_db < -100 or end_threshold_db > 0:
-            logger.warning(f"End threshold {end_threshold_db} dB is outside typical range (-100 to 0 dB)")
+            logger.warning(
+                f"End threshold {end_threshold_db} dB is outside typical range (-100 to 0 dB)"
+            )
         if silence_duration_sec < 0.1 or silence_duration_sec > 300:
-            logger.warning(f"Silence duration {silence_duration_sec}s is outside typical range (0.1 to 300s)")
+            logger.warning(
+                f"Silence duration {silence_duration_sec}s is outside typical range (0.1 to 300s)"
+            )
         if rms_window_sec < 0.01 or rms_window_sec > 1.0:
-            logger.warning(f"RMS window {rms_window_sec}s is outside typical range (0.01 to 1.0s)")
+            logger.warning(
+                f"RMS window {rms_window_sec}s is outside typical range (0.01 to 1.0s)"
+            )
 
         self.samplerate = samplerate
         self.channels = channels
@@ -67,16 +75,22 @@ class SignalDetector:
 
         # RMS calculation state
         self.rms_window_frames = int(samplerate * rms_window_sec)
-        self.rms_buffer = np.zeros((self.rms_window_frames, channels), dtype='float32')
+        self.rms_buffer = np.zeros((self.rms_window_frames, channels), dtype="float32")
         self.rms_write_pos = 0
         self.rms_buffer_filled = False
 
         # Current RMS levels
-        self.rms_levels = [0.0] * channels
-        self.rms_db = [-100.0] * channels
+        self.rms_levels = np.zeros(channels, dtype="float32")
+        self.rms_db = np.full(channels, -100.0, dtype="float32")
+        self.rms_sq_scratchpad = np.zeros(
+            (self.rms_window_frames, channels), dtype="float32"
+        )
+        self.rms_squared_buffer = np.zeros(channels, dtype="float32")
 
         # Performance optimization: only calculate RMS every N frames to reduce CPU
-        self.rms_calc_interval = 10  # Calculate every 10th callback (~50ms at typical buffer sizes)
+        self.rms_calc_interval = (
+            10  # Calculate every 10th callback (~50ms at typical buffer sizes)
+        )
         self.rms_calc_counter = 0
 
         # Silence tracking (with noise immunity)
@@ -89,6 +103,15 @@ class SignalDetector:
         self.signal_sustain_duration = 0.2  # Trigger after 0.2s of signal
         self.signal_start_time: Optional[float] = None
         self.is_signal_sustained = False
+
+        # Pre-allocated metrics dictionary for zero-allocation update
+        self._metrics_dict: Dict[str, Any] = {
+            "rms_levels": self.rms_levels,
+            "rms_db": self.rms_db,
+            "is_above_begin": False,
+            "is_above_end": False,
+            "silence_duration": 0.0,
+        }
 
         logger.info(
             f"SignalDetector initialized: "
@@ -121,12 +144,14 @@ class SignalDetector:
         remaining = self.rms_window_frames - self.rms_write_pos
 
         if frames <= remaining:
-            self.rms_buffer[self.rms_write_pos:self.rms_write_pos + frames] = audio_data
+            self.rms_buffer[self.rms_write_pos : self.rms_write_pos + frames] = (
+                audio_data
+            )
             self.rms_write_pos += frames
         else:
             # Wrap around
-            self.rms_buffer[self.rms_write_pos:] = audio_data[:remaining]
-            self.rms_buffer[:frames - remaining] = audio_data[remaining:]
+            self.rms_buffer[self.rms_write_pos :] = audio_data[:remaining]
+            self.rms_buffer[: frames - remaining] = audio_data[remaining:]
             self.rms_write_pos = frames - remaining
             self.rms_buffer_filled = True
 
@@ -141,8 +166,8 @@ class SignalDetector:
             self.rms_calc_counter = 0
 
         # Check instantaneous thresholds
-        is_above_begin_instantaneous = any(db > self.begin_threshold_db for db in self.rms_db)
-        is_above_end_instantaneous = any(db > self.end_threshold_db for db in self.rms_db)
+        is_above_begin_instantaneous = np.any(self.rms_db > self.begin_threshold_db)
+        is_above_end_instantaneous = np.any(self.rms_db > self.end_threshold_db)
 
         current_time = time.time()
 
@@ -162,7 +187,7 @@ class SignalDetector:
             # Potential noise or start of talking
             if self.noise_start_time is None:
                 self.noise_start_time = current_time
-            
+
             # If noise is sustained, reset the silence timer
             if current_time - self.noise_start_time >= self.noise_sustain_duration:
                 self.reset_silence_timer()
@@ -175,13 +200,10 @@ class SignalDetector:
                 self.silence_start_time = current_time
             self.is_currently_silent = True
 
-        return {
-            'rms_levels': self.rms_levels.copy(),
-            'rms_db': self.rms_db.copy(),
-            'is_above_begin': self.is_signal_sustained,
-            'is_above_end': is_above_end_instantaneous,
-            'silence_duration': self.get_silence_duration()
-        }
+        self._metrics_dict["is_above_begin"] = self.is_signal_sustained
+        self._metrics_dict["is_above_end"] = is_above_end_instantaneous
+        self._metrics_dict["silence_duration"] = self.get_silence_duration()
+        return self._metrics_dict
 
     def _calculate_rms(self) -> None:
         """Calculate RMS levels from current buffer."""
@@ -189,25 +211,26 @@ class SignalDetector:
         if self.rms_buffer_filled:
             data = self.rms_buffer
         else:
-            data = self.rms_buffer[:self.rms_write_pos]
+            data = self.rms_buffer[: self.rms_write_pos]
 
         if len(data) == 0:
-            self.rms_levels = [0.0] * self.channels
-            self.rms_db = [-100.0] * self.channels
+            self.rms_levels.fill(0.0)
+            self.rms_db.fill(-100.0)
             return
 
         # RMS = sqrt(mean(x^2))
-        rms_squared = np.mean(data ** 2, axis=0)
-        self.rms_levels = np.sqrt(rms_squared).tolist()
+        np.square(data, out=self.rms_sq_scratchpad[: len(data)])
+        np.mean(
+            self.rms_sq_scratchpad[: len(data)], axis=0, out=self.rms_squared_buffer
+        )
+        np.sqrt(self.rms_squared_buffer, out=self.rms_levels)
 
         # Convert to dB (20 * log10(rms))
-        self.rms_db = []
-        for rms in self.rms_levels:
-            if rms > 1e-5:  # Avoid log(0)
-                db = 20 * np.log10(rms)
-            else:
-                db = -100.0  # Effective silence
-            self.rms_db.append(db)
+        mask = self.rms_levels > 1e-5
+        self.rms_db.fill(-100.0)
+        if np.any(mask):
+            np.log10(self.rms_levels, out=self.rms_db, where=mask)
+            np.multiply(self.rms_db, 20.0, out=self.rms_db, where=mask)
 
     def reset_silence_timer(self) -> None:
         """Reset the silence duration counter."""
@@ -239,7 +262,7 @@ class SignalDetector:
         self,
         begin_threshold_db: Optional[float] = None,
         end_threshold_db: Optional[float] = None,
-        silence_duration_sec: Optional[float] = None
+        silence_duration_sec: Optional[float] = None,
     ) -> None:
         """
         Update detection thresholds without recreating the detector.
@@ -269,8 +292,8 @@ class SignalDetector:
             Dictionary with current threshold and duration settings
         """
         return {
-            'begin_threshold_db': self.begin_threshold_db,
-            'end_threshold_db': self.end_threshold_db,
-            'silence_duration_sec': self.silence_duration_sec,
-            'rms_window_sec': self.rms_window_sec
+            "begin_threshold_db": self.begin_threshold_db,
+            "end_threshold_db": self.end_threshold_db,
+            "silence_duration_sec": self.silence_duration_sec,
+            "rms_window_sec": self.rms_window_sec,
         }

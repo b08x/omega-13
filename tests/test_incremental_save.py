@@ -32,7 +32,8 @@ def test_incremental_save():
         save_loc = session.save_location
         assert save_loc is not None
         assert save_loc.exists()
-        assert (save_loc / "recordings" / "001.wav").exists()
+        assert (save_loc / "recordings" / "001.mp3").exists()
+
         
         with open(save_loc / "session.json", "r") as f:
             data = json.load(f)
@@ -52,8 +53,9 @@ def test_incremental_save():
         assert manager.save_session(save_loc.parent) == True
         
         assert save_loc.exists()
-        assert (save_loc / "recordings" / "001.wav").exists()
-        assert (save_loc / "recordings" / "002.wav").exists()
+        assert (save_loc / "recordings" / "001.mp3").exists()
+        assert (save_loc / "recordings" / "002.mp3").exists()
+
         
         with open(save_loc / "session.json", "r") as f:
             data = json.load(f)

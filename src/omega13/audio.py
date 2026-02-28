@@ -8,6 +8,7 @@ import numpy as np
 import soundfile as sf
 from typing import Optional, Dict, Any
 from .config import ConfigManager
+from .audio_processor import AudioProcessor
 from .signal_detector import SignalDetector
 
 logger = logging.getLogger(__name__)
@@ -15,13 +16,15 @@ logger = logging.getLogger(__name__)
 BUFFER_DURATION = 13
 DEFAULT_CHANNELS = 2
 
+
 class AudioEngine:
     """Handles JACK client, ring buffer, and file writing logic."""
+
     def __init__(
         self,
         buffer_duration: int = BUFFER_DURATION,
         config_manager: Optional[ConfigManager] = None,
-        num_channels: int = DEFAULT_CHANNELS
+        num_channels: int = DEFAULT_CHANNELS,
     ) -> None:
         self.buffer_duration = buffer_duration
         self.config_manager = config_manager
@@ -30,16 +33,33 @@ class AudioEngine:
         # Setup input ports
         self.input_ports = []
         for i in range(num_channels):
-            self.input_ports.append(self.client.inports.register(f"in_{i+1}"))
+            self.input_ports.append(self.client.inports.register(f"in_{i + 1}"))
 
         self.samplerate = int(self.client.samplerate)
         self.channels = len(self.input_ports)
 
         # Ring Buffer setup
         self.ring_size = self.samplerate * self.buffer_duration
-        self.ring_buffer = np.zeros((self.ring_size, self.channels), dtype='float32')
+        self.ring_buffer = np.zeros((self.ring_size, self.channels), dtype="float32")
         self.write_ptr = 0
         self.buffer_filled = False
+        # Zero-allocation JACK callback buffers
+        try:
+            self.max_block_size = int(self.client.blocksize)
+        except (TypeError, ValueError, AttributeError):
+            self.max_block_size = 4096
+        self.scratchpad = np.zeros(
+            (self.max_block_size, self.channels), dtype="float32"
+        )
+        self.abs_scratchpad = np.zeros(
+            (self.max_block_size, self.channels), dtype="float32"
+        )
+
+        self.buffer_pool_size = 200  # Matches record_queue maxsize
+        self.buffer_pool = np.zeros(
+            (self.buffer_pool_size, self.max_block_size, self.channels), dtype="float32"
+        )
+        self.buffer_pool_index = 0
 
         # Recording state
         self.is_recording = False
@@ -48,33 +68,42 @@ class AudioEngine:
         self.stop_event = threading.Event()
 
         # Metering (peak-based for VU meters)
-        self.peaks = [0.0] * self.channels
-        self.dbs = [-100.0] * self.channels
+        self.peaks = np.zeros(self.channels, dtype="float32")
 
         # RMS metering (energy-based for intelligent recording)
-        self.rms_levels = [0.0] * self.channels
-        self.rms_db = [-100.0] * self.channels
+        self.rms_levels = np.zeros(self.channels, dtype="float32")
+        self.rms_db = np.full(self.channels, -100.0, dtype="float32")
 
         # Signal detector for auto-record
-        begin_threshold = config_manager.get_auto_record_begin_threshold() if config_manager else -35.0
-        end_threshold = config_manager.get_auto_record_end_threshold() if config_manager else -35.0
-        silence_duration = config_manager.get_auto_record_silence_duration() if config_manager else 10.0
+        begin_threshold = (
+            config_manager.get_auto_record_begin_threshold()
+            if config_manager
+            else -35.0
+        )
+        end_threshold = (
+            config_manager.get_auto_record_end_threshold() if config_manager else -35.0
+        )
+        silence_duration = (
+            config_manager.get_auto_record_silence_duration()
+            if config_manager
+            else 10.0
+        )
 
         self.signal_detector = SignalDetector(
             samplerate=self.samplerate,
             channels=self.channels,
             begin_threshold_db=begin_threshold,
             end_threshold_db=end_threshold,
-            silence_duration_sec=silence_duration
+            silence_duration_sec=silence_duration,
         )
 
         # Signal detector metrics (last update result)
         self.last_signal_metrics: Dict[str, Any] = {
-            'rms_levels': [0.0] * self.channels,
-            'rms_db': [-100.0] * self.channels,
-            'is_above_begin': False,
-            'is_above_end': False,
-            'silence_duration': 0.0
+            "rms_levels": self.rms_levels,
+            "rms_db": self.rms_db,
+            "is_above_begin": False,
+            "is_above_end": False,
+            "silence_duration": 0.0,
         }
 
         # Connection tracking
@@ -83,6 +112,7 @@ class AudioEngine:
         # Activity tracking (legacy - kept for backward compatibility)
         self.last_activity_time = 0.0
         self.activity_threshold_db = -70.0  # Slightly more sensitive default
+        self.activity_threshold_linear = 10 ** (self.activity_threshold_db / 20)
 
         # Shutdown state
         self._stopped = False
@@ -91,31 +121,28 @@ class AudioEngine:
 
     def start(self) -> None:
         self.client.activate()
-        logger.info(f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s")
+        logger.info(
+            f"JACK Client started. Sample rate: {self.samplerate}, Buffer: {self.buffer_duration}s"
+        )
 
     def has_audio_activity(self, window_seconds: float = 0.5) -> bool:
         """
         Check if there was any audio activity above threshold within the last window_seconds.
-        
+
         Args:
             window_seconds: Time window to look back for activity (default 0.5s)
-            
+
         Returns:
-            True if activity was detected recently OR if ports are connected and engine is safe, 
+            True if activity was detected recently OR if ports are connected and engine is safe,
             False otherwise.
         """
         # 1. Check for recent signal peaks
         if (time.time() - self.last_activity_time) < window_seconds:
             return True
-        
+
         # 2. Fallback: check if ports are actually connected
-        # If signal is very low but ports ARE connected, we might want to allow it
-        # or at least not be so aggressive if it's PipeWire.
         connections = self.get_current_connections()
         if any(c is not None for c in connections):
-            # If connected, maybe the signal is just quiet right now.
-            # Return true but maybe we should still log a warning?
-            # For now, if connected, we treat it as "active enough" to not block.
             return True
 
         return False
@@ -127,7 +154,7 @@ class AudioEngine:
             return
 
         try:
-            if hasattr(self, 'client'):
+            if hasattr(self, "client"):
                 if self.client.status:  # Check if active
                     logger.debug("Deactivating JACK client")
                     self.client.deactivate()
@@ -148,30 +175,31 @@ class AudioEngine:
             part1 = remaining_space
             part2 = frames - remaining_space
             self.ring_buffer[self.write_ptr : self.write_ptr + part1] = data[:part1]
-            self.ring_buffer[0 : part2] = data[part1:]
+            self.ring_buffer[0:part2] = data[part1:]
             self.write_ptr = part2
             self.buffer_filled = True
-        
+
         if self.write_ptr >= self.ring_size:
             self.write_ptr = 0
             self.buffer_filled = True
 
     def process(self, frames: int) -> None:
         try:
-            input_arrays = [port.get_array() for port in self.input_ports]
-            data = np.stack(input_arrays, axis=-1)
+            for i, port in enumerate(self.input_ports):
+                self.scratchpad[:frames, i] = port.get_array()
+            data = self.scratchpad[:frames]
 
-            # Update Peak Meters (for VU display)
-            self.peaks = np.max(np.abs(data), axis=0).tolist()
-            self.dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in self.peaks]
+            # Update Peak Meters (for VU display) - raw peaks only
+            np.abs(data, out=self.abs_scratchpad[:frames])
+            np.max(self.abs_scratchpad[:frames], axis=0, out=self.peaks)
 
             # Update RMS Meters (for intelligent recording decisions)
             self.last_signal_metrics = self.signal_detector.update(data)
-            self.rms_levels = self.last_signal_metrics['rms_levels']
-            self.rms_db = self.last_signal_metrics['rms_db']
+            self.rms_levels = self.last_signal_metrics["rms_levels"]
+            self.rms_db = self.last_signal_metrics["rms_db"]
 
             # Update Activity Tracking (legacy - kept for backward compatibility)
-            if any(db > self.activity_threshold_db for db in self.dbs):
+            if np.any(self.peaks > self.activity_threshold_linear):
                 self.last_activity_time = time.time()
 
             # Write to Ring Buffer
@@ -181,7 +209,10 @@ class AudioEngine:
             if self.is_recording:
                 try:
                     # Non-blocking put to prevent JACK callback hang
-                    self.record_queue.put(data.copy(), block=False)
+                    idx = self.buffer_pool_index
+                    self.buffer_pool[idx, :frames, :] = data
+                    self.record_queue.put((idx, frames), block=False)
+                    self.buffer_pool_index = (idx + 1) % self.buffer_pool_size
                 except queue.Full:
                     # Queue full - log but don't block (rare case)
                     if logger.isEnabledFor(logging.DEBUG):
@@ -193,6 +224,17 @@ class AudioEngine:
                 logger.debug(f"JACK process error: {e}")
             # Must swallow exception for JACK stability
             pass
+
+    def get_peak_meters(self) -> tuple[list[float], list[float]]:
+        """
+        Compute dB values from raw peaks in UI thread.
+
+        Returns:
+            Tuple of (linear_peaks, db_peaks)
+        """
+        peaks_list = self.peaks.tolist()
+        dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in peaks_list]
+        return peaks_list, dbs
 
     def start_recording(self, output_path: Path) -> Path | None:
         """
@@ -212,18 +254,19 @@ class AudioEngine:
 
         # Reconstruct buffer
         if self.buffer_filled:
-            part_old = self.ring_buffer[self.write_ptr:]
-            part_new = self.ring_buffer[:self.write_ptr]
+            part_old = self.ring_buffer[self.write_ptr :]
+            part_new = self.ring_buffer[: self.write_ptr]
             past_data = np.concatenate((part_old, part_new))
         else:
-            past_data = self.ring_buffer[:self.write_ptr].copy()
+            past_data = self.ring_buffer[: self.write_ptr].copy()
 
         # Ensure parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.writer_thread = threading.Thread(
             target=self._file_writer,
-            args=(str(output_path), past_data)
+            args=(str(output_path), past_data),
+            daemon=True,  # Daemon thread allows clean shutdown without blocking
         )
         self.writer_thread.start()
         return output_path
@@ -251,7 +294,6 @@ class AudioEngine:
                     f"Remaining queue: {self.record_queue.qsize()} blocks. "
                     f"File may be incomplete."
                 )
-                # Thread will be forcibly terminated when process exits
             else:
                 logger.info("Writer thread completed successfully")
 
@@ -263,18 +305,67 @@ class AudioEngine:
             logger.debug(f"Queue cleanup error (non-critical): {e}")
 
     def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
+        """Write audio data to MP3 file with 16kHz mono encoding."""
+        import tempfile
+        import os
+
+        # Replace .wav extension with .mp3 in filename
+        if filename.endswith(".wav"):
+            mp3_filename = filename[:-4] + ".mp3"
+        else:
+            mp3_filename = (
+                filename + ".mp3" if not filename.endswith(".mp3") else filename
+            )
+
+        # Create temporary WAV file for intermediate processing
+        temp_wav = None
         try:
-            with sf.SoundFile(filename, mode='w', samplerate=self.samplerate, channels=self.channels) as file:
-                file.write(pre_buffer_data)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                temp_wav = temp_file.name
+
+            # Write audio data to temporary WAV file
+            with sf.SoundFile(
+                temp_wav, mode="w", samplerate=self.samplerate, channels=self.channels
+            ) as wav_file:
+                wav_file.write(pre_buffer_data)
+
+                # Continue writing blocks from queue
                 while self.is_recording or not self.record_queue.empty():
                     try:
-                        block = self.record_queue.get(timeout=0.1)
-                        file.write(block)
+                        item = self.record_queue.get(timeout=0.1)
+                        if isinstance(item, tuple):
+                            idx, frames = item
+                            block = self.buffer_pool[idx, :frames, :]
+                        else:
+                            block = item
+                        wav_file.write(block)
                     except queue.Empty:
                         if not self.is_recording:
                             break
+
+            # Apply audio processing pipeline (Trim silence -> Resample -> Encode MP3)
+            processor = AudioProcessor()
+            operations = [
+                {"op": "trim_silence", "threshold_db": -50.0},
+                {"op": "encode_mp3", "bitrate": "128k"}
+            ]
+            
+            final_path = processor.process_pipeline(temp_wav, mp3_filename, operations)
+            
+            logger.info(f"Audio processed and saved: {final_path}")
+
         except Exception as e:
             logger.error(f"File writer error: {e}")
+            raise
+        finally:
+            # Clean up temporary WAV file
+            if temp_wav and os.path.exists(temp_wav):
+                try:
+                    os.unlink(temp_wav)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to cleanup temporary file {temp_wav}: {cleanup_error}"
+                    )
 
     def get_available_output_ports(self) -> list[jack.Port]:
         try:

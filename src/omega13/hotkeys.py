@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Callable, Optional
 
@@ -6,6 +7,11 @@ import os
 logger = logging.getLogger(__name__)
 
 IS_WAYLAND = os.environ.get('XDG_SESSION_TYPE') == 'wayland'
+
+# D-Bus constants matching dbus_service.py
+DBUS_SERVICE_NAME = "org.omega13.Recorder"
+DBUS_OBJECT_PATH = "/org/omega13/Recorder"
+DBUS_INTERFACE_NAME = "org.omega13.Recorder"
 
 # Graceful degradation if pynput is missing or fails
 try:
@@ -18,6 +24,11 @@ except ImportError:
 class GlobalHotkeyListener:
     """
     Listens for a global hotkey combination.
+    
+    On X11: Uses pynput for direct keyboard capture.
+    On Wayland: pynput cannot capture global hotkeys reliably.
+    Configure your desktop environment to run 'omega13 --toggle'
+    which uses D-Bus IPC to toggle recording on the running instance.
     """
 
     def __init__(self, hotkey_str: str, callback: Callable):
@@ -79,8 +90,6 @@ class GlobalHotkeyListener:
         
         return lower_hotkey
 
-
-
     def start(self) -> bool:
         """
         Start the global hotkey listener.
@@ -97,7 +106,11 @@ class GlobalHotkeyListener:
 
 
             if IS_WAYLAND:
-                logger.warning("Running on Wayland. Global hotkeys may not work unless the application has focus or specific permissions.")
+                logger.warning(
+                    "Running on Wayland. pynput global hotkeys are unreliable. "
+                    "Configure your desktop environment to run 'omega13 --toggle' "
+                    "as a system-wide hotkey for reliable D-Bus-based recording toggle."
+                )
             
             # Fallback to standard string-based GlobalHotKeys
             self.listener = keyboard.GlobalHotKeys({
@@ -122,3 +135,168 @@ class GlobalHotkeyListener:
                 pass
             finally:
                 self.listener = None
+
+
+async def _dbus_toggle_async() -> str:
+    """Call ToggleRecording() on the running Omega-13 D-Bus service.
+
+    Returns:
+        str: New recording state description
+
+    Raises:
+        ConnectionError: If no running Omega-13 instance found
+        RuntimeError: If D-Bus call fails
+    """
+    try:
+        from dbus_next.aio.message_bus import MessageBus
+        from dbus_next.errors import DBusError
+    except ImportError:
+        raise RuntimeError("dbus-next not installed. Cannot toggle recording.")
+
+    bus = None
+    try:
+        import asyncio
+        
+        # Connect to D-Bus with timeout
+        bus = await asyncio.wait_for(
+            MessageBus().connect(), timeout=3.0
+        )
+        
+        # Introspect with timeout to prevent hanging
+        introspection = await asyncio.wait_for(
+            bus.introspect(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH), timeout=5.0
+        )
+        
+        proxy = bus.get_proxy_object(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH, introspection)
+        iface = proxy.get_interface(DBUS_INTERFACE_NAME)
+        
+        # Call method with timeout to prevent hanging
+        is_recording = await asyncio.wait_for(
+            iface.call_toggle_recording(), timeout=10.0
+        )
+        
+        state = "recording" if is_recording else "stopped"
+        return state
+        
+    except asyncio.TimeoutError:
+        raise ConnectionError(
+            "Timeout: Omega-13 instance found but not responding. "
+            "The application may be frozen or busy."
+        )
+    except DBusError as e:
+        if "NameHasNoOwner" in str(e) or "ServiceUnknown" in str(e):
+            raise ConnectionError(
+                "No running Omega-13 instance found. Start omega13 first."
+            )
+        else:
+            raise ConnectionError(
+                f"D-Bus communication error: {e}"
+            )
+    except asyncio.CancelledError:
+        raise ConnectionError(
+            "Operation cancelled (likely by Ctrl+C). Omega-13 may be starting up."
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to toggle recording via D-Bus: {e}")
+    finally:
+        # Ensure bus is properly disconnected
+        if bus and hasattr(bus, 'disconnect'):
+            try:
+                bus.disconnect()
+            except Exception:
+                pass  # Ignore cleanup errors
+
+
+def send_dbus_toggle() -> str:
+    """Send ToggleRecording() to the running Omega-13 instance via D-Bus.
+
+    Synchronous wrapper for the async D-Bus call.
+
+    Returns:
+        str: New recording state ("recording" or "stopped")
+
+    Raises:
+        ConnectionError: If no running Omega-13 instance found
+        RuntimeError: If D-Bus call fails or dbus-next not installed
+    """
+    return asyncio.run(_dbus_toggle_async())
+
+
+async def _dbus_get_state_async() -> str:
+    """Get recording state from the running Omega-13 D-Bus service.
+
+    Returns:
+        str: Current recording state name
+
+    Raises:
+        ConnectionError: If no running Omega-13 instance found
+        RuntimeError: If D-Bus call fails
+    """
+    try:
+        from dbus_next.aio.message_bus import MessageBus
+        from dbus_next.errors import DBusError
+    except ImportError:
+        raise RuntimeError("dbus-next not installed. Cannot query state.")
+
+    bus = None
+    try:
+        import asyncio
+        
+        # Connect to D-Bus with timeout
+        bus = await asyncio.wait_for(
+            MessageBus().connect(), timeout=3.0
+        )
+        
+        # Introspect with timeout
+        introspection = await asyncio.wait_for(
+            bus.introspect(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH), timeout=5.0
+        )
+        
+        proxy = bus.get_proxy_object(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH, introspection)
+        iface = proxy.get_interface(DBUS_INTERFACE_NAME)
+        
+        # Call method with timeout
+        state = await asyncio.wait_for(
+            iface.call_get_state(), timeout=5.0
+        )
+        
+        return state
+        
+    except asyncio.TimeoutError:
+        raise ConnectionError(
+            "Timeout: Omega-13 instance found but not responding."
+        )
+    except DBusError as e:
+        if "NameHasNoOwner" in str(e) or "ServiceUnknown" in str(e):
+            raise ConnectionError(
+                "No running Omega-13 instance found. Start omega13 first."
+            )
+        else:
+            raise ConnectionError(
+                f"D-Bus communication error: {e}"
+            )
+    except asyncio.CancelledError:
+        raise ConnectionError("Operation cancelled.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to get state via D-Bus: {e}")
+    finally:
+        if bus and hasattr(bus, 'disconnect'):
+            try:
+                bus.disconnect()
+            except Exception:
+                pass
+
+
+def get_dbus_state() -> str:
+    """Get current recording state from a running Omega-13 instance.
+
+    Synchronous wrapper for the async D-Bus call.
+
+    Returns:
+        str: Current recording state
+
+    Raises:
+        ConnectionError: If no running Omega-13 instance found
+        RuntimeError: If D-Bus call fails or dbus-next not installed
+    """
+    return asyncio.run(_dbus_get_state_async())

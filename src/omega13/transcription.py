@@ -87,7 +87,9 @@ class LocalTranscriptionProvider(TranscriptionProvider):
 
     def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
         with open(audio_path, "rb") as audio_file:
-            files = {"file": (audio_path.name, audio_file, "audio/wav")}
+            # Detect MIME type from file extension
+            mime_type = "audio/mpeg" if audio_path.suffix == ".mp3" else "audio/wav"
+            files = {"file": (audio_path.name, audio_file, mime_type)}
             data = {"response_format": "json", "temperature": "0.0"}
             response = requests.post(
                 self.endpoint, files=files, data=data, timeout=timeout
@@ -126,7 +128,8 @@ class GroqTranscriptionProvider(TranscriptionProvider):
 
         headers = {"Authorization": f"Bearer {self.api_key}"}
         with open(audio_path, "rb") as audio_file:
-            files = {"file": (audio_path.name, audio_file, "audio/wav")}
+            mime_type = "audio/mpeg" if audio_path.suffix == ".mp3" else "audio/wav"
+            files = {"file": (audio_path.name, audio_file, mime_type)}
             data = {
                 "model": self.model,
                 "response_format": "json",
@@ -223,7 +226,7 @@ class TranscriptionService:
                 inject_to_active_window_enabled,
                 injection_error_callback,
             ),
-            daemon=False,  # Changed from True
+            daemon=True,  # Daemon thread allows clean shutdown without blocking
             name=f"transcription-{audio_path.stem}",  # Added name for debugging
         )
         thread.start()

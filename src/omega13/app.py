@@ -30,7 +30,7 @@ from .hotkeys import GlobalHotkeyListener
 from .notifications import DesktopNotifier
 from .signal_detector import SignalDetector
 from .recording_controller import RecordingController, RecordingState, RecordingEvent
-
+from .dbus_service import DBusService
 # Optional import for transcription
 try:
     from .transcription import (
@@ -101,9 +101,9 @@ class Omega13App(App):
         super().__init__(*args, **kwargs)
         self._shutdown_initiated = False
         self._signal_handlers_registered = False
-        self._signal_handlers_registered = False
         self.hotkey_listener: Optional[GlobalHotkeyListener] = None
         self.notifier: Optional[DesktopNotifier] = None
+        self.dbus_service: Optional[DBusService] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -156,11 +156,6 @@ class Omega13App(App):
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-        # Add SIGUSR1 handler for external toggle triggering
-        if hasattr(signal, "SIGUSR1"):
-            signal.signal(
-                signal.SIGUSR1, lambda s, f: self.call_later(self.action_toggle_record)
-            )
 
     def _graceful_shutdown(self) -> None:
         if hasattr(self, "session_manager"):
@@ -171,7 +166,7 @@ class Omega13App(App):
                 self.session_manager.discard_session()
         self.exit()
 
-    def on_mount(self):
+    async def on_mount(self):
         if not self._signal_handlers_registered:
             self._register_signal_handlers()
             self._signal_handlers_registered = True
@@ -234,17 +229,6 @@ class Omega13App(App):
             if self.auto_record_enabled:
                 self.recording_controller.enable_auto_record()
 
-            # Write PID file for CLI toggle support
-            try:
-                self._pid_file = (
-                    Path.home() / ".local" / "share" / "omega13" / "omega13.pid"
-                )
-                self._pid_file.parent.mkdir(parents=True, exist_ok=True)
-                self._pid_file.write_text(str(os.getpid()))
-                logger = logging.getLogger(__name__)
-                logger.info(f"PID file written: {self._pid_file} (PID: {os.getpid()})")
-            except Exception as e:
-                logging.getLogger(__name__).error(f"Failed to write PID file: {e}")
 
             self._load_and_connect_saved_inputs()
             self._update_meter_visibility()
@@ -320,6 +304,19 @@ class Omega13App(App):
                     self.transcription_service = None
                     self.notify(f"Transcription init failed: {e}", severity="warning")
 
+            # Initialize and register D-Bus service (skip in tests)
+            import os
+            if "PYTEST_CURRENT_TEST" not in os.environ:
+                try:
+                    self.dbus_service = DBusService(self)
+                    # Register D-Bus service
+                    await self.dbus_service.register()
+                    logger = logging.getLogger(__name__)
+                    logger.info("D-Bus service registered successfully")
+                except Exception as e:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"D-Bus service registration failed: {e}")
+                    self.dbus_service = None
             self.set_interval(0.05, self.update_meters)
             self.set_interval(
                 0.2, self.check_auto_triggers
@@ -327,7 +324,8 @@ class Omega13App(App):
         except Exception as e:
             self.exit(message=f"Failed to start: {e}")
 
-    def on_unmount(self):
+    async def on_unmount(self) -> None:
+        """Async cleanup during app shutdown - Textual awaits this automatically."""
         logger = logging.getLogger(__name__)
         logger.info("=== SHUTDOWN SEQUENCE STARTING ===")
 
@@ -342,7 +340,14 @@ class Omega13App(App):
             except Exception as e:
                 logger.error(f"Hotkey stop error: {e}")
 
-        # 2. Stop audio engine
+        # 2. Stop D-Bus service (properly awaited)
+        if self.dbus_service and self.dbus_service.is_registered():
+            try:
+                await self.dbus_service.unregister()
+                logger.info("D-Bus service stopped")
+            except Exception as e:
+                logger.error(f"D-Bus service stop error: {e}")
+        # 3. Stop audio engine
         if hasattr(self, "engine"):
             try:
                 if self.engine.is_recording:
@@ -360,7 +365,7 @@ class Omega13App(App):
             )
             return
 
-        # 3. Shutdown transcription service
+        # 4. Shutdown transcription service
         if hasattr(self, "transcription_service") and self.transcription_service:
             try:
                 active = len(
@@ -399,32 +404,27 @@ class Omega13App(App):
             except Exception as e:
                 logger.error(f"Session cleanup error: {e}")
 
-        # 5. PID file cleanup
-        if hasattr(self, "_pid_file") and self._pid_file.exists():
-            try:
-                self._pid_file.unlink()
-            except Exception:
-                pass
 
         total_time = time.time() - (shutdown_deadline - 60.0)
         logger.info(f"=== SHUTDOWN COMPLETE: {total_time:.2f}s ===")
 
     def update_meters(self):
         try:
-            peaks = self.engine.peaks
+            peaks, dbs = self.engine.get_peak_meters()
             meter_1 = self.query_one("#meter-1", VUMeter)
             meter_1.level = peaks[0]
-            meter_1.db_level = self.engine.dbs[0]
+            meter_1.db_level = dbs[0]
 
             if len(peaks) > 1 and self.engine.channels > 1:
                 meter_2 = self.query_one("#meter-2", VUMeter)
                 meter_2.level = peaks[1]
-                meter_2.db_level = self.engine.dbs[1]
+                meter_2.db_level = dbs[1]
         except NoMatches:
             pass
 
         # Update buffer info display
         try:
+            from .recording_controller import RecordingState
             state = self.recording_controller.get_state()
             if state == RecordingState.ARMED:
                 # Show armed status when monitoring
@@ -1120,32 +1120,17 @@ def main():
     args = parser.parse_args()
 
     if args.toggle:
-        # Find the PID of the running omega13 instance using the PID file
+        # Use D-Bus to toggle recording on running instance
+        from .hotkeys import send_dbus_toggle
         try:
-            pid_file = Path.home() / ".local" / "share" / "omega13" / "omega13.pid"
-            if not pid_file.exists():
-                print("No running Omega-13 instance found (PID file missing).")
-                sys.exit(1)
-
-            try:
-                target_pid = int(pid_file.read_text().strip())
-            except ValueError:
-                print("Invalid PID file content.")
-                sys.exit(1)
-
-            # verify the process is actually running
-            try:
-                # sending signal 0 does not actually kill the process but checks if it running (and we have permission)
-                os.kill(target_pid, 0)
-            except OSError:
-                print(f"Stale PID file found. Process {target_pid} is not running.")
-                sys.exit(1)
-
-            print(f"Sending toggle signal to Omega-13 (PID: {target_pid})...")
-            os.kill(target_pid, signal.SIGUSR1)
+            state = send_dbus_toggle()
+            print(f"Toggle signal sent. Recording state: {state}")
             sys.exit(0)
-        except Exception as e:
-            print(f"Error sending toggle signal: {e}")
+        except ConnectionError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f"Error: {e}")
             sys.exit(1)
 
     configure_logging(level=args.log_level)
