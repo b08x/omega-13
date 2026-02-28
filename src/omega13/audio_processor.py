@@ -1,4 +1,6 @@
 import logging
+import shutil
+import subprocess
 import tempfile
 import threading
 from pathlib import Path
@@ -13,6 +15,80 @@ import numpy as np
 import soundfile as sf
 
 logger = logging.getLogger(__name__)
+
+def check_ffmpeg_available() -> bool:
+    """
+    Check if ffmpeg binary is available in system PATH.
+    
+    Returns:
+        True if ffmpeg is found and executable, False otherwise
+    """
+    ffmpeg_path = shutil.which("ffmpeg")
+    return ffmpeg_path is not None
+
+
+def check_sox_available() -> bool:
+    """
+    Check if sox binary is available in system PATH.
+    
+    Returns:
+        True if sox is found and executable, False otherwise
+    """
+    sox_path = shutil.which("sox")
+    return sox_path is not None
+
+
+def get_ffmpeg_version() -> Optional[str]:
+    """
+    Get the version string of the ffmpeg binary.
+    
+    Returns:
+        Version string if ffmpeg is available, None otherwise
+    """
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        return None
+    
+    try:
+        result = subprocess.run(
+            [ffmpeg_path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout:
+            # First line contains version info
+            return result.stdout.split("\n")[0]
+        return None
+    except Exception as e:
+        logger.debug(f"Failed to get ffmpeg version: {e}")
+        return None
+
+
+def get_sox_version() -> Optional[str]:
+    """
+    Get the version string of the sox binary.
+    
+    Returns:
+        Version string if sox is available, None otherwise
+    """
+    sox_path = shutil.which("sox")
+    if not sox_path:
+        return None
+    
+    try:
+        result = subprocess.run(
+            [sox_path, "-V"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout:
+            return result.stdout.strip()
+        return None
+    except Exception as e:
+        logger.debug(f"Failed to get sox version: {e}")
+        return None
 
 
 class AudioProcessor:
@@ -31,7 +107,7 @@ class AudioProcessor:
             config: Optional configuration dictionary for processor settings
         """
         self.config = config or {}
-        self._validate_ffmpeg_availability()
+        self._validate_cli_tools_availability()
 
         # Default processing parameters
         self.default_params = {
@@ -46,27 +122,43 @@ class AudioProcessor:
         self._lock = threading.RLock()  # Reentrant: pipeline calls individual methods
         logger.info("AudioProcessor initialized")
 
-    def _validate_ffmpeg_availability(self) -> None:
-        """Validate that FFmpeg is available for processing."""
-        if ffmpeg is None:
-            raise ImportError(
-                "ffmpeg-python is required for audio processing. "
-                "Install with: pip install ffmpeg-python"
-            )
-
-        try:
-            # Test FFmpeg binary availability
-            ffmpeg.probe("dummy", v="quiet")
-        except ffmpeg.Error:
-            # This is expected for dummy input, just validates binary exists
-            pass
-        except FileNotFoundError:
+    def _validate_cli_tools_availability(self) -> None:
+        """Validate that required CLI tools (ffmpeg/sox) are available for processing.
+        
+        Raises:
+            RuntimeError: If required binaries are not found in system PATH
+        """
+        # Check ffmpeg availability
+        if not check_ffmpeg_available():
             raise RuntimeError(
                 "FFmpeg binary not found in system PATH. "
-                "Please install FFmpeg system package."
+                "Please install FFmpeg system package. "
+                "On Ubuntu/Debian: sudo apt-get install ffmpeg\n"
+                "On Fedora/RHEL: sudo dnf install ffmpeg\n"
+                "On macOS: brew install ffmpeg"
             )
-
-        logger.debug("FFmpeg availability validated")
+        
+        # Log ffmpeg version
+        ffmpeg_version = get_ffmpeg_version()
+        if ffmpeg_version:
+            logger.info(f"FFmpeg available: {ffmpeg_version}")
+        else:
+            logger.warning("FFmpeg found but could not determine version")
+        
+        # Check sox availability (optional but recommended)
+        if not check_sox_available():
+            logger.warning(
+                "SoX binary not found in system PATH. "
+                "Some audio processing features may be unavailable. "
+                "Install with: sudo apt-get install sox (Ubuntu/Debian) "
+                "or brew install sox (macOS)"
+            )
+        else:
+            sox_version = get_sox_version()
+            if sox_version:
+                logger.info(f"SoX available: {sox_version}")
+        
+        logger.debug("CLI tools availability validated")
 
     def trim_silence(
         self,
