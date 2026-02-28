@@ -619,46 +619,40 @@ class AudioProcessor:
 
             # Build FFmpeg pipeline for MP3 encoding with resampling and mono conversion
             try:
-                # Create ffmpeg input stream
-                input_stream = ffmpeg.input(str(input_path))
+                # Define audio filters for resampling to 16kHz and converting to mono
+                filters = [
+                    "aresample=16000",  # Resample to 16kHz
+                    "pan=mono|c0=c0"    # Convert to mono
+                ]
                 
-                # Get input audio info for proper processing
-                probe = ffmpeg.probe(str(input_path))
-                audio_stream = next(stream for stream in probe['streams'] if stream['codec_type'] == 'audio')
-                input_channels = int(audio_stream['channels'])
-                
-                # Apply audio processing pipeline:
-                # 1. Resample to 16kHz first
-                # 2. Convert to mono (sum channels if stereo)
-                # 3. Encode as MP3
-                stream = input_stream.audio
-                
-                # Resample to 16kHz
-                stream = stream.filter('aresample', 16000)
-                
-                # Output as MP3 with CBR encoding
-                # Use ac=1 output option for mono conversion (avoids filter escaping issues)
-                output_args = {
+                # Define codec arguments for MP3 encoding
+                codec_args = {
                     'acodec': 'mp3',
-                    'audio_bitrate': bitrate,
-                    'ac': 1,  # Force mono output
+                    'b:a': bitrate,
                     'map_metadata': '-1',  # Strip all metadata/ID3 tags
                     'write_id3v2': '0',   # Disable ID3v2 tags
-                    'fflags': '+bitexact', # Use bitexact mode to avoid encoder metadata
+                    'fflags': '+bitexact' # Use bitexact mode to avoid encoder metadata
                 }
-                output_stream = stream.output(
+                
+                # Get quality parameters
+                quality_params = self._get_quality_params(quality)
+                codec_args.update(quality_params)
+                
+                # Build FFmpeg command using subprocess
+                command = build_ffmpeg_command(
+                    str(input_path),
                     str(output_path),
-                    **output_args
+                    filters=filters,
+                    codec_args=codec_args
                 )
                 
-                # Execute the pipeline
-                # Execute the pipeline with verbose output for debugging
-                output_stream.overwrite_output().run()
+                # Run encoding using subprocess
+                run_command(command, timeout=300, description="MP3 encoding")
                 
                 logger.info(f"Successfully encoded MP3: {output_path}")
                 return output_path
                 
-            except ffmpeg.Error as e:
+            except CommandExecutionError as e:
                 logger.error(f"FFmpeg encoding failed: {e}")
                 raise
             except Exception as e:
