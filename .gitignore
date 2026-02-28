@@ -19,3 +19,7 @@ docs/omega13*
 hubs.txt
 
 backlog.md
+
+.worktrees/
+
+.sisyphus/evidence/

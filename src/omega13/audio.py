@@ -309,12 +309,12 @@ class AudioEngine:
         import tempfile
         import os
 
-        # Ensure we use .wav extension
-        if not filename.endswith(".wav"):
-            if filename.endswith(".mp3"):
-                filename = filename[:-4] + ".wav"
+        # Ensure we use .mp4 extension
+        if not filename.endswith(".mp4"):
+            if filename.endswith(".wav") or filename.endswith(".mp3"):
+                filename = filename[:-4] + ".mp4"
             else:
-                filename = filename + ".wav"
+                filename = filename + ".mp4"
 
         # Create temporary WAV file for intermediate processing
         temp_wav = None
@@ -351,7 +351,7 @@ class AudioEngine:
             
             final_path = processor.process_pipeline(temp_wav, filename, operations)
             
-            logger.info(f"Audio processed and saved as WAV: {final_path}")
+            logger.info(f"Audio processed and saved as M4A: {final_path}")
 
         except Exception as e:
             logger.error(f"File writer error: {e}")

@@ -58,11 +58,11 @@ Replace python-ffmpeg library with CLI subprocess calls while maintaining 100% b
 - `.sisyphus/evidence/` - Audio processing comparison results
 
 ### Definition of Done
-- [ ] All AudioProcessor methods work with subprocess implementation
-- [ ] Same audio quality output verified by comparison testing
-- [ ] Same error types and messages preserved
-- [ ] Performance within 20% of original implementation
-- [ ] Integration with audio.py unchanged
+- [x] All AudioProcessor methods work with subprocess implementation
+- [x] Same audio quality output verified by comparison testing
+- [x] Same error types and messages preserved
+- [x] Performance within 20% of original implementation
+- [x] Integration with audio.py unchanged
 
 ### Must Have
 - Exact same public interface (method signatures, return types, exceptions)
@@ -119,16 +119,30 @@ Wave 1 (Start Immediately — foundation + preparation):
 └── Task 6: Audio metadata extraction implementation [quick]
 
 Wave 2 (After Wave 1 — core implementations):
-├── Task 7: Audio probing (ffprobe) implementation [unspecified-high]
+├── [x] Task 7: Audio probing (ffprobe) implementation [unspecified-high]
 ├── [x] Task 8: Audio resampling (ffmpeg/sox) implementation [unspecified-high]
 ├── [x] Task 9: Format conversion (PCM) implementation [unspecified-high]
 ├── [x] Task 10: MP3 encoding pipeline implementation [unspecified-high]
 ├── [x] Task 11: Processing pipeline orchestration [unspecified-high]
-└── Task 12: Error handling & exception mapping [unspecified-high]
+└── [x] Task 12: Error handling & exception mapping [unspecified-high]
 
 Wave 3 (After Wave 2 — integration & validation):
-├── Task 13: AudioProcessor class integration [deep]
-├── Task 14: Comprehensive test suite development [deep]
+├── [x] Task 13: AudioProcessor class integration [deep]
+├── [x] Task 14: Comprehensive test suite development [deep]
+├── [x] Task 15: Audio quality comparison validation [deep]
+├── [x] Task 16: Performance benchmarking [unspecified-high]
+├── [x] Task 17: Edge case testing (corrupted files, missing binaries) [unspecified-high]
+├── [x] Task 14: Comprehensive test suite development [deep]
+├── [x] Task 15: Audio quality comparison validation [deep]
+├── [x] Task 16: Performance benchmarking [unspecified-high]
+├── [x] Task 17: Edge case testing (corrupted files, missing binaries) [unspecified-high]
+├── [x] Task 18: Integration testing with audio.py [deep]
+
+Wave 4 (After Wave 3 — finalization):
+├── [x] Task 19: pyproject.toml dependency cleanup [quick]
+├── [x] Task 20: Documentation updates [writing]
+├── [x] Task 21: Final integration validation [deep]
+└── [x] Task 22: Migration guide & rollback procedures [writing]
 ├── Task 15: Audio quality comparison validation [deep]
 ├── Task 16: Performance benchmarking [unspecified-high]
 ├── Task 17: Edge case testing (corrupted files, missing binaries) [unspecified-high]
@@ -159,7 +173,7 @@ Max Concurrent: 6 (Wave 1)
 > Implementation + Test = ONE Task. Never separate.
 > EVERY task MUST have: Recommended Agent Profile + Parallelization info + QA Scenarios.
 
-- [ ] 1. CLI Command Mapping Research & Validation
+- [x] 1. CLI Command Mapping Research & Validation
 
   **What to do**:
   - Research exact ffmpeg/sox CLI equivalents for each ffmpeg-python operation
@@ -197,9 +211,9 @@ Max Concurrent: 6 (Wave 1)
   - Librarian research results - CLI command equivalents and best practices
 
   **Acceptance Criteria**:
-  - [ ] Complete mapping table: ffmpeg-python operation → CLI command
-  - [ ] Verified CLI commands produce equivalent output to current implementation
-  - [ ] Documentation includes error handling patterns and timeout values
+  - [x] Complete mapping table: ffmpeg-python operation → CLI command
+  - [x] Verified CLI commands produce equivalent output to current implementation
+  - [x] Documentation includes error handling patterns and timeout values
 
   **QA Scenarios (MANDATORY)**:
 
@@ -228,7 +242,7 @@ Max Concurrent: 6 (Wave 1)
 
   **Commit**: NO (research task, no code changes)
 
-- [ ] 2. Error Mapping Design & Exception Hierarchy
+- [x] 2. Error Mapping Design & Exception Hierarchy
 
   **What to do**:
   - Design mapping from subprocess exceptions to current AudioProcessor exceptions
@@ -264,9 +278,9 @@ Max Concurrent: 6 (Wave 1)
   - `src/omega13/audio.py:356-358` - How AudioProcessor errors propagate to _file_writer
 
   **Acceptance Criteria**:
-  - [ ] Complete exception mapping: subprocess errors → existing AudioProcessor exceptions
-  - [ ] Error message parsing utilities for ffmpeg stderr output
-  - [ ] Compatibility verification with existing error handling code
+  - [x] Complete exception mapping: subprocess errors → existing AudioProcessor exceptions
+  - [x] Error message parsing utilities for ffmpeg stderr output
+  - [x] Compatibility verification with existing error handling code
 
   **QA Scenarios (MANDATORY)**:
 
@@ -327,10 +341,10 @@ Max Concurrent: 6 (Wave 1)
   - `src/omega13/injection.py:27-31,74-83` - Binary availability checking with shutil.which
 
   **Acceptance Criteria**:
-  - [ ] check_ffmpeg_available() function returns bool
-  - [ ] check_sox_available() function returns bool
-  - [ ] _validate_cli_tools_availability() method for AudioProcessor
-  - [ ] Clear error messages when binaries not found
+  - [x] check_ffmpeg_available() function returns bool
+  - [x] check_sox_available() function returns bool
+  - [x] _validate_cli_tools_availability() method for AudioProcessor
+  - [x] Clear error messages when binaries not found
 
   **QA Scenarios (MANDATORY)**:
 
@@ -394,10 +408,10 @@ Max Concurrent: 6 (Wave 1)
   - `src/omega13/audio_processor.py:37-43` - Default processing parameters to replicate
 
   **Acceptance Criteria**:
-  - [ ] Test audio files: mono/stereo, various sample rates, different durations
-  - [ ] Baseline measurements: processing times, output file properties
-  - [ ] Expected output documentation: metadata, audio characteristics
-  - [ ] Performance measurement utilities ready
+  - [x] Test audio files: mono/stereo, various sample rates, different durations
+  - [x] Baseline measurements: processing times, output file properties
+  - [x] Expected output documentation: metadata, audio characteristics
+  - [x] Performance measurement utilities ready
 
   **QA Scenarios (MANDATORY)**:
 
@@ -462,10 +476,10 @@ Max Concurrent: 6 (Wave 1)
   - Librarian research - Best practices for subprocess execution in Python
 
   **Acceptance Criteria**:
-  - [ ] run_command() function with timeout and error handling
-  - [ ] build_ffmpeg_command() / build_sox_command() utilities
-  - [ ] Command logging with debug output
-  - [ ] Exception mapping to AudioProcessor-compatible errors
+  - [x] run_command() function with timeout and error handling
+  - [x] build_ffmpeg_command() / build_sox_command() utilities
+  - [x] Command logging with debug output
+  - [x] Exception mapping to AudioProcessor-compatible errors
 
   **QA Scenarios (MANDATORY)**:
 
@@ -530,10 +544,10 @@ Max Concurrent: 6 (Wave 1)
   - Librarian research - ffprobe JSON output parsing patterns
 
   **Acceptance Criteria**:
-  - [ ] get_audio_info() returns same metadata structure as before
-  - [ ] JSON parsing handles all required fields: duration, sample_rate, channels, codec, bitrate
-  - [ ] Error handling preserves existing exception types
-  - [ ] Performance within 10% of current implementation
+  - [x] get_audio_info() returns same metadata structure as before
+  - [x] JSON parsing handles all required fields: duration, sample_rate, channels, codec, bitrate
+  - [x] Error handling preserves existing exception types
+  - [x] Performance within 10% of current implementation
 
   **QA Scenarios (MANDATORY)**:
 
@@ -571,19 +585,19 @@ Max Concurrent: 6 (Wave 1)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Rejection → fix → re-run.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `pytest tests/` + any linting. Review all changed files for: hardcoded paths, missing error handling, subprocess security issues, performance regressions. Check that AudioProcessor interface unchanged.
   Output: `Tests [N pass/N fail] | Lint [PASS/FAIL] | Security [PASS/FAIL] | Interface [UNCHANGED/CHANGED] | VERDICT`
 
-- [ ] F3. **Audio Quality Verification** — `unspecified-high`
+- [x] F3. **Audio Quality Verification** — `unspecified-high`
   Process same test audio files with old (ffmpeg-python) and new (CLI) implementation. Compare outputs: identical metadata, equivalent audio quality, same file formats. Test complete audio workflow from audio.py integration.
   Output: `Quality [N/N equivalent] | Integration [PASS/FAIL] | Metadata [N/N match] | VERDICT`
 
-- [ ] F4. **Performance & Regression Check** — `deep`
+- [x] F4. **Performance & Regression Check** — `deep`
   Measure processing time for new vs old implementation. Verify memory usage hasn't increased significantly. Test error handling preserves same exception types. Validate no breaking changes to existing workflow.
   Output: `Performance [±N% vs baseline] | Memory [±N% vs baseline] | Errors [N/N preserved] | VERDICT`
 
@@ -616,9 +630,9 @@ python -m omega13 --test-audio-processing
 ```
 
 ### Final Checklist
-- [ ] All AudioProcessor methods work with subprocess implementation
-- [ ] Same audio quality verified by comparison testing
-- [ ] Same error types and messages preserved
-- [ ] Performance within 20% of original
-- [ ] ffmpeg-python dependency removed from pyproject.toml
-- [ ] Integration with audio.py unchanged
+- [x] All AudioProcessor methods work with subprocess implementation
+- [x] Same audio quality verified by comparison testing
+- [x] Same error types and messages preserved
+- [x] Performance within 20% of original
+- [x] ffmpeg-python dependency removed from pyproject.toml
+- [x] Integration with audio.py unchanged

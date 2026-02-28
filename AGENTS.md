@@ -24,7 +24,10 @@ Context7 MCP is available to fetch up-to-date documentation with code examples.
 
 ```
 omega-13/
-├── src/omega13/           # 14 modules, 3586 lines
+├── src/omega13/           # 14 modules, ~4000 lines
+│   ├── app.py             # Main entry, Textual app lifecycle
+│   ├── audio.py           # JACK client, ring buffer (NumPy)
+│   ├── audio_processor.py # FFmpeg/sox CLI subprocess wrapper (~400 lines)
 │   ├── app.py             # Main entry, Textual app lifecycle
 │   ├── audio.py           # JACK client, ring buffer (NumPy)
 │   ├── recording_controller.py  # State machine (IDLE→ARMED→RECORDING→STOPPING)
@@ -45,7 +48,10 @@ omega-13/
 
 | Task | Location | Notes |
 |------|----------|-------|
-| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo wrapping, buffer_filled flag |
+|| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo wrapping, buffer_filled flag |
+|| Recording state | `recording_controller.py` | State machine with 5 states |
+|| Audio processing | `audio_processor.py` | FFmpeg CLI subprocess, MP3/WAV/PCM conversion |
+|| Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
 | Recording state | `recording_controller.py` | State machine with 5 states |
 | Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
 | Transcription retry | `transcription.py:_transcribe_worker()` | 3 attempts, exponential backoff |

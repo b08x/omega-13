@@ -8,6 +8,10 @@
 src/omega13/
 ├── app.py              # Textual app lifecycle, signal handlers, IPC
 ├── audio.py            # JACK client, ring buffer, modulo wrapping  
+├── audio_processor.py  # FFmpeg/sox CLI subprocess wrapper (~400 lines)
+├── recording_controller.py  # State machine (IDLE→ARMED→RECORDING→STOPPING)
+├── app.py              # Textual app lifecycle, signal handlers, IPC
+├── audio.py            # JACK client, ring buffer, modulo wrapping  
 ├── recording_controller.py  # State machine (IDLE→ARMED→RECORDING→STOPPING)
 ├── signal_detector.py  # RMS energy detection, voice activity
 ├── transcription.py    # HTTP client, worker threads, retry logic
@@ -23,7 +27,10 @@ src/omega13/
 
 | Task | Location | Critical Notes |
 |------|----------|----------------|
-| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo math, buffer_filled flag |
+|| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo math, buffer_filled flag |
+|| Thread coordination | `audio.py:AudioEngine` | Producer→Queue→Consumer pattern |
+|| Audio processing | `audio_processor.py` | FFmpeg CLI subprocess, downsample/encode |
+|| State transitions | `recording_controller.py:RecordingController` | 5-state FSM |
 | Thread coordination | `audio.py:AudioEngine` | Producer→Queue→Consumer pattern |
 | State transitions | `recording_controller.py:RecordingController` | 5-state FSM |
 | Voice detection | `signal_detector.py:has_audio_activity()` | RMS thresholds, sustained signal |
