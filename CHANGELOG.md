@@ -24,6 +24,14 @@
 - Consolidate agent documentation and remove obsolete files
 - *(README)* Refactor project overview and architecture
 - Consolidate agent documentation and add module-specific guides
+
+### 🎨 Styling
+
+- *(ui)* Update TUI color scheme and styling
+
+### ⚙️ Miscellaneous Tasks
+
+- Updated changelog
 ## [2.3.0] - 2025-12-26
 
 ### 🚀 Features
