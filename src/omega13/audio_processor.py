@@ -668,8 +668,8 @@ class AudioProcessor:
         """
         Execute a complete processing pipeline with multiple operations.
 
-        Chains together multiple processing steps efficiently using FFmpeg's
-        filter graph capabilities for optimal performance.
+        Chains together multiple processing steps efficiently using subprocess-based
+        implementations for optimal performance.
 
         Args:
             input_path: Path to input audio file
