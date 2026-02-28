@@ -1,0 +1,43 @@
+Task 6: Audio Metadata Extraction - Error Handling Test Results
+================================================================
+
+Test 1: Missing File Error
+--------------------------
+✓ FileNotFoundError raised: Audio file not found: /nonexistent/file.wav
+  - Exception type: FileNotFoundError
+  - Error message: Clear and informative
+  - Behavior: Matches original ffmpeg.probe() implementation
+
+Test 2: Corrupted File Error
+----------------------------
+✓ CommandExecutionError raised for invalid audio data
+  - Exception type: CommandExecutionError
+  - Error message: Includes ffprobe error details
+  - Behavior: Gracefully handles corrupted files
+
+Test 3: Valid File Processing
+------------------------------
+✓ Metadata extracted successfully
+  - File: tests/fixtures/audio/mono_16000_3s.wav
+  - Duration: 3.0s
+  - Sample Rate: 16000Hz
+  - Channels: 1
+  - Codec: pcm_s16le
+  - Status: PASS
+
+Summary
+=======
+✓ All error handling tests passed
+✓ Exception types preserved from original implementation
+✓ Error messages are informative and helpful
+✓ Corrupted files are handled gracefully
+✓ Missing files raise appropriate FileNotFoundError
+✓ Valid files are processed correctly
+
+Conclusion
+==========
+The ffprobe-based get_audio_info() implementation successfully:
+1. Preserves exception types from the original ffmpeg.probe() implementation
+2. Handles edge cases (missing files, corrupted data) gracefully
+3. Provides clear error messages for debugging
+4. Maintains backward compatibility with existing error handling code

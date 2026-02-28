@@ -1,0 +1,79 @@
+[
+  {
+    "file": "mono_16000_3s.wav",
+    "duration": 3.0,
+    "sample_rate": 16000,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "bitrate": 256117,
+    "size_bytes": 96044,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "mono_16000_long.wav",
+    "duration": 5.0,
+    "sample_rate": 16000,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "bitrate": 256070,
+    "size_bytes": 160044,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "mono_44100_1s.wav",
+    "duration": 1.0,
+    "sample_rate": 44100,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "bitrate": 705952,
+    "size_bytes": 88244,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "mono_44100_short.wav",
+    "duration": 0.5,
+    "sample_rate": 44100,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "bitrate": 706304,
+    "size_bytes": 44144,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "mono_44100_with_silence.wav",
+    "duration": 2.0,
+    "sample_rate": 44100,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "bitrate": 705776,
+    "size_bytes": 176444,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "stereo_48000_2s.wav",
+    "duration": 2.0,
+    "sample_rate": 48000,
+    "channels": 2,
+    "codec": "pcm_s16le",
+    "bitrate": 1536176,
+    "size_bytes": 384044,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  },
+  {
+    "file": "stereo_48000_with_silence.wav",
+    "duration": 2.0,
+    "sample_rate": 48000,
+    "channels": 2,
+    "codec": "pcm_s16le",
+    "bitrate": 1536176,
+    "size_bytes": 384044,
+    "format": "wav",
+    "status": "\u2713 PASS"
+  }
+]

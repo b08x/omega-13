@@ -1,4 +1,11 @@
+import json
 import logging
+import shutil
+import subprocess
+import tempfile
+import threading
+from pathlib import Path
+from typing import Optional, Dict, Any, Union
 import shutil
 import subprocess
 import tempfile
@@ -802,36 +809,101 @@ class AudioProcessor:
 
     def get_audio_info(self, file_path: Union[str, Path]) -> Dict[str, Any]:
         """
-        Get detailed information about an audio file.
+        Get detailed information about an audio file using ffprobe CLI.
 
         Args:
             file_path: Path to audio file
 
         Returns:
-            Dictionary containing audio metadata and properties
+            Dictionary containing audio metadata and properties:
+            - duration: float (seconds)
+            - sample_rate: int (Hz)
+            - channels: int
+            - codec: str (codec name)
+            - bitrate: int (bits per second)
+            - size_bytes: int (file size)
+            - format: str (format name)
+
+        Raises:
+            FileNotFoundError: If file does not exist
+            CommandExecutionError: If ffprobe fails
+            CommandTimeoutError: If ffprobe times out
         """
         file_path = Path(file_path)
 
+        # Validate file exists
+        if not file_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {file_path}")
+
         try:
-            # Use ffmpeg.probe for comprehensive metadata
-            probe = ffmpeg.probe(str(file_path))
-            audio_stream = next(
-                stream for stream in probe["streams"] if stream["codec_type"] == "audio"
+            # Build ffprobe command to extract JSON metadata
+            command = [
+                "ffprobe",
+                "-print_format", "json",
+                "-show_streams",
+                "-show_format",
+                str(file_path)
+            ]
+
+            # Execute ffprobe with 30s timeout (probe operations are fast)
+            result = run_command(
+                command,
+                timeout=30,
+                description=f"Extract metadata from {file_path.name}",
+                check=True
+            )
+
+            # Parse JSON output
+            probe_data = json.loads(result.stdout)
+
+            # Find audio stream
+            audio_stream = None
+            for stream in probe_data.get("streams", []):
+                if stream.get("codec_type") == "audio":
+                    audio_stream = stream
+                    break
+
+            if audio_stream is None:
+                raise CommandExecutionError(f"No audio stream found in {file_path}")
+
+            # Extract format information
+            format_info = probe_data.get("format", {})
+
+            # Parse metadata with safe defaults for missing fields
+            duration = float(format_info.get("duration", 0.0))
+            sample_rate = int(audio_stream.get("sample_rate", 0))
+            channels = int(audio_stream.get("channels", 0))
+            codec = audio_stream.get("codec_name", "unknown")
+            bitrate = int(format_info.get("bit_rate", 0))
+            size_bytes = int(format_info.get("size", 0))
+            format_name = format_info.get("format_name", "unknown")
+
+            logger.debug(
+                f"Audio info: {sample_rate}Hz, {channels}ch, {duration:.2f}s, {codec}, {bitrate}bps"
             )
 
             return {
-                "duration": float(probe["format"]["duration"]),
-                "sample_rate": int(audio_stream["sample_rate"]),
-                "channels": int(audio_stream["channels"]),
-                "codec": audio_stream["codec_name"],
-                "bitrate": int(probe["format"].get("bit_rate", 0)),
-                "size_bytes": int(probe["format"]["size"]),
-                "format": probe["format"]["format_name"],
+                "duration": duration,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "codec": codec,
+                "bitrate": bitrate,
+                "size_bytes": size_bytes,
+                "format": format_name,
             }
 
+        except FileNotFoundError:
+            raise
+        except CommandExecutionError:
+            raise
+        except CommandTimeoutError:
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse ffprobe JSON output: {e}")
+            raise CommandExecutionError(f"Invalid ffprobe output: {str(e)}") from e
         except Exception as e:
             logger.error(f"Failed to get audio info for {file_path}: {e}")
-            raise
+            raise CommandExecutionError(f"Failed to extract audio metadata: {str(e)}") from e
 
     def _get_quality_params(self, quality: str) -> Dict[str, Any]:
         """Get FFmpeg quality parameters based on quality preset."""

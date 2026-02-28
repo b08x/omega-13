@@ -142,3 +142,58 @@
 - Type checking: Verify type hints with mypy/pyright
 - Edge cases: Empty filters, None values, special characters
 
+
+## Task 6: Audio Metadata Extraction Implementation
+
+### Patterns Discovered
+
+- **ffprobe JSON output structure**: Use `-print_format json -show_streams -show_format` flags
+  - Streams array contains codec_type, sample_rate, channels, codec_name, bit_rate
+  - Format object contains duration, size, format_name, bit_rate
+  - Always find audio stream by filtering `codec_type == "audio"`
+  
+- **JSON parsing strategy**: Parse ffprobe output with json.loads()
+  - Handle missing fields gracefully with .get() and defaults
+  - Duration from format object, sample_rate/channels from audio stream
+  - Bitrate available in both format and stream (use format for consistency)
+
+- **Error handling mapping**:
+  - FileNotFoundError: File doesn't exist (check before calling ffprobe)
+  - CommandExecutionError: ffprobe fails (invalid audio, corrupted file)
+  - CommandTimeoutError: ffprobe exceeds timeout (rare, 30s is safe)
+  - JSONDecodeError: Invalid JSON output (wrap with CommandExecutionError)
+
+### Conventions
+
+- Timeout for probe operations: 30s (much faster than processing)
+- Metadata structure: dict with keys [duration, sample_rate, channels, codec, bitrate, size_bytes, format]
+- Return types: float for duration, int for sample_rate/channels/bitrate/size_bytes, str for codec/format
+- Logging: Debug level for successful extractions, error level for failures
+
+### Gotchas
+
+- ffprobe stderr contains version info on error (not just error message)
+- Sample rate and channels are strings in JSON, must convert to int
+- Duration is string in JSON, must convert to float
+- Bitrate may be 0 if not available in format metadata
+- Some audio files may not have bitrate in format (use 0 as default)
+- File size comes from format.size, not from file system stat
+
+### Successful Approaches
+
+- Validate file exists before calling ffprobe (better error messages)
+- Use safe defaults (.get() with 0) for optional metadata fields
+- Parse JSON first, then extract fields (cleaner error handling)
+- Test with multiple audio formats (mono/stereo, various sample rates)
+- Compare with original ffmpeg.probe() for equivalence verification
+- Create comprehensive test suite with edge cases (corrupted files, missing files)
+
+### Testing Recommendations
+
+- Unit tests: Test metadata extraction with all test audio files
+- Equivalence tests: Compare ffprobe CLI vs ffmpeg.probe() output
+- Error tests: Test missing files, corrupted files, invalid paths
+- Performance tests: Measure ffprobe execution time (should be <100ms)
+- Edge cases: Empty files, very short audio, unusual sample rates
+- Regression tests: Verify metadata structure matches original implementation
+
