@@ -8,11 +8,26 @@
 
 Omega-13: retroactive audio recorder with 13-second ring buffer + transcription. Python 3.12+, Textual TUI, JACK/PipeWire audio, local whisper.cpp inference via Docker.
 
+### Use Context7 MCP for Loading Documentation
+
+Context7 MCP is available to fetch up-to-date documentation with code examples.
+
+**Recommended library IDs**:
+
+- `/websites/ffmpeg_documentation` - Official FFmpeg documentation for audio/video transcoding, filtering, and streaming
+- `/rbouqueau/sox` - SoX (Sound eXchange) command-line audio processing tool, Swiss Army knife for audio manipulation
+- `/websites/ccrma_stanford_edu_planetccrma_man` - SoX man page
+- `/websites/jackclient-python_readthedocs_io_en_0_5_5` - Python module providing bindings for JACK Audio Connection Kit, enabling audio and MIDI processing with JACK server
+- `/websites/textual_textualize_io` - Rapid application development framework for Python, build sophisticated user interfaces that run in terminal or web browser
+
 ## STRUCTURE
 
 ```
 omega-13/
-├── src/omega13/           # 14 modules, 3586 lines
+├── src/omega13/           # 14 modules, ~4000 lines
+│   ├── app.py             # Main entry, Textual app lifecycle
+│   ├── audio.py           # JACK client, ring buffer (NumPy)
+│   ├── audio_processor.py # FFmpeg/sox CLI subprocess wrapper (~400 lines)
 │   ├── app.py             # Main entry, Textual app lifecycle
 │   ├── audio.py           # JACK client, ring buffer (NumPy)
 │   ├── recording_controller.py  # State machine (IDLE→ARMED→RECORDING→STOPPING)
@@ -33,7 +48,10 @@ omega-13/
 
 | Task | Location | Notes |
 |------|----------|-------|
-| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo wrapping, buffer_filled flag |
+|| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo wrapping, buffer_filled flag |
+|| Recording state | `recording_controller.py` | State machine with 5 states |
+|| Audio processing | `audio_processor.py` | FFmpeg CLI subprocess, MP3/WAV/PCM conversion |
+|| Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
 | Recording state | `recording_controller.py` | State machine with 5 states |
 | Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
 | Transcription retry | `transcription.py:_transcribe_worker()` | 3 attempts, exponential backoff |
@@ -80,37 +98,47 @@ CUDA_ARCHITECTURES="86" ./bootstrap.sh --build  # Custom GPU arch
 ## CRITICAL IMPLEMENTATION DETAILS
 
 ### Ring Buffer Mechanics
+
 `AudioEngine._write_to_ring_buffer()` uses modulo wrapping:
+
 - When `write_ptr + frames > ring_size`: write part1 to buffer end, part2 to start
 - `buffer_filled` flag: has buffer wrapped ≥1 time?
 - Record start reconstruction differs based on `buffer_filled` state
 
 ### Thread Safety (NEVER VIOLATE)
+
 - JACK `process()` callback: **NO locks, NO allocations, NO blocking** (>1ms = xruns)
 - Audio → writer thread: `queue.Queue(maxsize=200)`
 - `TranscriptionService`: tracks threads for clean shutdown (60s deadline)
 
 ### Signal Detection
+
 `has_audio_activity()` prevents empty recordings:
+
 - RMS threshold: -70 dB (default)
 - Window: 0.5s sustained signal required
 - Fallback: if JACK ports connected, allow recording
 
 ### PID-Based IPC (Wayland workaround)
+
 1. App writes PID → `~/.local/share/omega13/omega13.pid`
 2. System hotkey → `omega13 --toggle`
 3. Reads PID → sends `SIGUSR1`
 4. Signal handler → `call_from_thread(action_toggle_record)`
 
 ### Auto-Record State Machine
+
 `RecordingController` states:
+
 - IDLE → ARMED (ports connected)
 - ARMED → RECORDING_AUTO (voice detected: RMS > -35 dB for 0.5s+)
 - RECORDING_AUTO → STOPPING (silence: 10s default)
 - Discards recordings with avg RMS < -50 dB
 
 ### Transcription Retry
+
 `_transcribe_worker()` smart retries:
+
 - 3 attempts, backoff: `2^retry_count` seconds
 - Shutdown mode: 3s timeout (fail fast)
 - Checks `_shutdown_event` before HTTP POST
@@ -135,6 +163,7 @@ CUDA_ARCHITECTURES="86" ./bootstrap.sh --build  # Custom GPU arch
 ## CONVENTIONAL COMMITS
 
 Enforced by git-cliff:
+
 - `feat:` New features
 - `fix:` Bug fixes  
 - `refactor:` Restructuring

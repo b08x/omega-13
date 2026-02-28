@@ -1,0 +1,210 @@
+{
+  "ffmpeg_available": true,
+  "sox_available": true,
+  "measurements": [
+    {
+      "operation": "get_audio_info",
+      "input_file": "mono_44100_1s.wav",
+      "output_file": "",
+      "input_metrics": {
+        "filename": "mono_44100_1s.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 1.0,
+        "size_bytes": 88244
+      },
+      "output_metrics": {
+        "duration": 1.0,
+        "sample_rate": 44100,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bitrate": 705952,
+        "size_bytes": 88244,
+        "format": "wav"
+      },
+      "processing_time_ms": 177.76846885681152,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "get_audio_info",
+      "input_file": "stereo_48000_2s.wav",
+      "output_file": "",
+      "input_metrics": {
+        "filename": "stereo_48000_2s.wav",
+        "channels": 2,
+        "sample_rate": 48000,
+        "duration": 2.0,
+        "size_bytes": 384044
+      },
+      "output_metrics": {
+        "duration": 2.0,
+        "sample_rate": 48000,
+        "channels": 2,
+        "codec": "pcm_s16le",
+        "bitrate": 1536176,
+        "size_bytes": 384044,
+        "format": "wav"
+      },
+      "processing_time_ms": 200.97064971923828,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "get_audio_info",
+      "input_file": "mono_16000_3s.wav",
+      "output_file": "",
+      "input_metrics": {
+        "filename": "mono_16000_3s.wav",
+        "channels": 1,
+        "sample_rate": 16000,
+        "duration": 3.0,
+        "size_bytes": 96044
+      },
+      "output_metrics": {
+        "duration": 3.0,
+        "sample_rate": 16000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+        "bitrate": 256117,
+        "size_bytes": 96044,
+        "format": "wav"
+      },
+      "processing_time_ms": 159.8803997039795,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "trim_silence",
+      "input_file": "mono_44100_with_silence.wav",
+      "output_file": "trimmed.wav",
+      "input_metrics": {
+        "filename": "mono_44100_with_silence.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 2.0,
+        "size_bytes": 176444
+      },
+      "output_metrics": {
+        "filename": "trimmed.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 1.75,
+        "size_bytes": 154394
+      },
+      "processing_time_ms": 1.8780231475830078,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "trim_silence_stereo",
+      "input_file": "stereo_48000_with_silence.wav",
+      "output_file": "trimmed_stereo.wav",
+      "input_metrics": {
+        "filename": "stereo_48000_with_silence.wav",
+        "channels": 2,
+        "sample_rate": 48000,
+        "duration": 2.0,
+        "size_bytes": 384044
+      },
+      "output_metrics": {
+        "filename": "trimmed_stereo.wav",
+        "channels": 2,
+        "sample_rate": 48000,
+        "duration": 1.75,
+        "size_bytes": 336044
+      },
+      "processing_time_ms": 3.562450408935547,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "downsample_44100_to_16000",
+      "input_file": "mono_44100_1s.wav",
+      "output_file": "downsampled_16k.wav",
+      "input_metrics": {
+        "filename": "mono_44100_1s.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 1.0,
+        "size_bytes": 88244
+      },
+      "output_metrics": {
+        "filename": "downsampled_16k.wav",
+        "channels": 1,
+        "sample_rate": 16000,
+        "duration": 1.0,
+        "size_bytes": 32078
+      },
+      "processing_time_ms": 510.32495498657227,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "downsample_48000_to_16000_stereo_to_mono",
+      "input_file": "stereo_48000_2s.wav",
+      "output_file": "downsampled_stereo_16k.wav",
+      "input_metrics": {
+        "filename": "stereo_48000_2s.wav",
+        "channels": 2,
+        "sample_rate": 48000,
+        "duration": 2.0,
+        "size_bytes": 384044
+      },
+      "output_metrics": {
+        "filename": "downsampled_stereo_16k.wav",
+        "channels": 1,
+        "sample_rate": 16000,
+        "duration": 2.0,
+        "size_bytes": 64078
+      },
+      "processing_time_ms": 541.4574146270752,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "encode_mp3",
+      "input_file": "mono_44100_1s.wav",
+      "output_file": "encoded.mp3",
+      "input_metrics": {
+        "filename": "mono_44100_1s.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 1.0,
+        "size_bytes": 88244
+      },
+      "output_metrics": {
+        "filename": "encoded.mp3",
+        "channels": 1,
+        "sample_rate": 16000,
+        "duration": 1.0,
+        "size_bytes": 5420
+      },
+      "processing_time_ms": 170.23086547851562,
+      "success": true,
+      "error": null
+    },
+    {
+      "operation": "preprocess_for_transcription",
+      "input_file": "mono_44100_1s.wav",
+      "output_file": "preprocessed.wav",
+      "input_metrics": {
+        "filename": "mono_44100_1s.wav",
+        "channels": 1,
+        "sample_rate": 44100,
+        "duration": 1.0,
+        "size_bytes": 88244
+      },
+      "output_metrics": {
+        "filename": "preprocessed.wav",
+        "channels": 1,
+        "sample_rate": 16000,
+        "duration": 1.0,
+        "size_bytes": 32078
+      },
+      "processing_time_ms": 502.6507377624512,
+      "success": true,
+      "error": null
+    }
+  ]
+}

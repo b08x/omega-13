@@ -1,0 +1,165 @@
+TASK 5: SUBPROCESS WRAPPER AND COMMAND BUILDER UTILITIES
+========================================================
+
+TEST EXECUTION RESULTS
+======================
+
+Test Suite: tests/test_subprocess_wrapper.py
+Total Tests: 41
+Status: ALL PASSED ✓
+Execution Time: 2.35s
+
+Test Breakdown:
+- TestRunCommand: 13 tests (PASSED)
+  - test_run_command_empty_command
+  - test_run_command_failure_with_check
+  - test_run_command_failure_without_check
+  - test_run_command_invalid_command_type
+  - test_run_command_invalid_timeout
+  - test_run_command_logging_output
+  - test_run_command_long_output_truncation
+  - test_run_command_stderr_capture
+  - test_run_command_success
+  - test_run_command_timeout
+  - test_run_command_timeout_not_integer
+  - test_run_command_with_description
+  - test_run_command_with_special_characters
+
+- TestBuildFFmpegCommand: 9 tests (PASSED)
+  - test_build_ffmpeg_all_options
+  - test_build_ffmpeg_basic
+  - test_build_ffmpeg_empty_filters
+  - test_build_ffmpeg_none_filters
+  - test_build_ffmpeg_numeric_codec_args
+  - test_build_ffmpeg_output_order
+  - test_build_ffmpeg_with_codec_args
+  - test_build_ffmpeg_with_extra_args
+  - test_build_ffmpeg_with_filters
+
+- TestBuildSoxCommand: 9 tests (PASSED)
+  - test_build_sox_all_options
+  - test_build_sox_basic
+  - test_build_sox_empty_effects
+  - test_build_sox_none_effects
+  - test_build_sox_numeric_rate
+  - test_build_sox_with_effects
+  - test_build_sox_with_mono_channel
+  - test_build_sox_with_rate
+  - test_build_sox_with_stereo_channel
+
+- TestExceptionHierarchy: 3 tests (PASSED)
+  - test_command_execution_error_is_audio_processor_error
+  - test_command_timeout_error_is_audio_processor_error
+  - test_exception_instantiation
+
+- TestCommandIntegration: 3 tests (PASSED)
+  - test_ffmpeg_command_execution_simulation
+  - test_run_command_with_built_command
+  - test_sox_command_execution_simulation
+
+- Standalone Tests: 4 tests (PASSED)
+  - test_run_command_success
+  - test_run_command_timeout_error
+  - test_build_ffmpeg_command_structure
+  - test_build_sox_command_structure
+
+IMPLEMENTATION DETAILS
+======================
+
+1. run_command() Function
+   - Signature: run_command(command: list[str], timeout: int = 300, description: str = "", check: bool = True) -> subprocess.CompletedProcess[str]
+   - Features:
+     * Argument list validation (prevents shell injection)
+     * Timeout handling with CommandTimeoutError exception
+     * Error handling with CommandExecutionError exception
+     * Debug-level logging of commands and output
+     * Output truncation (500 chars) for long outputs
+     * Proper exception chaining with 'from e'
+   - Error Handling:
+     * ValueError: Invalid command type or timeout
+     * CommandTimeoutError: Command exceeds timeout
+     * CommandExecutionError: Command fails with non-zero exit code
+     * Unexpected exceptions wrapped in CommandExecutionError
+
+2. build_ffmpeg_command() Function
+   - Signature: build_ffmpeg_command(input_file: str, output_file: str, filters: Optional[list[str]] = None, codec_args: Optional[dict[str, Any]] = None, extra_args: Optional[list[str]] = None) -> list[str]
+   - Features:
+     * Proper FFmpeg argument ordering
+     * Filter chain joining with commas
+     * Codec argument expansion with -prefix
+     * Extra arguments insertion before output
+     * Automatic -y (overwrite) flag
+   - Example Output:
+     ['ffmpeg', '-i', 'input.wav', '-af', 'aresample=16000,aformat=mono', '-acodec', 'mp3', '-ab', '128k', '-y', 'output.mp3']
+
+3. build_sox_command() Function
+   - Signature: build_sox_command(input_file: str, output_file: str, effects: Optional[list[str]] = None, rate: Optional[int] = None, channels: Optional[int] = None) -> list[str]
+   - Features:
+     * Proper SoX argument ordering
+     * Rate conversion support
+     * Channel conversion (mono/stereo)
+     * Effects list appending
+   - Example Output:
+     ['sox', 'input.wav', 'output.wav', 'rate', '16000', 'remix -', 'norm']
+
+4. Exception Classes
+   - AudioProcessorError: Base exception for audio processing
+   - CommandExecutionError: Raised on command failure
+   - CommandTimeoutError: Raised on timeout
+
+VERIFICATION CHECKLIST
+======================
+
+✓ All 41 tests pass
+✓ Type hints properly specified (list[str], dict[str, Any], etc.)
+✓ Error handling covers all edge cases
+✓ Logging at debug level with command details
+✓ Timeout handling with proper exception
+✓ Command validation prevents injection
+✓ Output truncation prevents log spam
+✓ Exception hierarchy properly structured
+✓ Integration tests verify command building + execution
+✓ Standalone test runners work correctly
+
+COVERAGE SUMMARY
+================
+
+run_command():
+- Success path: ✓
+- Timeout path: ✓
+- Failure path (check=True): ✓
+- Failure path (check=False): ✓
+- Invalid input validation: ✓
+- Logging verification: ✓
+- Output truncation: ✓
+- Special characters handling: ✓
+
+build_ffmpeg_command():
+- Basic command: ✓
+- With filters: ✓
+- With codec args: ✓
+- With extra args: ✓
+- All options combined: ✓
+- Output ordering: ✓
+- Empty/None handling: ✓
+- Numeric argument conversion: ✓
+
+build_sox_command():
+- Basic command: ✓
+- With rate: ✓
+- With mono channel: ✓
+- With stereo channel: ✓
+- With effects: ✓
+- All options combined: ✓
+- Empty/None handling: ✓
+- Numeric argument conversion: ✓
+
+NOTES
+=====
+
+- All functions follow the pattern from injection.py (subprocess.run with argument lists)
+- Timeout defaults: 300s for processing, can be overridden for probe operations (30s)
+- Commands use argument lists (not shell strings) for security
+- Logging includes full command for debugging
+- Exception messages are descriptive and include error details
+- Type hints use modern Python 3.10+ syntax (list[str], dict[str, Any])

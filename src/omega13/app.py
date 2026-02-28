@@ -48,7 +48,25 @@ except ImportError:
 
 class Omega13App(App):
     CSS = """
-    Screen { align: center middle; background: $surface; }
+    /* --- CUSTOM COLOR SCHEME --- */
+    $background: #0F0F1F;
+    $surface: #161526;
+    $surface-lighten-1: #271D37;
+    $surface-darken-1: #13101D;
+    
+    $primary: #7726C4;
+    $secondary: #1B544C;
+    $accent: #119EDE;
+    
+    $success: #00F698;
+    $warning: #AD5CC8;
+    $error: #934167;
+    
+    $text: #D5CEDB;
+    $text-muted: #9999A1;
+    /* --------------------------- */
+
+    Screen { align: center middle; background: $background; }
     #app-layout { width: 100%; height: 100%; }
     
     #left-pane { width: 40%; height: 100%; border: solid $accent; margin-right: 1; }
@@ -57,26 +75,30 @@ class Omega13App(App):
     
     #transcription-pane { width: 60%; height: 100%; border: solid $accent; padding: 1 2; background: $surface-lighten-1; }
     
-    .title { text-align: center; text-style: bold; margin-bottom: 1; }
-    .status-idle { color: $text; background: $success; padding: 1; text-align: center; text-style: bold; }
+    .title { text-align: center; text-style: bold; margin-bottom: 1; color: $primary; }
+    .status-idle { color: $background; background: $success; padding: 1; text-align: center; text-style: bold; }
     .status-recording { color: $text; background: $error; padding: 1; text-align: center; text-style: bold; }
+    
     #connection-status, #path-status, #buffer-info { text-align: center; padding: 0 1; margin-top: 1; }
     #connection-status { border: solid $primary; background: $surface-darken-1; }
     #meters { height: 5; margin-top: 1; border: heavy $primary; }
-    .help-text { text-align: center; width: 100%; margin-top: 1; }
-    Label { width: 100%; }
+    
+    .help-text { text-align: center; width: 100%; margin-top: 1; color: $text-muted; }
+    Label { width: 100%; color: $text; }
     
     /* UI Imports CSS */
     #transcription-status { text-align: center; padding: 1; margin-bottom: 1; border: solid $primary; }
-    .status-loading, .status-processing { color: $text; background: $warning; }
-    .status-complete { color: $text; background: $success; }
+    .status-loading, .status-processing { color: $background; background: $warning; }
+    .status-complete { color: $background; background: $success; }
     .status-error { color: $text; background: $error; }
+    
     #clipboard-toggle { margin-bottom: 1; padding: 0 1; }
-    #transcription-log { height: 1fr; border: solid $primary; background: $surface-darken-1; padding: 1; }
+    #transcription-log { height: 1fr; border: solid $primary; background: $surface-darken-1; padding: 1; color: $text; }
     
     .transcription-header { height: auto; align: center middle; margin-bottom: 1; }
     .transcription-title { width: auto; text-align: center; text-style: bold; color: $accent; }
-    .provider-badge { width: auto; padding: 0 1; background: $accent; color: $text; text-style: bold; margin-left: 1; }
+    
+    .provider-badge { width: auto; padding: 0 1; background: $accent; color: $background; text-style: bold; margin-left: 1; }
     .provider-local { background: $primary; }
     .provider-groq { background: $secondary; }
     """
@@ -257,6 +279,7 @@ class Omega13App(App):
             if TRANSCRIPTION_AVAILABLE:
                 try:
                     provider_type = self.config_manager.get_transcription_provider()
+                    logger.info(f"Loading transcription provider: {provider_type}")
                     if provider_type == "groq":
                         provider = GroqTranscriptionProvider(
                             api_key=self.config_manager.get_groq_api_key(),
@@ -945,11 +968,11 @@ class Omega13App(App):
         class NewSessionPromptScreen(ModalScreen):
             CSS = """
             NewSessionPromptScreen { align: center middle; }
-            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #dialog { width: 60; height: 16; border: thick $accent; background: $surface; padding: 2; }
             #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
             #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
-            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
-            Button { width: 100%; }
+            #button-row { width: 100%; height: 3; align: center middle; margin-top: 1; }
+            Button { width: 14; margin: 0 1; }
             """
 
             def __init__(self, session_manager):
@@ -965,7 +988,7 @@ class Omega13App(App):
                         f"Current session has {count} unsaved recording(s)",
                         id="message",
                     )
-                    with Grid():
+                    with Horizontal(id="button-row"):
                         yield Button("Save & New", variant="primary", id="save")
                         yield Button("Discard", variant="error", id="discard")
                         yield Button("Cancel", id="cancel")
@@ -1028,11 +1051,11 @@ class Omega13App(App):
         class SavePromptScreen(ModalScreen):
             CSS = """
             SavePromptScreen { align: center middle; }
-            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #dialog { width: 60; height: 16; border: thick $accent; background: $surface; padding: 2; }
             #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
             #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
-            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
-            Button { width: 100%; }
+            #button-row { width: 100%; height: 3; align: center middle; margin-top: 1; }
+            Button { width: 14; margin: 0 1; }
             """
 
             def __init__(self, session_manager, config_manager):
@@ -1046,7 +1069,7 @@ class Omega13App(App):
                 with Container(id="dialog"):
                     yield Static("Save Session Before Quitting?", id="question")
                     yield Static(f"You have {count} unsaved recording(s)", id="message")
-                    with Grid():
+                    with Horizontal(id="button-row"):
                         yield Button("Save", variant="primary", id="save")
                         yield Button("Discard", variant="error", id="discard")
                         yield Button("Cancel", id="cancel")

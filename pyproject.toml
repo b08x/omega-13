@@ -13,7 +13,6 @@ dependencies = [
     "pyperclip>=1.8.0",
     "pynput>=1.7.6",
     "dbus-next>=0.2.3",
-    "ffmpeg-python>=0.2.0",
 ]
 [project.scripts]
 omega13 = "omega13.app:main"

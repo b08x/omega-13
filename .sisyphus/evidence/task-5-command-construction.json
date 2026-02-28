@@ -1,0 +1,111 @@
+{
+  "ffmpeg_examples": {
+    "basic_resample": [
+      "ffmpeg",
+      "-i",
+      "input.wav",
+      "-af",
+      "aresample=16000",
+      "-y",
+      "output.wav"
+    ],
+    "with_codec": [
+      "ffmpeg",
+      "-i",
+      "input.wav",
+      "-acodec",
+      "mp3",
+      "-ab",
+      "128k",
+      "-y",
+      "output.mp3"
+    ],
+    "full_pipeline": [
+      "ffmpeg",
+      "-i",
+      "input.wav",
+      "-af",
+      "aresample=16000,aformat=mono",
+      "-acodec",
+      "mp3",
+      "-ab",
+      "128k",
+      "-loglevel",
+      "quiet",
+      "-y",
+      "output.mp3"
+    ],
+    "silence_removal": [
+      "ffmpeg",
+      "-i",
+      "input.wav",
+      "-af",
+      "silenceremove=start_periods=1:start_duration=0.5:start_threshold=-50dB",
+      "-y",
+      "output.wav"
+    ]
+  },
+  "sox_examples": {
+    "basic_resample": [
+      "sox",
+      "input.wav",
+      "output.wav",
+      "rate",
+      "16000"
+    ],
+    "mono_conversion": [
+      "sox",
+      "input.wav",
+      "output.wav",
+      "remix -"
+    ],
+    "with_effects": [
+      "sox",
+      "input.wav",
+      "output.wav",
+      "silence 1 0.1 1%",
+      "norm"
+    ],
+    "full_pipeline": [
+      "sox",
+      "input.wav",
+      "output.wav",
+      "rate",
+      "16000",
+      "remix -",
+      "norm"
+    ]
+  },
+  "command_structure": {
+    "ffmpeg_basic": {
+      "description": "Basic FFmpeg command structure",
+      "command": [
+        "ffmpeg",
+        "-i",
+        "input.wav",
+        "-y",
+        "output.wav"
+      ],
+      "parts": {
+        "binary": "ffmpeg",
+        "input_flag": "-i",
+        "input_file": "input.wav",
+        "output_flag": "-y",
+        "output_file": "output.wav"
+      }
+    },
+    "sox_basic": {
+      "description": "Basic SoX command structure",
+      "command": [
+        "sox",
+        "input.wav",
+        "output.wav"
+      ],
+      "parts": {
+        "binary": "sox",
+        "input_file": "input.wav",
+        "output_file": "output.wav"
+      }
+    }
+  }
+}

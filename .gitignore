@@ -15,8 +15,11 @@ docs/omega13*
 .claude/exports/
 .pytest_cache/
 
-.sisyphus/
 .ruff_cache/
 hubs.txt
 
 backlog.md
+
+.worktrees/
+
+.sisyphus/evidence/
