@@ -236,3 +236,44 @@
 - Performance tests: Measure resampling times for different quality settings
 - Error handling: Test invalid inputs, missing files, unsupported formats
 - Regression tests: Compare output files with baseline measurements
+
+## Task 9: PCM Conversion Implementation
+
+### Patterns Discovered
+
+- **Method signature consistency**: Maintained same signature as ffmpeg-python based implementation
+- **CLI tool integration**: Used existing `run_command()` and `build_ffmpeg_command()` utilities
+- **Parameter validation**: Implemented comprehensive input validation with descriptive error messages
+- **Thread safety**: Used existing RLock mechanism consistent with other AudioProcessor methods
+- **Error handling**: Leveraged existing exception hierarchy (CommandExecutionError)
+
+### Conventions
+
+- Function naming: `convert_to_pcm()` following verb_noun pattern
+- Supported codecs: pcm_s16le, pcm_s24le, pcm_f32le
+- Default parameters: codec="pcm_s16le", channels=1
+- Auto-generated output paths follow existing pattern
+
+### Gotchas
+
+- FFmpeg codec parameter naming: "acodec" for audio codec
+- Channel count parameter: "ac" for audio channels
+- Sample rate parameter: "ar" for audio rate
+- Need to verify output file properties with get_audio_info()
+
+### Successful Approaches
+
+- Replaced ffmpeg-python dependency with subprocess calls
+- Maintained API compatibility
+- Added comprehensive test coverage including error cases
+- Used existing utilities to minimize new code
+- Verified functionality with multiple test cases
+
+### Testing Recommendations
+
+- Unit tests: Test each supported codec with various input files
+- Integration tests: Test PCM conversion in processing pipelines
+- Error handling: Test invalid inputs, missing files, unsupported codecs
+- Channel conversion: Verify mono/stereo conversion works correctly
+- Sample rate conversion: Test resampling functionality
+- Regression tests: Compare with baseline measurements

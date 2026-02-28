@@ -922,6 +922,91 @@ class AudioProcessor:
         }
         
         return quality_presets.get(quality, quality_presets["standard"])
+
+    def convert_to_pcm(
+        self,
+        input_path: Union[str, Path],
+        output_path: Optional[Union[str, Path]] = None,
+        codec: str = "pcm_s16le",
+        channels: int = 1,
+        sample_rate: Optional[int] = None,
+    ) -> Path:
+        """
+        Convert audio to PCM format with specified codec and channel count.
+
+        Uses FFmpeg CLI to convert audio files to PCM format with high fidelity.
+
+        Args:
+            input_path: Path to input audio file
+            output_path: Optional output path (auto-generated if None)
+            codec: PCM codec to use (pcm_s16le, pcm_s24le, pcm_f32le)
+            channels: Target number of channels (default 1 for mono)
+            sample_rate: Optional target sample rate (preserves original if None)
+
+        Returns:
+            Path to the converted PCM audio file
+
+        Raises:
+            FileNotFoundError: If input file doesn't exist
+            ValueError: If codec or channels are invalid
+            CommandExecutionError: If conversion fails
+        """
+        with self._lock:
+            # Validate inputs
+            input_path = Path(input_path)
+            if not input_path.exists():
+                raise FileNotFoundError(f"Input file not found: {input_path}")
+
+            # Validate codec
+            supported_codecs = {"pcm_s16le", "pcm_s24le", "pcm_f32le"}
+            if codec not in supported_codecs:
+                raise ValueError(f"Unsupported codec: {codec}. Supported: {supported_codecs}")
+
+            # Validate channels
+            if not isinstance(channels, int) or channels <= 0:
+                raise ValueError(f"channels must be a positive integer, got {channels}")
+
+            # Validate sample_rate if provided
+            if sample_rate is not None and (not isinstance(sample_rate, int) or sample_rate <= 0):
+                raise ValueError(f"sample_rate must be a positive integer, got {sample_rate}")
+
+            # Generate output path if not provided
+            if output_path is None:
+                output_path = self._generate_output_path(
+                    input_path, suffix=f"_{codec}_{channels}ch"
+                )
+            else:
+                output_path = Path(output_path)
+
+            logger.info(f"Converting {input_path} to {codec} ({channels}ch) -> {output_path}")
+
+            try:
+                # Build codec arguments
+                codec_args = {'acodec': codec, 'ac': channels}
+                if sample_rate is not None:
+                    codec_args['ar'] = sample_rate
+
+                # Build FFmpeg command for PCM conversion using subprocess
+                command = build_ffmpeg_command(
+                    str(input_path),
+                    str(output_path),
+                    codec_args=codec_args
+                )
+
+                # Run conversion using subprocess
+                logger.debug(f"Running FFmpeg PCM conversion: {codec} ({channels}ch)")
+                run_command(command, timeout=300, description="Audio PCM conversion")
+
+                logger.info(f"PCM conversion completed: {input_path} -> {output_path}")
+                return output_path
+
+            except CommandExecutionError as e:
+                logger.error(f"FFmpeg PCM conversion failed: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error during PCM conversion: {e}")
+                raise
+
     def __enter__(self):
         """Context manager entry."""
         return self
