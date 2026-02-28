@@ -16,6 +16,174 @@ import soundfile as sf
 
 logger = logging.getLogger(__name__)
 
+
+class AudioProcessorError(Exception):
+    """Base exception for audio processing errors."""
+    pass
+
+
+class CommandExecutionError(AudioProcessorError):
+    """Raised when subprocess command execution fails."""
+    pass
+
+
+class CommandTimeoutError(AudioProcessorError):
+    """Raised when subprocess command times out."""
+    pass
+
+
+def run_command(
+    command: list[str],
+    timeout: int = 300,
+    description: str = "",
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Execute a subprocess command with timeout and error handling.
+    
+    Args:
+        command: List of command arguments (e.g., ['ffmpeg', '-i', 'input.wav'])
+        timeout: Timeout in seconds (default 300s for processing, 30s for probe)
+        description: Human-readable description of the command for logging
+        check: If True, raise CommandExecutionError on non-zero exit code
+        
+    Returns:
+        subprocess.CompletedProcess with stdout/stderr captured
+        
+    Raises:
+        CommandTimeoutError: If command exceeds timeout
+        CommandExecutionError: If command fails and check=True
+        ValueError: If command is not a list or is empty
+    """
+    # Validate input
+    if not isinstance(command, list) or not command:
+        raise ValueError("command must be a non-empty list")
+    
+    if not isinstance(timeout, int) or timeout <= 0:
+        raise ValueError(f"timeout must be positive integer, got {timeout}")
+    
+    # Log command execution at debug level
+    cmd_str = " ".join(str(arg) for arg in command)
+    if description:
+        logger.debug(f"Executing: {description}")
+    logger.debug(f"Command: {cmd_str}")
+    
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,  # We handle errors manually for better control
+        )
+        
+        # Log output at debug level
+        if result.stdout:
+            logger.debug(f"Command stdout: {result.stdout[:500]}")
+        if result.stderr:
+            logger.debug(f"Command stderr: {result.stderr[:500]}")
+        
+        # Check return code if requested
+        if check and result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else f"Exit code {result.returncode}"
+            logger.error(f"Command failed: {cmd_str}")
+            logger.error(f"Error: {error_msg}")
+            raise CommandExecutionError(f"Command failed: {error_msg}")
+        
+        logger.debug(f"Command succeeded with exit code {result.returncode}")
+        return result
+        
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Command timed out after {timeout}s: {cmd_str}")
+        raise CommandTimeoutError(f"Command timed out after {timeout}s") from e
+    except CommandExecutionError:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error executing command: {e}")
+        raise CommandExecutionError(f"Command execution error: {str(e)}") from e
+
+
+def build_ffmpeg_command(
+    input_file: str,
+    output_file: str,
+    filters: Optional[list[str]] = None,
+    codec_args: Optional[dict[str, Any]] = None,
+    extra_args: Optional[list[str]] = None,
+) -> list[str]:
+    """
+    Build an FFmpeg command with proper argument ordering.
+    
+    Args:
+        input_file: Path to input audio file
+        output_file: Path to output audio file
+        filters: List of filter strings (e.g., ['aresample=16000', 'aformat=mono'])
+        codec_args: Dictionary of codec arguments (e.g., {'acodec': 'mp3', 'ab': '128k'})
+        extra_args: Additional arguments to append before output file
+        
+    Returns:
+        List of command arguments ready for subprocess.run()
+    """
+    command = ["ffmpeg", "-i", input_file]
+    
+    # Add filters if provided
+    if filters:
+        filter_chain = ",".join(filters)
+        command.extend(["-af", filter_chain])
+    
+    # Add codec arguments
+    if codec_args:
+        for key, value in codec_args.items():
+            command.extend([f"-{key}", str(value)])
+    
+    # Add extra arguments
+    if extra_args:
+        command.extend(extra_args)
+    
+    # Add output file and overwrite flag
+    command.extend(["-y", output_file])
+    
+    return command
+
+
+def build_sox_command(
+    input_file: str,
+    output_file: str,
+    effects: Optional[list[str]] = None,
+    rate: Optional[int] = None,
+    channels: Optional[int] = None,
+) -> list[str]:
+    """
+    Build a SoX command with proper argument ordering.
+    
+    Args:
+        input_file: Path to input audio file
+        output_file: Path to output audio file
+        effects: List of effect strings (e.g., ['silence 1 0.1 1%', 'norm'])
+        rate: Target sample rate in Hz
+        channels: Target number of channels (1 for mono, 2 for stereo)
+        
+    Returns:
+        List of command arguments ready for subprocess.run()
+    """
+    command = ["sox", input_file, output_file]
+    
+    # Add rate conversion if specified
+    if rate:
+        command.extend(["rate", str(rate)])
+    
+    # Add channel conversion if specified
+    if channels:
+        if channels == 1:
+            command.append("remix -")
+        elif channels == 2:
+            command.append("remix 1,2")
+    
+    # Add effects
+    if effects:
+        command.extend(effects)
+    
+    return command
+
 def check_ffmpeg_available() -> bool:
     """
     Check if ffmpeg binary is available in system PATH.

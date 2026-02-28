@@ -83,3 +83,62 @@
 - Error handling: Test invalid inputs and missing files
 - Regression testing: Compare new measurements against baseline
 
+
+## Task 5: Subprocess Wrapper and Command Builder Utilities
+
+### Patterns Discovered
+
+- **Subprocess execution pattern**: Use `subprocess.run()` with argument lists (not shell strings) to prevent injection
+  - Always use `capture_output=True, text=True` for output capture
+  - Use `check=False` and handle errors manually for better control
+  - Timeout parameter prevents hanging processes
+  
+- **Command building approach**: Separate builder functions for each CLI tool
+  - FFmpeg: Input → Filters → Codec args → Extra args → Output
+  - SoX: Input → Rate → Channels → Effects → Output
+  - Always return list[str] for subprocess compatibility
+
+- **Error handling hierarchy**: Custom exception classes for different failure modes
+  - AudioProcessorError: Base exception
+  - CommandExecutionError: Command failed with non-zero exit
+  - CommandTimeoutError: Command exceeded timeout
+
+- **Logging strategy**: Debug-level logging with output truncation
+  - Log full command for debugging
+  - Truncate output to 500 chars to prevent log spam
+  - Log description if provided for context
+
+### Conventions
+
+- Function naming: `run_command()`, `build_<tool>_command()`
+- Type hints: Use modern syntax (list[str], dict[str, Any])
+- Timeout defaults: 300s for processing, 30s for probe operations
+- Exception messages: Descriptive with error details
+- Command validation: Check for non-empty list, positive timeout
+
+### Gotchas
+
+- FFmpeg filter chain must be comma-separated (not space-separated)
+- SoX channel conversion uses "remix -" for mono, "remix 1,2" for stereo
+- Output truncation at 500 chars prevents log spam but may hide important details
+- Timeout exceptions need proper exception chaining with 'from e'
+- Type hints must use list[str] not list for proper type checking
+
+### Successful Approaches
+
+- Separate builder functions for each CLI tool (FFmpeg vs SoX)
+- Argument lists prevent shell injection vulnerabilities
+- Custom exception classes enable precise error handling
+- Debug-level logging with truncation balances visibility and log size
+- Integration tests verify command building + execution together
+- Standalone test runners work with pytest
+
+### Testing Recommendations
+
+- Unit tests: Test each builder function with various options
+- Error tests: Test timeout, failure, invalid input paths
+- Integration tests: Test command building + execution together
+- Logging tests: Verify debug output with mock logger
+- Type checking: Verify type hints with mypy/pyright
+- Edge cases: Empty filters, None values, special characters
+
