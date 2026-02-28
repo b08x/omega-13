@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 # --- Type Aliases ---
 ConfigDict = Dict[str, Any]
 
+
 class ConfigManager:
     """Manages persistent configuration for Omega-13."""
 
@@ -32,30 +33,33 @@ class ConfigManager:
             "transcription": {
                 "enabled": True,
                 "auto_transcribe": True,
+                "provider": "local",  # "local" or "groq"
                 "server_url": "http://localhost:8080",
                 "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
+                "groq_api_key": "",
+                "groq_model": "whisper-large-v3-turbo",
                 "save_to_file": True,
                 "copy_to_clipboard": False,
-                "inject_to_active_window": False
+                "inject_to_active_window": False,
             },
             "desktop_notifications": True,
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
-                "auto_cleanup_days": 7
+                "auto_cleanup_days": 7,
             },
             "auto_record": {
                 "enabled": False,
                 "begin_threshold_db": -35.0,
                 "end_threshold_db": -35.0,
-                "silence_duration_seconds": 10.0
-            }
+                "silence_duration_seconds": 10.0,
+            },
         }
-        
+
         try:
             if self.config_path.exists():
-                with open(self.config_path, 'r') as f:
+                with open(self.config_path, "r") as f:
                     config = json.load(f)
                     # Merge defaults for missing keys (simple shallow merge)
                     if "transcription" not in config:
@@ -66,11 +70,16 @@ class ConfigManager:
                         config["global_hotkey"] = default_config["global_hotkey"]
                     if "auto_record" not in config:
                         config["auto_record"] = default_config["auto_record"]
-                    
+
                     # Ensure inference_path exists if transcription exists
-                    if "transcription" in config and "inference_path" not in config["transcription"]:
-                        config["transcription"]["inference_path"] = default_config["transcription"]["inference_path"]
-                        
+                    if (
+                        "transcription" in config
+                        and "inference_path" not in config["transcription"]
+                    ):
+                        config["transcription"]["inference_path"] = default_config[
+                            "transcription"
+                        ]["inference_path"]
+
                     return config
             return default_config
         except (json.JSONDecodeError, IOError) as e:
@@ -80,7 +89,7 @@ class ConfigManager:
     def save_config(self, config: ConfigDict) -> bool:
         """Save configuration to disk."""
         try:
-            with open(self.config_path, 'w') as f:
+            with open(self.config_path, "w") as f:
                 json.dump(config, f, indent=2)
             return True
         except IOError as e:
@@ -105,7 +114,7 @@ class ConfigManager:
     def set_save_path(self, path: str | Path):
         self.config["save_path"] = str(path)
         self.save_config(self.config)
-        
+
     def get_global_hotkey(self) -> str:
         """Get the global hotkey combination string."""
         return self.config.get("global_hotkey", "<ctrl>+<alt>+space")
@@ -138,13 +147,55 @@ class ConfigManager:
     def get_save_transcription_to_file(self) -> bool:
         return self.config.get("transcription", {}).get("save_to_file", True)
 
+    def get_transcription_provider(self) -> str:
+        """Get the transcription provider (local or groq)."""
+        return self.config.get("transcription", {}).get("provider", "local")
+
+    def set_transcription_provider(self, provider: str) -> None:
+        """Set the transcription provider (local or groq)."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["provider"] = provider
+        self.save_config(self.config)
+
+    def get_groq_api_key(self) -> str:
+        """Get Groq API key, checking environment variable first."""
+        import os
+
+        env_key = os.environ.get("GROQ_API_KEY")
+        if env_key:
+            return env_key
+        return self.config.get("transcription", {}).get("groq_api_key", "")
+
+    def set_groq_api_key(self, api_key: str) -> None:
+        """Set Groq API key."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["groq_api_key"] = api_key
+        self.save_config(self.config)
+
+    def get_groq_model(self) -> str:
+        """Get Groq model name."""
+        return self.config.get("transcription", {}).get(
+            "groq_model", "whisper-large-v3-turbo"
+        )
+
+    def set_groq_model(self, model: str) -> None:
+        """Set Groq model name."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["groq_model"] = model
+        self.save_config(self.config)
+
     def get_copy_to_clipboard(self) -> bool:
         """Get whether to copy transcription results to clipboard."""
         return self.config.get("transcription", {}).get("copy_to_clipboard", False)
 
     def get_transcription_server_url(self) -> str:
         """Get the whisper-server URL."""
-        return self.config.get("transcription", {}).get("server_url", "http://localhost:8080")
+        return self.config.get("transcription", {}).get(
+            "server_url", "http://localhost:8080"
+        )
 
     def set_transcription_server_url(self, url: str) -> None:
         """Set the whisper-server URL."""
@@ -166,7 +217,9 @@ class ConfigManager:
 
     def get_inject_to_active_window(self) -> bool:
         """Get whether to inject transcription results to the active window."""
-        return self.config.get("transcription", {}).get("inject_to_active_window", False)
+        return self.config.get("transcription", {}).get(
+            "inject_to_active_window", False
+        )
 
     def set_copy_to_clipboard(self, enabled: bool) -> None:
         """Set whether to copy transcription results to clipboard."""

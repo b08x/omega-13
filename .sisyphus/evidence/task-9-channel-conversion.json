@@ -1,0 +1,36 @@
+{
+  "task": "Verify channel conversion functionality",
+  "file_tested": "tests/test_format_conversion.py",
+  "test_cases": [
+    {
+      "name": "test_convert_to_pcm_s16le_mono",
+      "description": "Test converting to pcm_s16le mono format",
+      "input": "stereo_48000_2s.wav",
+      "output_channels": 1,
+      "output_codec": "pcm_s16le",
+      "status": "PASSED"
+    },
+    {
+      "name": "test_convert_to_pcm_s24le_stereo",
+      "description": "Test converting to pcm_s24le stereo format",
+      "input": "mono_16000_3s.wav",
+      "output_channels": 2,
+      "output_codec": "pcm_s24le",
+      "status": "PASSED"
+    },
+    {
+      "name": "test_convert_to_pcm_f32le_with_resampling",
+      "description": "Test converting to pcm_f32le with sample rate conversion",
+      "input": "stereo_48000_2s.wav",
+      "output_channels": 1,
+      "output_codec": "pcm_f32le",
+      "output_sample_rate": 16000,
+      "status": "PASSED"
+    }
+  ],
+  "validation": {
+    "method": "get_audio_info()",
+    "properties_checked": ["codec", "channels", "sample_rate"],
+    "results": "All channel conversion tests passed successfully"
+  }
+}

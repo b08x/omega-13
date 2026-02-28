@@ -1,4 +1,4 @@
-## [unreleased]
+## [2.4.0] - 2026-02-28
 
 ### 🚀 Features
 
@@ -6,6 +6,15 @@
 - Add UI and configuration for transcription server inference path.
 - Refine signal detection with noise immunity and sustained signal logic, and improve signal metrics data flow.
 - Embed large-v3-turbo-q5_0 model and quantize binary into container, update model path configuration, and ignore pytest cache.
+- Enhance installation with automated bootstrap script, update documentation, and bump version to 2.3.0 with new features and fixes.
+- Switch transcription output to markdown
+- *(transcription)* Add Groq API support as a transcription provider
+- *(audio)* Switch default recording format to WAV and enhance downsampling
+- *(audio)* Add CLI binary availability validation utilities
+- *(audio)* Add subprocess wrapper foundation for CLI tools
+- *(audio)* Implement ffprobe-based metadata extraction
+- *(audio)* Implement audio resampling with ffmpeg CLI
+- *(audio)* Implement PCM format conversion with ffmpeg CLI
 
 ### 🐛 Bug Fixes
 
@@ -14,16 +23,31 @@
 ### 🚜 Refactor
 
 - Reorder mono/stereo button handlers in TranscriptionSettingsScreen.
+- Implement real-time safety, D-Bus IPC, and MP3 processing pipeline
+- Replace ffmpeg-python with subprocess in MP3 encoding
+- Remove ffmpeg-python dependency
+- *(audio)* Complete ffmpeg-python removal and optimize audio processing
 
 ### 📚 Documentation
 
-- Enhance README with bootstrap.sh as primary installation method, add CUDA customization guide, and update version to 2.3.0
-  - Promote bootstrap.sh to "Quick Start (Recommended)" with distro-agnostic installation
-  - Add CUDA architecture customization examples for GPU optimization
-  - Restructure manual installation as alternative for advanced users
-  - Add minimal development section with reference to CLAUDE.md
-  - Synchronize version in `__init__.py` (2.0.0 → 2.3.0) with `pyproject.toml`
-  - Add bootstrap-specific troubleshooting entries
+- Consolidate agent documentation and remove obsolete files
+- *(README)* Refactor project overview and architecture
+- Consolidate agent documentation and add module-specific guides
+- *(audio)* Update process_pipeline docstring for subprocess-based implementation
+
+### 🎨 Styling
+
+- *(ui)* Update TUI color scheme and styling
+- *(ui)* Standardize button layouts and dialog sizes in modal screens
+
+### 🧪 Testing
+
+- Add comprehensive test audio files and baseline measurements
+
+### ⚙️ Miscellaneous Tasks
+
+- Updated changelog
+- Relocate scripts and update project documentation with Context7 MCP
 ## [2.3.0] - 2025-12-26
 
 ### 🚀 Features

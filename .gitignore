@@ -14,3 +14,12 @@ docs/omega13*
 .code-packager/
 .claude/exports/
 .pytest_cache/
+
+.ruff_cache/
+hubs.txt
+
+backlog.md
+
+.worktrees/
+
+.sisyphus/evidence/

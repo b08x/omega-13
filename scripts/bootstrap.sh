@@ -61,6 +61,7 @@ install_system_deps() {
                 python3 python3-pip python3-devel \
                 libsndfile libsndfile-devel \
                 pipewire-jack-audio-connection-kit-devel \
+                ffmpeg ffmpeg-devel \
                 gcc git podman
             ;;
         apt)
@@ -70,6 +71,7 @@ install_system_deps() {
                 python3 python3-pip python3-venv python3-dev \
                 libsndfile1 libsndfile1-dev \
                 libjack-jackd2-dev \
+                ffmpeg libavcodec-dev libavformat-dev libavutil-dev \
                 build-essential git podman
             ;;
         pacman)
@@ -78,6 +80,7 @@ install_system_deps() {
                 python python-pip \
                 libsndfile \
                 jack2 \
+                ffmpeg \
                 base-devel git podman
             ;;
         zypper)
@@ -86,6 +89,7 @@ install_system_deps() {
                 python3 python3-pip python3-devel \
                 libsndfile libsndfile-devel \
                 libjack-devel \
+                ffmpeg ffmpeg-devel \
                 gcc git podman
             ;;
     esac

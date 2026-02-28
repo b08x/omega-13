@@ -3,17 +3,28 @@ import jack
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, Checkbox, DirectoryTree, Input, Label, OptionList, RichLog, Static
+    Button,
+    Checkbox,
+    DirectoryTree,
+    Input,
+    Label,
+    OptionList,
+    RichLog,
+    Static,
+    RadioSet,
+    RadioButton,
 )
 from textual.containers import Container, Horizontal, Vertical
 from textual.binding import Binding
 from textual.app import ComposeResult
 
+
 class VUMeter(Static):
     """A vertical bar displaying audio level."""
+
     level = reactive(0.0)
     db_level = reactive(-100.0)
-    
+
     def watch_level(self, level: float) -> None:
         self.update_bar()
 
@@ -21,9 +32,12 @@ class VUMeter(Static):
         self.update_bar()
 
     def _get_level_color(self, percentage: float) -> str:
-        if percentage > 90: return "red"
-        elif percentage > 70: return "yellow"
-        else: return "green"
+        if percentage > 90:
+            return "red"
+        elif percentage > 70:
+            return "yellow"
+        else:
+            return "green"
 
     def update_bar(self) -> None:
         pct = min(100, int(self.level * 100))
@@ -32,12 +46,14 @@ class VUMeter(Static):
         db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
         self.update(f"[{color}]{level_bar_display:50s}[/] [bold]{db_str}[/]")
 
+
 class SilenceCountdown(Static):
     """
     Displays countdown timer when silence is detected during recording.
 
     Shows remaining time before auto-stop is triggered.
     """
+
     countdown = reactive(0.0)  # Seconds remaining until auto-stop
     visible = reactive(False)  # Whether to show the countdown
 
@@ -74,8 +90,10 @@ class SilenceCountdown(Static):
 
 class TranscriptionDisplay(Static):
     """Widget for displaying transcription status and results."""
+
     status = reactive("idle")
     progress = reactive(0.0)
+    provider = reactive("local")
 
     def __init__(self, config_manager=None, **kwargs):
         super().__init__(**kwargs)
@@ -87,7 +105,9 @@ class TranscriptionDisplay(Static):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("Transcription", classes="transcription-title")
+            with Horizontal(classes="transcription-header"):
+                yield Label("Transcription", classes="transcription-title")
+                yield Static("", id="provider-badge", classes="provider-badge")
             yield RichLog(id="transcription-log", wrap=True, highlight=True)
 
     def on_mount(self):
@@ -96,19 +116,33 @@ class TranscriptionDisplay(Static):
         self.status_label = self.app.query_one("#transcription-status", Static)
         self.text_log.max_lines = 1000
 
-
     def watch_status(self, new_status: str) -> None:
         status_map = {
             "idle": ("Ready", "status-idle"),
             "loading_model": ("Loading model...", "status-loading"),
             "processing": ("Transcribing...", "status-processing"),
             "completed": ("Complete", "status-complete"),
-            "error": ("Error", "status-error")
+            "error": ("Error", "status-error"),
         }
         msg, cls = status_map.get(new_status, ("Unknown", "status-idle"))
         self.status_label.update(msg)
-        self.status_label.remove_class("status-idle", "status-loading", "status-processing", "status-complete", "status-error")
+        self.status_label.remove_class(
+            "status-idle",
+            "status-loading",
+            "status-processing",
+            "status-complete",
+            "status-error",
+        )
         self.status_label.add_class(cls)
+
+    def watch_provider(self, new_provider: str) -> None:
+        badge = self.query_one("#provider-badge", Static)
+        if new_provider == "groq":
+            badge.update("☁️ Groq")
+            badge.remove_class("provider-local").add_class("provider-groq")
+        else:
+            badge.update("🏠 Local")
+            badge.remove_class("provider-groq").add_class("provider-local")
 
     def watch_progress(self, new_progress: float):
         if self.status == "processing":
@@ -123,7 +157,7 @@ class TranscriptionDisplay(Static):
         self.text_log.clear()
         for text in transcriptions:
             self.text_log.write(text)
-            self.text_log.write("") # Add spacing between transcriptions
+            self.text_log.write("")  # Add spacing between transcriptions
 
     def show_error(self, error_message: str):
         self.status = "error"
@@ -132,20 +166,27 @@ class TranscriptionDisplay(Static):
     def clear(self):
         self.text_log.clear()
 
+
 class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     """Modal screen for selecting two JACK input ports."""
+
     CSS = """
     InputSelectionScreen { align: center middle; }
     #selection-dialog { width: 70; height: 30; border: thick $accent; background: $surface; padding: 1 2; }
     #port-list { height: 15; border: solid $primary; margin: 1 0; background: $surface-lighten-1; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
     #mode-selection { height: auto; min-height: 10; border: solid $primary; margin: 1 0; padding: 1; }
     #mode-selection Button { width: 100%; margin: 1 0; }
     """
-    BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm Selection")]
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("enter", "confirm", "Confirm Selection"),
+    ]
 
-    def __init__(self, available_ports: list[jack.Port], current_ports: list[str | None]):
+    def __init__(
+        self, available_ports: list[jack.Port], current_ports: list[str | None]
+    ):
         super().__init__()
         self.available_ports = available_ports
         self.current_ports = current_ports
@@ -175,11 +216,13 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
             opt_list.add_option(f"{port.name} {is_phys}".strip())
 
     def action_confirm(self):
-        if self.selection_step == 0: return
+        if self.selection_step == 0:
+            return
         opt_list = self.query_one("#port-list", OptionList)
         idx = opt_list.highlighted
-        if idx is None: return
-        
+        if idx is None:
+            return
+
         selected_port = self.available_ports[idx]
         if self.selection_step == 1:
             self.selected_port1 = selected_port.name
@@ -189,7 +232,8 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
                 self._switch_to_step_2()
         else:
             self.selected_port2 = selected_port.name
-            if self.selected_port1 == self.selected_port2: return
+            if self.selected_port1 == self.selected_port2:
+                return
             self.dismiss([self.selected_port1, self.selected_port2])
 
     def _switch_to_port_selection(self, mode: str):
@@ -204,57 +248,136 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
         self.selection_step = 2
         self.query_one("#title", Label).update("Select Input 2")
 
-    def action_cancel(self): self.dismiss(None)
+    def action_cancel(self):
+        self.dismiss(None)
 
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "cancel-btn": self.action_cancel()
-        elif event.button.id == "confirm-btn": self.action_confirm()
-        elif event.button.id == "mono-btn": self._switch_to_port_selection("Mono")
-        elif event.button.id == "stereo-btn": self._switch_to_port_selection("Stereo")
+        if event.button.id == "cancel-btn":
+            self.action_cancel()
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
+        elif event.button.id == "mono-btn":
+            self._switch_to_port_selection("Mono")
+        elif event.button.id == "stereo-btn":
+            self._switch_to_port_selection("Stereo")
+
 
 class TranscriptionSettingsScreen(ModalScreen[dict | None]):
-    """Modal screen for configuring transcription server settings."""
+    """Modal screen for configuring transcription settings."""
+
     CSS = """
     TranscriptionSettingsScreen { align: center middle; }
     #settings-dialog { width: 60; height: auto; border: thick $accent; background: $surface; padding: 1 2; }
     .settings-input { margin: 1 0; }
     .settings-label { margin-top: 1; text-style: bold; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
+    RadioSet { margin: 1 0; border: solid $primary; padding: 1; }
+    .hidden { display: none; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Save")]
 
-    def __init__(self, server_url: str, inference_path: str):
+    def __init__(self, config: dict):
         super().__init__()
-        self.server_url = server_url
-        self.inference_path = inference_path
+        self.provider = config.get("provider", "local")
+        self.server_url = config.get("server_url", "http://localhost:8080")
+        self.inference_path = config.get("inference_path", "/inference")
+        self.groq_api_key = config.get("groq_api_key", "")
+        self.groq_model = config.get("groq_model", "whisper-large-v3-turbo")
 
     def compose(self) -> ComposeResult:
         with Container(id="settings-dialog"):
-            yield Label("Transcription Server Settings", id="title", classes="settings-title")
-            
-            yield Label("Server URL:", classes="settings-label")
-            yield Input(value=self.server_url, placeholder="http://localhost:8080", id="server-url-input", classes="settings-input")
-            
-            yield Label("Inference Path:", classes="settings-label")
-            yield Input(value=self.inference_path, placeholder="/inference", id="inference-path-input", classes="settings-input")
-            
+            yield Label("Transcription Settings", id="title", classes="settings-title")
+
+            yield Label("Provider:", classes="settings-label")
+            with RadioSet(id="provider-radio"):
+                yield RadioButton(
+                    "Local (whisper-server)",
+                    id="local-provider",
+                    value=self.provider == "local",
+                )
+                yield RadioButton(
+                    "Groq (Cloud)", id="groq-provider", value=self.provider == "groq"
+                )
+
+            with Vertical(
+                id="local-settings",
+                classes="" if self.provider == "local" else "hidden",
+            ):
+                yield Label("Server URL:", classes="settings-label")
+                yield Input(
+                    value=self.server_url,
+                    placeholder="http://localhost:8080",
+                    id="server-url-input",
+                    classes="settings-input",
+                )
+
+                yield Label("Inference Path:", classes="settings-label")
+                yield Input(
+                    value=self.inference_path,
+                    placeholder="/inference",
+                    id="inference-path-input",
+                    classes="settings-input",
+                )
+
+            with Vertical(
+                id="groq-settings", classes="" if self.provider == "groq" else "hidden"
+            ):
+                yield Label("Groq API Key:", classes="settings-label")
+                yield Input(
+                    value=self.groq_api_key,
+                    placeholder="gsk_...",
+                    id="groq-api-key-input",
+                    password=True,
+                    classes="settings-input",
+                )
+
+                yield Label("Groq Model:", classes="settings-label")
+                yield Input(
+                    value=self.groq_model,
+                    placeholder="whisper-large-v3-turbo",
+                    id="groq-model-input",
+                    classes="settings-input",
+                )
+
             with Horizontal(id="button-row"):
                 yield Button("Cancel", variant="error", id="cancel-btn")
                 yield Button("Save", variant="primary", id="confirm-btn")
 
     def on_mount(self):
-        self.query_one("#server-url-input").focus()
+        if self.provider == "local":
+            self.query_one("#server-url-input").focus()
+        else:
+            self.query_one("#groq-api-key-input").focus()
+
+    def on_radio_set_changed(self, event: RadioSet.Changed):
+        is_local = event.pressed.id == "local-provider"
+        self.query_one("#local-settings").set_class(not is_local, "hidden")
+        self.query_one("#groq-settings").set_class(is_local, "hidden")
 
     def action_confirm(self):
+        provider = "local" if self.query_one("#local-provider").value else "groq"
         url = self.query_one("#server-url-input").value.strip()
         path = self.query_one("#inference-path-input").value.strip()
-        
-        if not url:
+        api_key = self.query_one("#groq-api-key-input").value.strip()
+        model = self.query_one("#groq-model-input").value.strip()
+
+        if provider == "local" and not url:
             self.app.notify("Server URL cannot be empty", severity="error")
             return
-            
-        self.dismiss({"server_url": url, "inference_path": path or "/inference"})
+        if provider == "groq" and not api_key:
+            self.app.notify("Groq API Key cannot be empty", severity="error")
+            return
+
+        self.dismiss(
+            {
+                "provider": provider,
+                "server_url": url,
+                "inference_path": path or "/inference",
+                "groq_api_key": api_key,
+                "groq_model": model or "whisper-large-v3-turbo",
+            }
+        )
 
     def action_cancel(self):
         self.dismiss(None)
@@ -268,12 +391,13 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
 
 class SessionTitleScreen(ModalScreen[str | None]):
     """Modal screen for entering a session title."""
+
     CSS = """
     SessionTitleScreen { align: center middle; }
     #title-dialog { width: 50; height: 15; border: thick $accent; background: $surface; padding: 1 2; }
     #title-input { margin: 1 0; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm")]
 
@@ -301,13 +425,14 @@ class SessionTitleScreen(ModalScreen[str | None]):
         elif event.button.id == "confirm-btn":
             self.action_confirm()
 
+
 class DirectorySelectionScreen(ModalScreen[Path | None]):
     CSS = """
     DirectorySelectionScreen { align: center middle; }
     #directory-dialog { width: 80; height: 30; border: thick $accent; background: $surface; padding: 1 2; }
     #directory-tree { height: 18; border: solid $primary; margin: 1 0; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 18; margin: 0 1; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Select")]
 
@@ -325,12 +450,20 @@ class DirectorySelectionScreen(ModalScreen[Path | None]):
                 yield Button("Cancel", variant="error", id="cancel-btn")
                 yield Button("Select Current", variant="primary", id="confirm-btn")
 
-    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected):
+    def on_directory_tree_directory_selected(
+        self, event: DirectoryTree.DirectorySelected
+    ):
         self.selected_path = Path(event.path)
         self.query_one("#help", Static).update(f"Selection: {self.selected_path}")
 
-    def action_confirm(self): self.dismiss(self.selected_path)
-    def action_cancel(self): self.dismiss(None)
+    def action_confirm(self):
+        self.dismiss(self.selected_path)
+
+    def action_cancel(self):
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "cancel-btn": self.action_cancel()
-        elif event.button.id == "confirm-btn": self.action_confirm()
+        if event.button.id == "cancel-btn":
+            self.action_cancel()
+        elif event.button.id == "confirm-btn":
+            self.action_confirm()
