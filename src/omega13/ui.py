@@ -175,7 +175,7 @@ class InputSelectionScreen(ModalScreen[tuple[str, str] | None]):
     #selection-dialog { width: 70; height: 30; border: thick $accent; background: $surface; padding: 1 2; }
     #port-list { height: 15; border: solid $primary; margin: 1 0; background: $surface-lighten-1; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
     #mode-selection { height: auto; min-height: 10; border: solid $primary; margin: 1 0; padding: 1; }
     #mode-selection Button { width: 100%; margin: 1 0; }
     """
@@ -271,7 +271,7 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
     .settings-input { margin: 1 0; }
     .settings-label { margin-top: 1; text-style: bold; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
     RadioSet { margin: 1 0; border: solid $primary; padding: 1; }
     .hidden { display: none; }
     """
@@ -397,7 +397,7 @@ class SessionTitleScreen(ModalScreen[str | None]):
     #title-dialog { width: 50; height: 15; border: thick $accent; background: $surface; padding: 1 2; }
     #title-input { margin: 1 0; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 14; margin: 0 1; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Confirm")]
 
@@ -432,7 +432,7 @@ class DirectorySelectionScreen(ModalScreen[Path | None]):
     #directory-dialog { width: 80; height: 30; border: thick $accent; background: $surface; padding: 1 2; }
     #directory-tree { height: 18; border: solid $primary; margin: 1 0; }
     #button-row { height: 3; align: center middle; margin-top: 1; }
-    #button-row Button { margin: 0 1; }
+    #button-row Button { width: 18; margin: 0 1; }
     """
     BINDINGS = [("escape", "cancel", "Cancel"), ("enter", "confirm", "Select")]
 

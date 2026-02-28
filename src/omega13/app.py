@@ -967,11 +967,11 @@ class Omega13App(App):
         class NewSessionPromptScreen(ModalScreen):
             CSS = """
             NewSessionPromptScreen { align: center middle; }
-            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #dialog { width: 60; height: 16; border: thick $accent; background: $surface; padding: 2; }
             #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
             #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
-            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
-            Button { width: 100%; }
+            #button-row { width: 100%; height: 3; align: center middle; margin-top: 1; }
+            Button { width: 14; margin: 0 1; }
             """
 
             def __init__(self, session_manager):
@@ -987,7 +987,7 @@ class Omega13App(App):
                         f"Current session has {count} unsaved recording(s)",
                         id="message",
                     )
-                    with Grid():
+                    with Horizontal(id="button-row"):
                         yield Button("Save & New", variant="primary", id="save")
                         yield Button("Discard", variant="error", id="discard")
                         yield Button("Cancel", id="cancel")
@@ -1050,11 +1050,11 @@ class Omega13App(App):
         class SavePromptScreen(ModalScreen):
             CSS = """
             SavePromptScreen { align: center middle; }
-            #dialog { width: 60; height: 15; border: thick $accent; background: $surface; padding: 2; }
+            #dialog { width: 60; height: 16; border: thick $accent; background: $surface; padding: 2; }
             #question { width: 100%; height: 3; content-align: center middle; text-style: bold; }
             #message { width: 100%; height: 3; content-align: center middle; color: $text-muted; }
-            Grid { width: 100%; height: auto; grid-size: 3 1; grid-gutter: 1; margin-top: 1; }
-            Button { width: 100%; }
+            #button-row { width: 100%; height: 3; align: center middle; margin-top: 1; }
+            Button { width: 14; margin: 0 1; }
             """
 
             def __init__(self, session_manager, config_manager):
@@ -1068,7 +1068,7 @@ class Omega13App(App):
                 with Container(id="dialog"):
                     yield Static("Save Session Before Quitting?", id="question")
                     yield Static(f"You have {count} unsaved recording(s)", id="message")
-                    with Grid():
+                    with Horizontal(id="button-row"):
                         yield Button("Save", variant="primary", id="save")
                         yield Button("Discard", variant="error", id="discard")
                         yield Button("Cancel", id="cancel")
