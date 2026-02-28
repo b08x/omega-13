@@ -279,6 +279,7 @@ class Omega13App(App):
             if TRANSCRIPTION_AVAILABLE:
                 try:
                     provider_type = self.config_manager.get_transcription_provider()
+                    logger.info(f"Loading transcription provider: {provider_type}")
                     if provider_type == "groq":
                         provider = GroqTranscriptionProvider(
                             api_key=self.config_manager.get_groq_api_key(),

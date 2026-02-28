@@ -88,7 +88,7 @@ class Session:
     def get_next_recording_path(self) -> Path:
         """Generate path for next recording with sequential numbering."""
         num = self.get_next_recording_number()
-        filename = f"{num:03d}.mp3"
+        filename = f"{num:03d}.wav"
         return self.recordings_dir / filename
 
     def register_recording(

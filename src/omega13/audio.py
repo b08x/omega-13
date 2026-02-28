@@ -305,17 +305,16 @@ class AudioEngine:
             logger.debug(f"Queue cleanup error (non-critical): {e}")
 
     def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
-        """Write audio data to MP3 file with 16kHz mono encoding."""
+        """Write audio data to WAV file (16kHz mono)."""
         import tempfile
         import os
 
-        # Replace .wav extension with .mp3 in filename
-        if filename.endswith(".wav"):
-            mp3_filename = filename[:-4] + ".mp3"
-        else:
-            mp3_filename = (
-                filename + ".mp3" if not filename.endswith(".mp3") else filename
-            )
+        # Ensure we use .wav extension
+        if not filename.endswith(".wav"):
+            if filename.endswith(".mp3"):
+                filename = filename[:-4] + ".wav"
+            else:
+                filename = filename + ".wav"
 
         # Create temporary WAV file for intermediate processing
         temp_wav = None
@@ -323,7 +322,7 @@ class AudioEngine:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
                 temp_wav = temp_file.name
 
-            # Write audio data to temporary WAV file
+            # Write raw audio data to temporary WAV file (current session samplerate/channels)
             with sf.SoundFile(
                 temp_wav, mode="w", samplerate=self.samplerate, channels=self.channels
             ) as wav_file:
@@ -343,16 +342,16 @@ class AudioEngine:
                         if not self.is_recording:
                             break
 
-            # Apply audio processing pipeline (Trim silence -> Resample -> Encode MP3)
+            # Apply audio processing pipeline (Trim silence -> Downsample to 16kHz Mono)
             processor = AudioProcessor()
             operations = [
                 {"op": "trim_silence", "threshold_db": -50.0},
-                {"op": "encode_mp3", "bitrate": "128k"}
+                {"op": "downsample", "target_rate": 16000}  # Downsample to target 16kHz Mono
             ]
             
-            final_path = processor.process_pipeline(temp_wav, mp3_filename, operations)
+            final_path = processor.process_pipeline(temp_wav, filename, operations)
             
-            logger.info(f"Audio processed and saved: {final_path}")
+            logger.info(f"Audio processed and saved as WAV: {final_path}")
 
         except Exception as e:
             logger.error(f"File writer error: {e}")

@@ -192,9 +192,10 @@ class AudioProcessor:
         output_path: Optional[Union[str, Path]] = None,
         target_rate: Optional[int] = None,
         filter_type: str = "high_quality",
+        channels: int = 1,
     ) -> Path:
         """
-        Downsample audio to a target sample rate.
+        Downsample audio to a target sample rate and channel count.
 
         Uses high-quality resampling algorithms to maintain audio fidelity
         while reducing file size and processing requirements.
@@ -204,6 +205,7 @@ class AudioProcessor:
             output_path: Optional output path (auto-generated if None)
             target_rate: Target sample rate in Hz
             filter_type: Resampling filter quality ('fast', 'medium', 'high_quality')
+            channels: Target number of channels (default 1 for mono)
 
         Returns:
             Path to the downsampled audio file
@@ -237,21 +239,22 @@ class AudioProcessor:
                 output_path = Path(output_path)
 
             logger.info(
-                f"Downsampling {input_path} to {target_rate}Hz -> {output_path}"
+                f"Downsampling {input_path} to {target_rate}Hz ({channels}ch) -> {output_path}"
             )
 
             # Get current audio info
             try:
                 current_info = self.get_audio_info(input_path)
                 current_rate = current_info['sample_rate']
-                logger.debug(f"Current sample rate: {current_rate}Hz")
+                current_channels = current_info['channels']
+                logger.debug(f"Current audio: {current_rate}Hz, {current_channels}ch")
             except Exception as e:
                 logger.error(f"Failed to get audio info: {e}")
                 raise
 
-            # Skip resampling if already at target rate
-            if current_rate == target_rate:
-                logger.info(f"Audio already at target rate {target_rate}Hz")
+            # Skip resampling if already at target rate and channels
+            if current_rate == target_rate and current_channels == channels:
+                logger.info(f"Audio already at target rate {target_rate}Hz and {channels}ch")
                 # Copy file to output path if different
                 if input_path != output_path:
                     import shutil
@@ -276,7 +279,8 @@ class AudioProcessor:
                     'linear_interp': 1 if filter_type != 'fast' else 0,
                     'cutoff': 0.98 if filter_type == 'high_quality' else 0.9
                 })
-                stream = ffmpeg.output(stream, str(output_path), acodec='pcm_s16le')
+                # Force output codec and channels
+                stream = ffmpeg.output(stream, str(output_path), acodec='pcm_s16le', ac=channels)
 
                 # Run resampling
                 logger.debug(f"Running FFmpeg resampling: {current_rate}Hz -> {target_rate}Hz")
@@ -372,6 +376,9 @@ class AudioProcessor:
                     'acodec': 'mp3',
                     'audio_bitrate': bitrate,
                     'ac': 1,  # Force mono output
+                    'map_metadata': '-1',  # Strip all metadata/ID3 tags
+                    'write_id3v2': '0',   # Disable ID3v2 tags
+                    'fflags': '+bitexact', # Use bitexact mode to avoid encoder metadata
                 }
                 output_stream = stream.output(
                     str(output_path),
