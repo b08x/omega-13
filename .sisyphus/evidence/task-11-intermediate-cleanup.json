@@ -1,8 +1,0 @@
-{
-  "task": "intermediate-cleanup",
-  "method": "process_pipeline",
-  "cleanup_logic": "verified",
-  "intermediate_files": "removed",
-  "final_output": "preserved",
-  "error_scenarios": "handled"
-}
