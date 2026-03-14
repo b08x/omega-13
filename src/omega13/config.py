@@ -42,6 +42,7 @@ class ConfigManager:
                 "save_to_file": True,
                 "copy_to_clipboard": False,
                 "inject_to_active_window": False,
+                "write_to_daily_note": False,
             },
             "desktop_notifications": True,
             "sessions": {
@@ -233,6 +234,17 @@ class ConfigManager:
         if "transcription" not in self.config:
             self.config["transcription"] = {}
         self.config["transcription"]["inject_to_active_window"] = enabled
+        self.save_config(self.config)
+
+    def get_write_to_daily_note(self) -> bool:
+        """Get whether to write transcription results to Obsidian daily note."""
+        return self.config.get("transcription", {}).get("write_to_daily_note", False)
+
+    def set_write_to_daily_note(self, enabled: bool) -> None:
+        """Set whether to write transcription results to Obsidian daily note."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["write_to_daily_note"] = enabled
         self.save_config(self.config)
 
     # Session Getters

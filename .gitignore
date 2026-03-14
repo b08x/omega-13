@@ -23,3 +23,6 @@ backlog.md
 .worktrees/
 
 .sisyphus/evidence/
+
+.codemap/
+.claude/

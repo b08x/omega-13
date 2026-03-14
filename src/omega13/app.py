@@ -31,6 +31,7 @@ from .notifications import DesktopNotifier
 from .signal_detector import SignalDetector
 from .recording_controller import RecordingController, RecordingState, RecordingEvent
 from .dbus_service import DBusService
+from .obsidian_cli import obsidian_cli
 # Optional import for transcription
 try:
     from .transcription import (
@@ -111,6 +112,7 @@ class Omega13App(App):
         Binding("a", "toggle_auto_record", "Toggle Auto-record"),
         Binding("c", "toggle_clipboard", "Toggle Clipboard"),
         Binding("j", "toggle_injection", "Toggle Injection"),
+        Binding("d", "toggle_daily_note", "Toggle Daily Note"),
         Binding("p", "open_settings", "Settings"),
         Binding("q", "quit", "Quit"),
     ]
@@ -118,6 +120,7 @@ class Omega13App(App):
     auto_record_enabled = reactive(False)
     copy_to_clipboard = reactive(False)
     inject_to_active_window = reactive(False)
+    write_to_daily_note = reactive(False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -210,7 +213,17 @@ class Omega13App(App):
             self.inject_to_active_window = (
                 self.config_manager.get_inject_to_active_window()
             )
+            self.write_to_daily_note = self.config_manager.get_write_to_daily_note()
             self.auto_record_enabled = self.config_manager.get_auto_record_enabled()
+
+            # Open daily note on launch if enabled
+            if self.write_to_daily_note:
+                result = obsidian_cli.open_daily_note_if_enabled()
+                if result.success:
+                    self.notify("Daily note opened", severity="information", timeout=2)
+                elif "not configured" not in result.message.lower():
+                    # Only show error if it's not just unconfigured
+                    self.notify(f"Daily note: {result.message}", severity="warning", timeout=3)
 
             temp_root = self.config_manager.get_session_temp_root()
             self.session_manager = SessionManager(temp_root=temp_root)
@@ -223,7 +236,7 @@ class Omega13App(App):
 
             help_text = self.query_one("#help-text", Static)
             help_text.update(
-                f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | P Settings[/dim]"
+                f"\n[dim]{formatted_hotkey} to Capture | I Inputs | N New | S Save | T Transcribe | A Auto-Rec | C Clip | J Inject | D Daily | P Settings[/dim]"
             )
             self.session_manager.create_session()
             self._update_session_status()
@@ -657,11 +670,32 @@ class Omega13App(App):
             status = "enabled" if value else "disabled"
             self.notify(f"Clipboard copy {status}", severity="information", timeout=2)
 
+            # Mutual exclusivity: disable daily note when copy/inject is enabled
+            if value and self.write_to_daily_note:
+                self.write_to_daily_note = False
+
     def watch_inject_to_active_window(self, value: bool) -> None:
         if hasattr(self, "config_manager"):
             self.config_manager.set_inject_to_active_window(value)
             status = "enabled" if value else "disabled"
             self.notify(f"Text injection {status}", severity="information", timeout=2)
+
+            # Mutual exclusivity: disable daily note when copy/inject is enabled
+            if value and self.write_to_daily_note:
+                self.write_to_daily_note = False
+
+    def watch_write_to_daily_note(self, value: bool) -> None:
+        if hasattr(self, "config_manager"):
+            self.config_manager.set_write_to_daily_note(value)
+            status = "enabled" if value else "disabled"
+            self.notify(f"Daily note writing {status}", severity="information", timeout=2)
+
+            # Mutual exclusivity: disable copy/inject when daily note is enabled
+            if value:
+                if self.copy_to_clipboard:
+                    self.copy_to_clipboard = False
+                if self.inject_to_active_window:
+                    self.inject_to_active_window = False
 
     def action_toggle_record(self) -> None:
         """Toggle recording on/off (manual control)."""
@@ -741,6 +775,9 @@ class Omega13App(App):
         def on_injection_error(error_msg):
             self.call_from_thread(self._handle_injection_error, error_msg)
 
+        def on_daily_note_error(error_msg):
+            self.call_from_thread(self._handle_daily_note_error, error_msg)
+
         copy_enabled = self.config_manager.get_copy_to_clipboard()
         inject_enabled = self.config_manager.get_inject_to_active_window()
 
@@ -752,6 +789,8 @@ class Omega13App(App):
             clipboard_error_callback=on_clipboard_error,
             inject_to_active_window_enabled=self.inject_to_active_window,  # Use reactive state
             injection_error_callback=on_injection_error,
+            write_to_daily_note_enabled=self.write_to_daily_note,  # Use reactive state
+            daily_note_error_callback=on_daily_note_error,
         )
 
     def action_toggle_auto_record(self) -> None:
@@ -765,6 +804,10 @@ class Omega13App(App):
     def action_toggle_injection(self) -> None:
         """Toggle text injection."""
         self.inject_to_active_window = not self.inject_to_active_window
+
+    def action_toggle_daily_note(self) -> None:
+        """Toggle daily note writing."""
+        self.write_to_daily_note = not self.write_to_daily_note
 
     def _handle_result(self, result, audio_file):
         display = self.query_one("#transcription-display", TranscriptionDisplay)
@@ -787,6 +830,11 @@ class Omega13App(App):
     def _handle_injection_error(self, error_msg: str):
         self.notify(
             f"Text injection failed: {error_msg}", severity="warning", timeout=4
+        )
+
+    def _handle_daily_note_error(self, error_msg: str):
+        self.notify(
+            f"Daily note writing failed: {error_msg}", severity="warning", timeout=4
         )
 
     def action_manual_transcribe(self):
