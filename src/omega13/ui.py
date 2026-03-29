@@ -282,7 +282,6 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
         self.provider = config.get("provider", "local")
         self.server_url = config.get("server_url", "http://localhost:8080")
         self.inference_path = config.get("inference_path", "/inference")
-        self.groq_api_key = config.get("groq_api_key", "")
         self.groq_model = config.get("groq_model", "whisper-large-v3-turbo")
 
     def compose(self) -> ComposeResult:
@@ -323,13 +322,9 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
             with Vertical(
                 id="groq-settings", classes="" if self.provider == "groq" else "hidden"
             ):
-                yield Label("Groq API Key:", classes="settings-label")
-                yield Input(
-                    value=self.groq_api_key,
-                    placeholder="gsk_...",
-                    id="groq-api-key-input",
-                    password=True,
-                    classes="settings-input",
+                yield Label(
+                    "Note: Groq API Key must be set in the 'GROQ_API_KEY' environment variable.",
+                    classes="settings-label",
                 )
 
                 yield Label("Groq Model:", classes="settings-label")
@@ -348,7 +343,7 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
         if self.provider == "local":
             self.query_one("#server-url-input").focus()
         else:
-            self.query_one("#groq-api-key-input").focus()
+            self.query_one("#groq-model-input").focus()
 
     def on_radio_set_changed(self, event: RadioSet.Changed):
         is_local = event.pressed.id == "local-provider"
@@ -359,14 +354,10 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
         provider = "local" if self.query_one("#local-provider").value else "groq"
         url = self.query_one("#server-url-input").value.strip()
         path = self.query_one("#inference-path-input").value.strip()
-        api_key = self.query_one("#groq-api-key-input").value.strip()
         model = self.query_one("#groq-model-input").value.strip()
 
         if provider == "local" and not url:
             self.app.notify("Server URL cannot be empty", severity="error")
-            return
-        if provider == "groq" and not api_key:
-            self.app.notify("Groq API Key cannot be empty", severity="error")
             return
 
         self.dismiss(
@@ -374,7 +365,6 @@ class TranscriptionSettingsScreen(ModalScreen[dict | None]):
                 "provider": provider,
                 "server_url": url,
                 "inference_path": path or "/inference",
-                "groq_api_key": api_key,
                 "groq_model": model or "whisper-large-v3-turbo",
             }
         )

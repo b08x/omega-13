@@ -849,7 +849,6 @@ class Omega13App(App):
             "provider": self.config_manager.get_transcription_provider(),
             "server_url": self.config_manager.get_transcription_server_url(),
             "inference_path": self.config_manager.get_transcription_inference_path(),
-            "groq_api_key": self.config_manager.get_groq_api_key(),
             "groq_model": self.config_manager.get_groq_model(),
         }
 
@@ -863,7 +862,6 @@ class Omega13App(App):
             self.config_manager.set_transcription_inference_path(
                 result["inference_path"]
             )
-            self.config_manager.set_groq_api_key(result["groq_api_key"])
             self.config_manager.set_groq_model(result["groq_model"])
 
             # Update transcription service
@@ -871,7 +869,8 @@ class Omega13App(App):
                 provider_type = result["provider"]
                 if provider_type == "groq":
                     provider = GroqTranscriptionProvider(
-                        api_key=result["groq_api_key"], model=result["groq_model"]
+                        api_key=self.config_manager.get_groq_api_key(),
+                        model=result["groq_model"],
                     )
                 else:
                     provider = LocalTranscriptionProvider(

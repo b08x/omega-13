@@ -37,7 +37,6 @@ class ConfigManager:
                 "server_url": "http://localhost:8080",
                 "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
-                "groq_api_key": "",
                 "groq_model": "whisper-large-v3-turbo",
                 "save_to_file": True,
                 "copy_to_clipboard": False,
@@ -160,20 +159,10 @@ class ConfigManager:
         self.save_config(self.config)
 
     def get_groq_api_key(self) -> str:
-        """Get Groq API key, checking environment variable first."""
+        """Get Groq API key from environment variable."""
         import os
 
-        env_key = os.environ.get("GROQ_API_KEY")
-        if env_key:
-            return env_key
-        return self.config.get("transcription", {}).get("groq_api_key", "")
-
-    def set_groq_api_key(self, api_key: str) -> None:
-        """Set Groq API key."""
-        if "transcription" not in self.config:
-            self.config["transcription"] = {}
-        self.config["transcription"]["groq_api_key"] = api_key
-        self.save_config(self.config)
+        return os.environ.get("GROQ_API_KEY", "")
 
     def get_groq_model(self) -> str:
         """Get Groq model name."""

@@ -59,7 +59,6 @@ def demo_ui_integration():
         "provider": "local",
         "server_url": "http://localhost:8080",
         "inference_path": "/inference",
-        "groq_api_key": "",
         "groq_model": "whisper-large-v3-turbo",
         "enable_auto_transcription": True
     }
@@ -78,7 +77,6 @@ def demo_ui_integration():
         "provider": "groq",
         "server_url": "http://localhost:8080",
         "inference_path": "/inference",
-        "groq_api_key": "gsk_example_key",
         "groq_model": "whisper-large-v3-turbo",
         "enable_auto_transcription": False  # User disabled it
     }
@@ -144,7 +142,6 @@ def demo_complete_workflow():
         "provider": config.get_transcription_provider(),
         "server_url": config.get_transcription_server_url(),
         "inference_path": config.get_transcription_inference_path(),
-        "groq_api_key": config.get_groq_api_key(),
         "groq_model": config.get_groq_model(),
         "enable_auto_transcription": enable_auto_transcription,
     }

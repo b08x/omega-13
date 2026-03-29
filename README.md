@@ -26,7 +26,7 @@
 - Python 3.12+
 - [`uv`](https://github.com/astral-sh/uv) for dependency management
 - For local transcription: a running `whisper-server` instance (default: `http://localhost:8080`)
-- For cloud transcription: a Groq API key (set via `GROQ_API_KEY` env var or the Settings screen)
+- For cloud transcription: a Groq API key (set via `GROQ_API_KEY` environment variable)
 - For Obsidian daily note integration: `obsidian-cli` installed and configured
 
 ---
@@ -113,7 +113,6 @@ Config lives at `~/.config/omega13/config.json` and is written on first run with
     "provider": "local",
     "server_url": "http://localhost:8080",
     "inference_path": "/inference",
-    "groq_api_key": "",
     "groq_model": "whisper-large-v3-turbo",
     "auto_transcribe": true,
     "copy_to_clipboard": false,
@@ -141,7 +140,6 @@ Config lives at `~/.config/omega13/config.json` and is written on first run with
 - `provider`: Transcription backend — `"local"` (whisper-server) or `"groq"`
 - `server_url`: Base URL for the local whisper-server (default: `"http://localhost:8080"`)
 - `inference_path`: Endpoint path on the local server (default: `"/inference"`)
-- `groq_api_key`: Groq API key; the `GROQ_API_KEY` environment variable takes precedence if set
 - `groq_model`: Groq model identifier (default: `"whisper-large-v3-turbo"`)
 - `auto_transcribe`: Automatically transcribe after each capture (default: `true`)
 - `copy_to_clipboard`: Copy result text to clipboard after transcription (default: `false`)
