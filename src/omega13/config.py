@@ -141,6 +141,13 @@ class ConfigManager:
     def get_auto_transcribe(self) -> bool:
         return self.config.get("transcription", {}).get("auto_transcribe", True)
 
+    def set_auto_transcribe(self, enabled: bool) -> None:
+        """Set whether to automatically transcribe after each capture."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["auto_transcribe"] = enabled
+        self.save_config(self.config)
+
     def get_transcription_model(self) -> str:
         return self.config.get("transcription", {}).get("model_size", "large-v3-turbo")
 
