@@ -3,7 +3,7 @@
 **/logs/
 **/results/
 **__pycache__
-*.venv
+.venv/
 .code-packager-*
 omega-13.json
 omega-13.csv
@@ -28,3 +28,6 @@ backlog.md
 .claude/
 
 logs/
+.cache/
+
+.ruff_cache/

@@ -1,81 +1,217 @@
-# Omega-13 🌌
+# Omega-13
 
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=for-the-badge&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/b08x/omega-13)
+> Captures the last 13 seconds of audio on demand, transcribes locally or via cloud, and routes the result wherever it's needed.
 
-> *"It's a time machine... but it only goes back 13 seconds."*
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![uv](https://img.shields.io/badge/managed%20by-uv-7c3aed)](https://github.com/astral-sh/uv)
 
-## 🤖 About This Project
+---
 
+## Features
 
-Omega-13 is an experiment in natural language programming: a retroactive audio recording and transcription system built by iteratively specifying requirements in English and using large language model (LLM) coding assistants and agents to generate, debug, and evolve the implementation. This project demonstrates how disparate programming languages and system components can be coalesced through a workflow where English serves as the source code, and AI models act as the compiler and implementer. The following documentation outlines the architecture, development process, and lessons learned, with references to deeper technical details and project evolution.
+- **Retroactive ring buffer** — continuously holds 13 seconds of JACK/PipeWire audio in memory; saving reconstructs a linear WAV from circular segments with zero re-recording
+- **Local or cloud transcription** — routes audio to a self-hosted `whisper-server` (HTTP) or the Groq Whisper API; provider and credentials switch at runtime via the Settings screen
+- **Auto-record mode** — RMS-based voice-activity detection arms recording when signal crosses a configurable dB threshold and stops automatically after a configurable silence window
+- **Session management** — recordings accumulate in a timestamped temp session under `/tmp/omega13/`; the session saves to permanent storage on demand, with incremental sync for recordings added after the initial save
+- **Multi-destination output** — transcription results can be written to a Markdown file, copied to the clipboard, typed into the active Wayland window via `pynput`, or appended to an Obsidian daily note
+- **Wayland-native IPC** — the app writes a PID file and handles `SIGUSR1` so external tools (compositor hotkey daemons, D-Bus clients) can trigger recording without requiring keyboard focus
+- **Overlap deduplication** — when auto-record produces consecutive clips with shared audio, the session de-duplicates transcriptions by matching word-level suffix–prefix overlaps before appending
 
-## 🎙️ Purpose and Scope
+---
 
-Omega-13 addresses the need to capture and transcribe fleeting audio moments—such as spontaneous thoughts or conversations—by continuously recording audio in memory and allowing users to retroactively save and transcribe the last several seconds on demand. The system is designed for privacy (local transcription), real-time performance, and seamless integration with modern Linux desktops, including those running under Wayland.
+## Requirements
 
-## 🏗 Architecture: Natural Language Specification → Implementation
+- Linux with JACK or PipeWire-JACK bridge running
+- Python 3.12+
+- [`uv`](https://github.com/astral-sh/uv) for dependency management
+- For local transcription: a running `whisper-server` instance (default: `http://localhost:8080`)
+- For cloud transcription: a Groq API key (set via `GROQ_API_KEY` env var or the Settings screen)
+- For Obsidian daily note integration: `obsidian-cli` installed and configured
 
-The architecture is the result of a declarative, iterative process: requirements are described in English, and LLM agents translate them into working code. The human remains the programmer, but the language shifts from Python (or C, or Bash) to English. The AI is the compiler, not the author.
+---
 
-### 📊 High-Level Flow
+## Installation
 
-```mermaid
-graph TD
-    A["User (English requirements)"]
-    B["LLM Agents (Claude, Gemini, GLM-4)"]
-    C["Python Implementation"]
-    D["JACK/PipeWire Audio Backend"]
-    E["Textual TUI Frontend"]
-    F["Whisper Transcription Server (Docker)"]
-    G["IPC (PID files, signals)"]
+<details>
+<summary>From source (recommended)</summary>
 
-    A --> B
-    B --> C
-    C --> D
-    C --> E
-    C --> G
-    D --> C
-    E --> C
-    C --> F
-    G --> C
+```bash
+git clone https://github.com/b08x/omega-13.git
+cd omega-13
+uv sync
 ```
 
-- The user specifies needs in English (e.g., "Always record in memory, save the past 13 seconds when triggered").
-- LLM agents translate requirements into architecture and code, iterating on feedback and new specifications.
-- The Python implementation orchestrates a Textual TUI frontend, a JACK/PipeWire audio backend with a ring buffer, RMS-based signal detection, a state machine for recording control, and a local Whisper transcription server running in Docker.
-- Inter-process communication uses PID files and signals to work around Wayland security constraints, enabling global hotkeys and seamless OS integration.
+</details>
 
-### 📦 Key Components
+<details>
+<summary>Docker (whisper-server)</summary>
 
-- **Textual TUI Frontend:** Provides a keyboard-driven terminal interface for control and feedback.
-- **JACK/PipeWire Audio Backend:** Continuously records audio into a ring buffer, enabling retroactive capture.
-- **Signal Detection:** Uses RMS-based energy monitoring to trigger recording only when voice activity is detected, reducing empty or noisy captures.
-- **Recording Controller:** Implements a finite state machine to manage recording lifecycle and transitions.
-- **Transcription:** Ships reconstructed audio to a local Whisper server for transcription, ensuring privacy and low latency.
-- **IPC:** Employs PID files and SIGUSR1 signals for reliable control, especially under Wayland.
+A `compose.yml` is included for running the whisper-server dependency:
 
-For a detailed breakdown of modules, threading constraints, and anti-patterns encountered during AI-driven development, see [AGENTS.md](https://github.com/b08x/omega-13/blob/a73786378ea1683937ab3bd5bc5533ac87c26017/AGENTS.md#L9-L117).
+```bash
+docker compose up -d
+```
 
-### 📊 Example: Ring Buffer Mechanics
+This brings up a GPU-accelerated whisper-server on port 8080. Adjust the model in `compose.yml` as needed.
 
-The audio backend uses a modulo-wrapped ring buffer to continuously record audio. When the user triggers a save, the system reconstructs the last N seconds by combining the pre-buffer and live queue, then writes a linear WAV file for transcription. This approach was specified in English and implemented by the AI, abstracting away the complexity of real-time audio programming.
+</details>
 
-## 🕰️ Iterative, LLM-Driven Development
+---
 
-Development is requirement-centric: bugs are described, not debugged; features are specified, not implemented. Each iteration begins with a natural language prompt, and the AI agents propose, generate, or refactor code accordingly. This process has enabled rapid prototyping and adaptation, even for complex, multi-threaded, real-time systems.
+## Usage
 
-The toolchain includes multiple LLMs (Claude, Gemini, GLM-4) and custom development environments for natural language programming and rapid iteration. The workflow is local-first, with no CI/CD, and leverages modern Python packaging and Docker-based deployment for the transcription server.
+```bash
+uv run omega13
+```
 
-## 📚 Capabilities and Experience
+On first launch, the Input Selection screen prompts for JACK port selection. The choice persists to `~/.config/omega13/config.json`.
 
-Omega-13 demonstrates that complex systems with real-time constraints, threading, and cross-language integration can be specified and evolved through natural language programming. The project has grown to support multi-channel input, mono/stereo selection, decibel level display, configurable save paths, session-based workflows, and containerized Whisper transcription with CUDA acceleration. Recent updates include improved signal detection, TUI key bindings, and advanced agent context management protocols. For a full history of features and improvements, see [CHANGELOG.md](https://github.com/b08x/omega-13/blob/a73786378ea1683937ab3bd5bc5533ac87c26017/CHANGELOG.md#L3-L121).
+### Keyboard Shortcuts
 
-## 🔧 Self-Assessment and Knowledge Gaps
+| Key | Action |
+|-----|--------|
+| `Space` / global hotkey | Capture last 13 seconds |
+| `a` | Toggle auto-record mode |
+| `t` | Manually trigger transcription |
+| `c` | Toggle clipboard copy |
+| `j` | Toggle text injection to active window |
+| `d` | Toggle Obsidian daily note output |
+| `i` | Open input port selector |
+| `n` | Start a new session |
+| `s` | Save current session to permanent storage |
+| `p` | Open transcription settings |
+| `q` | Quit |
 
-While the LLM-driven approach has enabled rapid progress and a high degree of flexibility, it is not without limitations. The generated code is not always perfect, and there are areas—such as low-level audio performance, advanced threading, and edge-case error handling—where deeper expertise or manual review may be required. The project is an ongoing experiment in collaborative software creation, and both the human and AI contributors continue to learn from each iteration. The documentation, especially [AGENTS.md](https://github.com/b08x/omega-13/blob/a73786378ea1683937ab3bd5bc5533ac87c26017/AGENTS.md#L9-L117), encodes lessons learned, anti-patterns, and operational constraints to guide future development.
+The global hotkey defaults to `Ctrl+Alt+Space` and can be changed in `~/.config/omega13/config.json`.
 
-## 🤝 Collaboration and Next Steps
+### Examples
 
-Omega-13 is designed to be both a tool and a living case study in natural language programming. Contributions, feedback, and critical review—whether from humans or AI agents—are welcome. The project aspires to lower the barrier to custom software by making English the lingua franca of programming, while remaining grounded in the realities of system integration and operational safety.
+```bash
+# Launch with default settings
+uv run omega13
 
-For technical deep-dives, implementation details, and guidance for AI collaborators, consult [AGENTS.md](https://github.com/b08x/omega-13/blob/a73786378ea1683937ab3bd5bc5533ac87c26017/AGENTS.md#L9-L117). For a chronological record of changes and feature evolution, see [CHANGELOG.md](https://github.com/b08x/omega-13/blob/a73786378ea1683937ab3bd5bc5533ac87c26017/CHANGELOG.md#L3-L121).
+# Override Groq API key at runtime
+GROQ_API_KEY=gsk_... uv run omega13
+
+# Trigger a capture from an external script (e.g., a Hyprland keybind)
+kill -USR1 $(cat /tmp/omega13.pid)
+```
+
+---
+
+## Configuration
+
+Config lives at `~/.config/omega13/config.json` and is written on first run with defaults. The Settings screen (`p`) handles most options at runtime; manual edits require a restart.
+
+```json
+{
+  "input_ports": ["system:capture_1", "system:capture_2"],
+  "save_path": "/home/user/Recordings",
+  "global_hotkey": "<ctrl>+<alt>+space",
+  "transcription": {
+    "provider": "local",
+    "server_url": "http://localhost:8080",
+    "inference_path": "/inference",
+    "groq_api_key": "",
+    "groq_model": "whisper-large-v3-turbo",
+    "auto_transcribe": true,
+    "copy_to_clipboard": false,
+    "inject_to_active_window": false,
+    "write_to_daily_note": false
+  },
+  "auto_record": {
+    "enabled": false,
+    "begin_threshold_db": -35.0,
+    "end_threshold_db": -35.0,
+    "silence_duration_seconds": 10.0
+  },
+  "sessions": {
+    "temp_root": "/tmp/omega13",
+    "default_save_location": "/home/user/Recordings",
+    "auto_cleanup_days": 7
+  }
+}
+```
+
+### Configuration Options
+
+**Transcription**
+
+- `provider`: Transcription backend — `"local"` (whisper-server) or `"groq"`
+- `server_url`: Base URL for the local whisper-server (default: `"http://localhost:8080"`)
+- `inference_path`: Endpoint path on the local server (default: `"/inference"`)
+- `groq_api_key`: Groq API key; the `GROQ_API_KEY` environment variable takes precedence if set
+- `groq_model`: Groq model identifier (default: `"whisper-large-v3-turbo"`)
+- `auto_transcribe`: Automatically transcribe after each capture (default: `true`)
+- `copy_to_clipboard`: Copy result text to clipboard after transcription (default: `false`)
+- `inject_to_active_window`: Type result into the focused Wayland window (default: `false`)
+- `write_to_daily_note`: Append result to the current Obsidian daily note (default: `false`)
+
+**Auto-Record**
+
+- `begin_threshold_db`: RMS level above which recording starts (default: `-35.0`)
+- `end_threshold_db`: RMS level below which the silence timer starts (default: `-35.0`)
+- `silence_duration_seconds`: Seconds of silence before auto-stop (default: `10.0`)
+
+**Sessions**
+
+- `temp_root`: Working directory for in-progress sessions (default: `"/tmp/omega13"`)
+- `default_save_location`: Destination for saved sessions (default: `~/Recordings`)
+- `auto_cleanup_days`: Age in days before unsaved temp sessions are pruned (default: `7`)
+
+---
+
+## Session Structure
+
+Each saved session is a directory under the configured save location:
+
+```
+omega13_session_2024-01-15_10-30-00/
+├── session.json          # metadata: timestamps, recording list, transcriptions
+├── recordings/
+│   ├── 001.mp4
+│   └── 002.mp4
+└── transcriptions/
+    ├── 001.md
+    └── 002.md
+```
+
+Sessions accumulate incrementally — recordings added after an initial save are synced to the permanent location automatically.
+
+---
+
+## Auto-Record Mode
+
+Pressing `a` arms the auto-record state machine. From that point:
+
+1. Signal above `begin_threshold_db` triggers a capture automatically
+2. When the signal drops below `end_threshold_db`, a silence countdown begins
+3. After `silence_duration_seconds` of continuous silence, the recording stops and (if `auto_transcribe` is on) transcription starts
+4. The system returns to armed state, ready for the next event
+
+Recordings with average RMS below -50 dB (near-silence false triggers) are discarded silently before transcription begins.
+
+---
+
+## Development
+
+```bash
+uv sync
+uv run pytest                          # full test suite
+uv run pytest tests/test_tui_bindings.py -v   # TUI binding tests only
+```
+
+Tests that instantiate the full app mock `omega13.app.obsidian_cli` and the JACK-dependent `AudioEngine` to avoid hardware requirements. The `tests/` directory also contains demo and integration scripts (`demo_*.py`, `example_*.py`) that require real JACK and whisper-server connections.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. For significant changes, opening an issue first to discuss the approach tends to save iteration time.
+
+---
+
+## License
+
+MIT
