@@ -398,7 +398,120 @@ dependencies = [
 
 ---
 
-## 12. Future Upgrade Path
+## 12. GNOME Shell Panel Extension
+
+A GJS extension that displays daemon state in the GNOME top bar, communicating exclusively via D-Bus — no Python imports, no shared process.
+
+### Structure
+
+```
+gnome-extension/omega-13-indicator@b08x.github.io/
+├── extension.js      # panel indicator + D-Bus proxy
+├── metadata.json     # GNOME Shell version compatibility
+└── stylesheet.css    # visual styling
+```
+
+Installation target: `~/.local/share/gnome-shell/extensions/omega-13-indicator@b08x.github.io/`
+Added as `make install-extension` in a new top-level `Makefile`.
+
+### Panel States
+
+| Daemon State | Icon | Label |
+|---|---|---|
+| Daemon not running | 🎙️ grey | — |
+| IDLE / auto-record off | 🎙️ dim | preset name |
+| ARMED — monitoring | 🔴 pulsing | `armed` |
+| RECORDING | ⚡ animated | `recording…` |
+| PROCESSING (tagger) | ⟳ spinner | `tagging…` |
+| ASSISTANT CALLING | ⟳ spinner | command name |
+| COMPLETE | ✅ brief flash | `register · intent` |
+| ERROR | ⚠️ | `failed: stage` |
+
+### `extension.js` — core pattern
+
+```javascript
+import Gio from 'gi://Gio';
+import St from 'gi://St';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+
+export default class Omega13Extension extends Extension {
+    enable() {
+        this._indicator = new Omega13Indicator();
+        Main.panel.addToStatusArea('omega13', this._indicator, 1);
+        this._indicator.connectDaemon();
+    }
+
+    disable() {
+        this._indicator.disconnectDaemon();
+        this._indicator.destroy();
+        this._indicator = null;
+    }
+}
+
+class Omega13Indicator extends PanelMenu.Button {
+    connectDaemon() {
+        // Gracefully handles daemon up/down — no polling
+        this._watchId = Gio.bus_watch_name(
+            Gio.BusType.SESSION,
+            'io.github.b08x.Omega13',
+            Gio.BusNameWatcherFlags.NONE,
+            () => this._onDaemonAppeared(),
+            () => this._onDaemonVanished()
+        );
+    }
+
+    _onDaemonAppeared() {
+        this._proxy.connectSignal('PipelineStarted',  (_, __, [preset]) =>
+            this._setState('recording', preset));
+        this._proxy.connectSignal('PipelineComplete', (_, __, [preset, register, intent]) =>
+            this._setState('complete', `${register} · ${intent}`));
+        this._proxy.connectSignal('PipelineFailed',   (_, __, [preset, stage, error]) =>
+            this._setState('error', `failed: ${stage}`));
+        this._proxy.connectSignal('AssistantCalling', (_, __, [preset, cmd]) =>
+            this._setState('assistant', cmd));
+        this._proxy.connectSignal('PresetChanged',    (_, __, [name]) =>
+            this._updatePresetLabel(name));
+    }
+}
+```
+
+### Menu Layout
+
+```
+┌──────────────────────────────┐
+│  🎙️  omega-13  [dictate]     │
+├──────────────────────────────┤
+│  Auto-record    [toggle]     │
+│  Preset ▶                    │
+│    • dictate                 │
+│      code                    │
+│      reflect                 │
+│      brainstorm              │
+├──────────────────────────────┤
+│  Last: "technical · instr…"  │
+│  "Fix the recording controll │
+│   er state machine…"         │
+└──────────────────────────────┘
+```
+
+Menu actions call existing D-Bus methods: `SetAutoRecord`, `SetPreset`, `ListPresets`.
+
+### New files
+
+```
+gnome-extension/omega-13-indicator@b08x.github.io/
+├── extension.js
+├── metadata.json
+└── stylesheet.css
+Makefile                       # install-extension target
+```
+
+---
+
+## 13. Future Upgrade Path
 
 - **DSPy optimization**: Once ~50 labeled transcriptions exist (daily notes are ready-made training data), run DSPy's optimizer to tune `TranscriptionSignature` prompts automatically — no code changes required
 - **Streaming assistant responses**: `AssistantCaller` can be extended to stream stdout from the CLI tool to D-Bus signals, enabling live TUI display of assistant output
