@@ -25,6 +25,21 @@ class VUMeter(Static):
     level = reactive(0.0)
     db_level = reactive(-100.0)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_rendered_level = -1.0
+        self._last_rendered_db = -200.0
+
+    def update_levels(self, level: float, db: float) -> None:
+        """Atomic update of levels to reduce reactive overhead."""
+        # Only update reactive attributes if change is significant (> 1%)
+        # or if we are crossing important thresholds (e.g. 0 level)
+        if abs(self.level - level) > 0.01 or (level == 0 and self.level > 0):
+            self.level = level
+        
+        if abs(self.db_level - db) > 0.5 or (db == -100.0 and self.db_level > -100.0):
+            self.db_level = db
+
     def watch_level(self, level: float) -> None:
         self.update_bar()
 
@@ -40,7 +55,14 @@ class VUMeter(Static):
             return "green"
 
     def update_bar(self) -> None:
+        # Extra safeguard: don't thrash the DOM if visual state is same
         pct = min(100, int(self.level * 100))
+        if pct == self._last_rendered_level and abs(self.db_level - self._last_rendered_db) < 0.2:
+            return
+
+        self._last_rendered_level = pct
+        self._last_rendered_db = self.db_level
+        
         color = self._get_level_color(pct)
         level_bar_display = "|" * (pct // 2)
         db_str = f"{self.db_level:>5.1f} dB" if self.db_level > -100 else "-inf dB"
