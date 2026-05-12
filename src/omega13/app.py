@@ -353,10 +353,15 @@ class Omega13App(App):
                     logger = logging.getLogger(__name__)
                     logger.warning(f"D-Bus service registration failed: {e}")
                     self.dbus_service = None
-            self.set_interval(0.05, self.update_meters)
+            
+            # Performance Optimization: Reduced UI refresh rates
+            self.set_interval(0.1, self.update_meters) # 10Hz for meters (was 20Hz)
             self.set_interval(
                 0.2, self.check_auto_triggers
-            )  # 200ms for auto-record logic (reduced from 100ms for performance)
+            )  # 5Hz for auto-record logic
+            
+            # Throttle slow-changing info (once per second)
+            self.set_interval(1.0, self.update_slow_info)
         except Exception as e:
             self.exit(message=f"Failed to start: {e}")
 
@@ -445,20 +450,21 @@ class Omega13App(App):
         logger.info(f"=== SHUTDOWN COMPLETE: {total_time:.2f}s ===")
 
     def update_meters(self):
+        """Update VU meters (called at 10Hz)."""
         try:
             peaks, dbs = self.engine.get_peak_meters()
             meter_1 = self.query_one("#meter-1", VUMeter)
-            meter_1.level = peaks[0]
-            meter_1.db_level = dbs[0]
+            # Use atomic update to avoid double layout trigger
+            meter_1.update_levels(peaks[0], dbs[0])
 
             if len(peaks) > 1 and self.engine.channels > 1:
                 meter_2 = self.query_one("#meter-2", VUMeter)
-                meter_2.level = peaks[1]
-                meter_2.db_level = dbs[1]
+                meter_2.update_levels(peaks[1], dbs[1])
         except NoMatches:
             pass
 
-        # Update buffer info display
+    def update_slow_info(self):
+        """Update slow-changing UI elements (called at 1Hz)."""
         try:
             from .recording_controller import RecordingState
             state = self.recording_controller.get_state()
