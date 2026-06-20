@@ -1,9 +1,9 @@
 # Omega-13
 
-> Captures the last 13 seconds of audio on demand, transcribes locally or via cloud, and routes the result wherever it's needed.
+> Retroactive audio capture — holds 13 seconds in a ring buffer, transcribes on demand, routes the result wherever it needs to go.
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![uv](https://img.shields.io/badge/managed%20by-uv-7c3aed)](https://github.com/astral-sh/uv)
 
 ---
