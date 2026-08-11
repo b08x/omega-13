@@ -61,11 +61,21 @@ This brings up a GPU-accelerated whisper-server on port 8080. Adjust the model i
 
 ## Usage
 
+Omega-13 now runs as a **background daemon by default**. Use `--no-daemon` to launch in the foreground when you need direct terminal access, live logs, or debugging.
+
 ```bash
-uv run omega13
+# Default: start as a background daemon (writes PID to /tmp/omega13.pid)
+uv run python -m omega13
 ```
 
-On first launch, the Input Selection screen prompts for JACK port selection. The choice persists to `~/.config/omega13/config.json`.
+The daemon runs headless by default. To use the Textual TUI, pass `--tui`. Combine `--tui` with `--no-daemon` to run the TUI in the foreground instead.
+
+```bash
+# Launch with the Textual TUI in the foreground
+uv run python -m omega13 --no-daemon --tui
+```
+
+On first launch with the TUI, the Input Selection screen prompts for JACK port selection. The choice persists to `~/.config/omega13/config.json`.
 
 ### Keyboard Shortcuts
 
@@ -88,11 +98,17 @@ The global hotkey defaults to `Ctrl+Alt+Space` and can be changed in `~/.config/
 ### Examples
 
 ```bash
-# Launch with default settings
-uv run omega13
+# Launch with default settings (background daemon, headless)
+uv run python -m omega13
+
+# Run in foreground mode (no daemonization, headless)
+uv run python -m omega13 --no-daemon
+
+# Launch the Textual TUI in the foreground
+uv run python -m omega13 --no-daemon --tui
 
 # Override Groq API key at runtime
-GROQ_API_KEY=gsk_... uv run omega13
+GROQ_API_KEY=gsk_... uv run python -m omega13
 
 # Trigger a capture from an external script (e.g., a Hyprland keybind)
 kill -USR1 $(cat /tmp/omega13.pid)
@@ -192,15 +208,86 @@ Recordings with average RMS below -50 dB (near-silence false triggers) are disca
 
 ---
 
-## Development
+## Bootstrap
+
+`bootstrap.sh` handles system dependencies and the local Python environment.
 
 ```bash
-uv sync
-uv run pytest                          # full test suite
-uv run pytest tests/test_tui_bindings.py -v   # TUI binding tests only
+cd omega-13
+./bootstrap.sh
 ```
 
-Tests that instantiate the full app mock `omega13.app.obsidian_cli` and the JACK-dependent `AudioEngine` to avoid hardware requirements. The `tests/` directory also contains demo and integration scripts (`demo_*.py`, `example_*.py`) that require real JACK and whisper-server connections.
+After bootstrap, activate the environment if needed and launch the app.
+
+---
+
+
+## First Run
+
+Complete these steps in order. After this, the app is running and controllable from the command line.
+
+1. Start the daemon / app process
+2. Verify it is running
+3. Attach the TUI
+4. Send a test control command
+
+### 1. Start the app
+
+Use the bootstrap-managed environment. By default, this starts a **background daemon** and returns control to your terminal immediately. Append `--no-daemon` to run in the foreground instead.
+
+```bash
+cd omega-13
+uv run python -m omega13
+
+# Or run in the foreground (for debugging / logs in terminal)
+uv run python -m omega13 --no-daemon
+```
+
+### 2. Verify it is running
+
+The app writes a PID file when it starts (only in daemon mode or when `--tui` is used without `--no-daemon`):
+
+```bash
+cat /tmp/omega13.pid
+ps -p $(cat /tmp/omega13.pid)
+```
+
+You should see the process in the output.
+
+### 3. Attach the TUI
+
+To use the Textual TUI, start the app with `--tui`. Add `--no-daemon` to keep it in the foreground:
+
+```bash
+uv run python -m omega13 --no-daemon --tui
+```
+
+### 4. Send a test control command
+
+Toggle recording without touching the TUI:
+
+```bash
+uv run python -m omega13 --toggle
+```
+
+If the instance is running, this sends a D-Bus-style control request and prints the new recording state.
+
+Additional signals and shortcuts:
+
+```bash
+# Trigger capture via SIGUSR1
+kill -USR1 $(cat /tmp/omega13.pid)
+```
+
+## Development
+
+Most tests mock the full app and JACK-dependent audio engine so they run without hardware:
+
+```bash
+uv run pytest tests/test_tui_bindings.py -v
+```
+
+The `tests/` directory also includes demo and integration scripts that do require real JACK access and a reachable `whisper-server`.
 
 ---
 

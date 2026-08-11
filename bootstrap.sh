@@ -173,7 +173,8 @@ main() {
     echo "=========================================="
     echo -e "${GREEN}Installation Complete!${NC}"
     echo "To run the application:"
-    echo "  uv run python -m omega13"
+    echo "  uv run python -m omega13        # defaults to background daemon"
+    echo "  uv run python -m omega13 --no-daemon  # run in foreground"
     echo "=========================================="
 }
 
