@@ -1,11 +1,11 @@
 """D-Bus service interface for Omega-13 recorder control.
 
-Provides org.omega13.Recorder service with methods for remote recording control.
+Provides org.omega13.Recorder service with methods and signals for remote recording control.
 """
 
 from typing import TYPE_CHECKING
 from dbus_next.errors import DBusError
-from dbus_next.service import ServiceInterface, method
+from dbus_next.service import ServiceInterface, method, signal
 from dbus_next.aio.message_bus import MessageBus
 
 if TYPE_CHECKING:
@@ -46,6 +46,8 @@ class RecorderInterface(ServiceInterface):
             
             # Get the updated recording state
             is_recording = self._app.recording_controller.is_recording()
+            # Emit signal for state change
+            self.RecordingToggled(is_recording)
             return is_recording
         except Exception as e:
             raise DBusError("org.omega13.Recorder.ToggleError", str(e))
@@ -66,6 +68,39 @@ class RecorderInterface(ServiceInterface):
             return state.value
         except Exception as e:
             raise DBusError("org.omega13.Recorder.StateError", str(e))
+
+    @method()
+    async def GetHealth(self) -> "a{sv}":  # type: ignore  # noqa: F821
+        """Get comprehensive health status.
+
+        Returns:
+            dict: Health status including state, audio, session, transcription
+
+        Raises:
+            DBusError: If health query fails
+        """
+        try:
+            return await self._app.get_health_status()
+        except Exception as e:
+            raise DBusError("org.omega13.Recorder.HealthError", str(e))
+
+    @signal()
+    def RecordingToggled(self, is_recording: "b") -> None:  # type: ignore  # noqa: F821
+        """Signal emitted when recording state changes.
+        
+        Args:
+            is_recording: True if now recording, False if stopped
+        """
+        pass  # Signal emission handled by dbus-next
+
+    @signal()
+    def HealthStatus(self, status: "a{sv}") -> None:  # type: ignore  # noqa: F821
+        """Signal emitted for periodic health status updates.
+        
+        Args:
+            status: Dictionary with health status information
+        """
+        pass
 
 
 class DBusService:
