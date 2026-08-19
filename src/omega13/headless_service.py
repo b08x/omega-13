@@ -21,6 +21,19 @@ from .session import SessionManager
 from .recording_controller import RecordingController, RecordingState, RecordingEvent
 from .signal_detector import SignalDetector
 from .hotkeys import GlobalHotkeyListener
+from .core.recording_events import RecordingEventHandler, RecordingEventCallbacks
+from .notifications import DesktopNotifier
+
+# Optional import for transcription - same pattern as app.py
+try:
+    from .transcription import (
+        TranscriptionService,
+        LocalTranscriptionProvider,
+        GroqTranscriptionProvider,
+    )
+    TRANSCRIPTION_AVAILABLE = True
+except ImportError:
+    TRANSCRIPTION_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +52,14 @@ class HeadlessRecorderInterface(ServiceInterface):
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         super().__init__(DBUS_INTERFACE_NAME)
         self.recording_controller = recording_controller
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.transcription_service = transcription_service
 
     @method()
     async def ToggleRecording(self) -> "b":  # type: ignore
@@ -118,6 +133,7 @@ class HeadlessRecorderInterface(ServiceInterface):
             DBusError: If health query fails
         """
         try:
+            session = self.session_manager.current_session
             health = {
                 "state": Variant("s", self.recording_controller.get_state().value),
                 "is_recording": Variant("b", self.recording_controller.is_recording()),
@@ -130,14 +146,14 @@ class HeadlessRecorderInterface(ServiceInterface):
                     "is_recording": Variant("b", self.audio_engine.is_recording if self.audio_engine.client else False),
                 }),
                 "session": Variant("a{sv}", {
-                    "active": Variant("b", self.session_manager.current_session is not None),
-                    "session_id": Variant("s", self.session_manager.current_session.session_id if self.session_manager.current_session else ""),
-                    "recording_count": Variant("i", len(self.session_manager.current_session.recordings) if self.session_manager.current_session else 0),
-                    "saved": Variant("b", self.session_manager.current_session.saved if self.session_manager.current_session else True),
+                    "active": Variant("b", session is not None),
+                    "session_id": Variant("s", session.session_id if session else ""),
+                    "recording_count": Variant("i", len(session.recordings) if session else 0),
+                    "saved": Variant("b", session.saved if session else True),
                 }),
                 "transcription": Variant("a{sv}", {
-                    "available": Variant("b", False),
-                    "provider": Variant("s", ""),
+                    "available": Variant("b", self.transcription_service is not None),
+                    "provider": Variant("s", self.config_manager.get_transcription_provider()),
                 }),
             }
             return health
@@ -176,11 +192,13 @@ class HeadlessDBusService:
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         self.recording_controller = recording_controller
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.transcription_service = transcription_service
         self.bus: Optional[MessageBus] = None
         self.interface: Optional[HeadlessRecorderInterface] = None
         self._is_registered: bool = False
@@ -194,6 +212,7 @@ class HeadlessDBusService:
                 self.audio_engine,
                 self.session_manager,
                 self.config_manager,
+                self.transcription_service,
             )
             self.bus.export(self.OBJECT_PATH, self.interface)
             await self.bus.request_name(self.SERVICE_NAME)
@@ -236,6 +255,8 @@ class HeadlessOmega13:
         self.recording_controller: Optional[RecordingController] = None
         self.dbus_service: Optional[HeadlessDBusService] = None
         self.hotkey_listener: Optional[GlobalHotkeyListener] = None
+        self._recording_event_handler: Optional[RecordingEventHandler] = None
+        self.transcription_service: Optional[TranscriptionService] = None
         self._shutdown_initiated = False
 
     async def initialize(self) -> None:
@@ -279,6 +300,42 @@ class HeadlessOmega13:
             config_manager=self.config_manager,
         )
 
+        # Initialize recording event handler (Textual-free business logic)
+        notifier = DesktopNotifier() if self.config_manager.get_desktop_notifications_enabled() else None
+        self._recording_event_handler = RecordingEventHandler(
+            recording_controller=self.recording_controller,
+            session_manager=self.session_manager,
+            audio_engine=self.audio_engine,
+            config_manager=self.config_manager,
+            notifier=notifier,
+        )
+        self.recording_controller.set_event_callback(self._recording_event_handler.handle_event)
+
+        # Initialize transcription service if available and enabled
+        if TRANSCRIPTION_AVAILABLE and self.config_manager.get_transcription_enabled():
+            try:
+                provider_type = self.config_manager.get_transcription_provider()
+                logger.info(f"Loading transcription provider: {provider_type}")
+                if provider_type == "groq":
+                    provider = GroqTranscriptionProvider(
+                        api_key=self.config_manager.get_groq_api_key(),
+                        model=self.config_manager.get_groq_model(),
+                    )
+                else:
+                    provider = LocalTranscriptionProvider(
+                        server_url=self.config_manager.get_transcription_server_url(),
+                        inference_path=self.config_manager.get_transcription_inference_path(),
+                    )
+                self.transcription_service = TranscriptionService(
+                    provider=provider, notifier=notifier
+                )
+                # Set transcription service on event handler
+                self._recording_event_handler.set_transcription_service(self.transcription_service)
+                logger.info(f"Transcription service initialized with {provider_type} provider")
+            except Exception as e:
+                logger.warning(f"Failed to initialize transcription service: {e}")
+                self.transcription_service = None
+
         # Enable auto-record if configured
         if self.config_manager.get_auto_record_enabled():
             self.recording_controller.enable_auto_record()
@@ -289,6 +346,7 @@ class HeadlessOmega13:
             self.audio_engine,
             self.session_manager,
             self.config_manager,
+            self.transcription_service,
         )
         await self.dbus_service.register()
 
@@ -335,6 +393,15 @@ class HeadlessOmega13:
                 await self.dbus_service.unregister()
             except Exception as e:
                 logger.error(f"D-Bus service stop error: {e}")
+
+        # Stop transcription service
+        if self.transcription_service:
+            try:
+                logger.info("Shutting down transcription service...")
+                self.transcription_service.shutdown(timeout=10.0)
+                logger.info("Transcription service stopped")
+            except Exception as e:
+                logger.error(f"Transcription service shutdown error: {e}")
 
         # Stop audio engine
         if self.audio_engine:
