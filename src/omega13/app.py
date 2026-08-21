@@ -551,6 +551,9 @@ def main():
                             on_silence_countdown=self._on_silence_countdown,
                             on_state_changed=self._on_state_changed,
                             on_session_status_changed=self._update_session_status,
+                            on_transcription_started=self._handle_transcription_started_from_event,
+                            on_transcription_progress=self._handle_transcription_progress_from_event,
+                            on_transcription_complete=self._handle_result_from_event,
                         )
                     )
         
@@ -585,6 +588,7 @@ def main():
         
                     if TRANSCRIPTION_AVAILABLE:
                         try:
+                            logger = logging.getLogger(__name__)
                             provider_type = self.config_manager.get_transcription_provider()
                             logger.info(f"Loading transcription provider: {provider_type}")
                             if provider_type == "groq":
@@ -1076,6 +1080,9 @@ def main():
                     self.transcription_service = TranscriptionService(
                         provider=provider, notifier=self.notifier
                     )
+                    # Pass the newly created service to the event handler
+                    if hasattr(self, "_recording_event_handler"):
+                        self._recording_event_handler.set_transcription_service(self.transcription_service)
         
                 display = self.query_one("#transcription-display", TranscriptionDisplay)
                 display.status = "processing"
@@ -1140,6 +1147,44 @@ def main():
                     display.status = "completed"
                 else:
                     display.show_error(result.error or "Unknown error")
+
+            def _safe_update(self, update_fn):
+                try:
+                    self.call_from_thread(update_fn)
+                except RuntimeError as e:
+                    if "different thread" in str(e):
+                        update_fn()
+                    else:
+                        raise
+
+            def _handle_result_from_event(self, result, audio_file):
+                def update():
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    if getattr(result, "status", None) and (result.status.name == "COMPLETED" or getattr(result.status, "value", result.status) == "completed" or str(result.status) == "TranscriptionStatus.COMPLETED"):
+                        session = self.session_manager.get_current_session()
+                        if session:
+                            # It's already added to session by RecordingEventHandler, just update display
+                            display.update_buffer(session.transcriptions)
+                        else:
+                            display.update_text(result.text)
+                        display.status = "completed"
+                    else:
+                        display.show_error(getattr(result, "error", "Unknown error"))
+                self._safe_update(update)
+
+            def _handle_transcription_started_from_event(self, path: Path):
+                def update():
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    display.status = "processing"
+                    display.progress = 0.0
+                    display.provider = self.config_manager.get_transcription_provider()
+                self._safe_update(update)
+
+            def _handle_transcription_progress_from_event(self, progress: float):
+                def update():
+                    display = self.query_one("#transcription-display", TranscriptionDisplay)
+                    display.progress = progress
+                self._safe_update(update)
         
             def _handle_clipboard_error(self, error_msg: str):
                 self.notify(

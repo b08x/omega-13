@@ -35,6 +35,9 @@ class RecordingEventCallbacks:
     on_state_changed: Optional[Callable[[str, str], None]] = None
     # (old_state, new_state)
     on_session_status_changed: Optional[Callable[[], None]] = None
+    on_transcription_started: Optional[Callable[[Path], None]] = None
+    on_transcription_progress: Optional[Callable[[float], None]] = None
+    on_transcription_complete: Optional[Callable[["TranscriptionResult", Path], None]] = None
 
 
 class RecordingEventHandler:
@@ -238,10 +241,52 @@ class RecordingEventHandler:
 
         # Start transcription if enabled
         if self.config_manager.get_auto_transcribe() and self.transcription_service:
-            self.transcription_service.transcribe_async(path, self._on_transcription_complete)
+            def on_clipboard_error(error_msg: str):
+                if self.notifier:
+                    self.notifier.notify(f"Clipboard copy failed: {error_msg}", urgency="normal")
+                    
+            def on_injection_error(error_msg: str):
+                if self.notifier:
+                    self.notifier.notify(f"Text injection failed: {error_msg}", urgency="critical")
+                    
+            def on_daily_note_error(error_msg: str):
+                if self.notifier:
+                    self.notifier.notify(f"Daily note failed: {error_msg}", urgency="normal")
 
-    def _on_transcription_complete(self, result) -> None:
-        """Handle transcription completion - can be overridden or extended."""
-        # Transcription completion handling is left to the consumer
-        # (TUI updates display, headless could write to file, etc.)
-        pass
+            def wrapped_on_complete(result):
+                self._on_transcription_complete(result, path)
+
+            def wrapped_on_progress(progress: float):
+                if self._callbacks.on_transcription_progress:
+                    self._callbacks.on_transcription_progress(progress)
+
+            if self._callbacks.on_transcription_started:
+                self._callbacks.on_transcription_started(path)
+
+            self.transcription_service.transcribe_async(
+                path,
+                wrapped_on_complete,
+                progress_callback=wrapped_on_progress,
+                copy_to_clipboard_enabled=self.config_manager.get_copy_to_clipboard(),
+                clipboard_error_callback=on_clipboard_error,
+                inject_to_active_window_enabled=self.config_manager.get_inject_to_active_window(),
+                injection_error_callback=on_injection_error,
+                write_to_daily_note_enabled=self.config_manager.get_write_to_daily_note(),
+                daily_note_error_callback=on_daily_note_error,
+            )
+
+    def _on_transcription_complete(self, result, path: Optional[Path] = None) -> None:
+        """Handle transcription completion."""
+        # Add to session
+        if getattr(result, "status", None) and (
+            getattr(result.status, "name", "") == "COMPLETED" or 
+            getattr(result.status, "value", result.status) == "completed" or 
+            str(result.status) == "TranscriptionStatus.COMPLETED"
+        ) and getattr(result, "text", None):
+            session = self.session_manager.get_current_session()
+            if session:
+                session.add_transcription(result.text)
+                
+        # Notify UI if callback exists
+        if self._callbacks.on_transcription_complete:
+            self._callbacks.on_transcription_complete(result, path)
