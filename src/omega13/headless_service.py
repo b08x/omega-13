@@ -24,6 +24,12 @@ from .hotkeys import GlobalHotkeyListener
 from .core.recording_events import RecordingEventHandler, RecordingEventCallbacks
 from .notifications import DesktopNotifier
 
+try:
+    from .ui.osd import osd_manager
+    OSD_AVAILABLE = True
+except (ImportError, ValueError):
+    osd_manager = None
+    OSD_AVAILABLE = False
 # Optional import for transcription - same pattern as app.py
 try:
     from .transcription import (
@@ -310,6 +316,17 @@ class HeadlessOmega13:
             notifier=notifier,
         )
         self.recording_controller.set_event_callback(self._recording_event_handler.handle_event)
+        
+        if OSD_AVAILABLE and osd_manager:
+            osd_manager.run_in_background()
+            self._recording_event_handler.set_callbacks(
+                RecordingEventCallbacks(
+                    on_recording_started=lambda path, mode: osd_manager.update("Recording (13s buffer)", recording=True),
+                    on_recording_stopped=lambda path: osd_manager.update("Processing...", recording=False),
+                    on_transcription_started=lambda path: osd_manager.update("Transcribing...", recording=False),
+                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:20]}...", timeout_ms=3000) if hasattr(result, "text") else osd_manager.update("Transcription Done", timeout_ms=3000),
+                )
+            )
 
         # Initialize transcription service if available and enabled
         if TRANSCRIPTION_AVAILABLE and self.config_manager.get_transcription_enabled():
@@ -378,6 +395,9 @@ class HeadlessOmega13:
         self._shutdown_initiated = True
 
         logger.info("Shutting down headless Omega-13...")
+        
+        if OSD_AVAILABLE and osd_manager:
+            osd_manager.quit()
 
         # Stop hotkey listener
         if self.hotkey_listener:

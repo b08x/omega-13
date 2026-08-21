@@ -33,15 +33,34 @@
 
 ## Installation
 
+<details open>
+<summary>System-wide User Installation (Recommended)</summary>
+
+Omega-13 provides an interactive, XDG-compliant installer powered by [gum](https://github.com/charmbracelet/gum). It safely installs to your local user directories without requiring `sudo`.
+
+```bash
+git clone https://github.com/b08x/omega-13.git
+cd omega-13
+./install.sh
+```
+
+The installer will:
+1. Copy the application to `~/.local/share/omega13`
+2. Create a Python virtual environment and install dependencies
+3. Symlink the executable to `~/.local/bin/omega13`
+4. Register a systemd user service at `~/.config/systemd/user/omega13.service`
+
+You can safely remove the installation at any time by running `./uninstall.sh`.
+</details>
+
 <details>
-<summary>From source (recommended)</summary>
+<summary>Development Setup (From source)</summary>
 
 ```bash
 git clone https://github.com/b08x/omega-13.git
 cd omega-13
 uv sync
 ```
-
 </details>
 
 <details>
@@ -61,18 +80,32 @@ This brings up a GPU-accelerated whisper-server on port 8080. Adjust the model i
 
 ## Usage
 
-Omega-13 now runs as a **background daemon by default**. Use `--no-daemon` to launch in the foreground when you need direct terminal access, live logs, or debugging.
+Omega-13 is designed to run as a **background daemon via systemd**. It features a native **GTK4 Layer Shell OSD** that displays recording and transcription status directly on your screen (Wayland/Hyprland supported).
+
+### Managing the Daemon
 
 ```bash
-# Default: start as a background daemon (writes PID to /tmp/omega13.pid)
-uv run python -m omega13
+# Start the daemon
+systemctl --user start omega13
+
+# Enable to run automatically on login
+systemctl --user enable omega13
+
+# Check logs
+journalctl --user -fu omega13
 ```
 
-The daemon runs headless by default. To use the Textual TUI, pass `--tui`. Combine `--tui` with `--no-daemon` to run the TUI in the foreground instead.
+You can also run it manually from the terminal for debugging:
 
 ```bash
-# Launch with the Textual TUI in the foreground
-uv run python -m omega13 --no-daemon --tui
+omega13 --no-daemon
+```
+
+### The TUI
+To use the legacy Textual TUI configuration screen, run:
+
+```bash
+omega13 --no-daemon --tui
 ```
 
 On first launch with the TUI, the Input Selection screen prompts for JACK port selection. The choice persists to `~/.config/omega13/config.json`.
@@ -98,20 +131,20 @@ The global hotkey defaults to `Ctrl+Alt+Space` and can be changed in `~/.config/
 ### Examples
 
 ```bash
-# Launch with default settings (background daemon, headless)
-uv run python -m omega13
+# Start the daemon via systemd
+systemctl --user start omega13
 
-# Run in foreground mode (no daemonization, headless)
-uv run python -m omega13 --no-daemon
+# Run in foreground mode (for debugging)
+omega13 --no-daemon
 
 # Launch the Textual TUI in the foreground
-uv run python -m omega13 --no-daemon --tui
-
-# Override Groq API key at runtime
-GROQ_API_KEY=gsk_... uv run python -m omega13
+omega13 --no-daemon --tui
 
 # Trigger a capture from an external script (e.g., a Hyprland keybind)
-kill -USR1 $(cat /tmp/omega13.pid)
+omega13 --toggle
+
+# Override Groq API key at runtime
+GROQ_API_KEY=gsk_... omega13 --no-daemon
 ```
 
 ---
@@ -226,58 +259,46 @@ After bootstrap, activate the environment if needed and launch the app.
 
 Complete these steps in order. After this, the app is running and controllable from the command line.
 
-1. Start the daemon / app process
-2. Verify it is running
-3. Attach the TUI
+1. Ensure the daemon is running
+2. Verify its status
+3. Attach the TUI to configure settings
 4. Send a test control command
 
-### 1. Start the app
+### 1. Ensure the daemon is running
 
-Use the bootstrap-managed environment. By default, this starts a **background daemon** and returns control to your terminal immediately. Append `--no-daemon` to run in the foreground instead.
-
-```bash
-cd omega-13
-uv run python -m omega13
-
-# Or run in the foreground (for debugging / logs in terminal)
-uv run python -m omega13 --no-daemon
-```
-
-### 2. Verify it is running
-
-The app writes a PID file when it starts (only in daemon mode or when `--tui` is used without `--no-daemon`):
+If you installed via `./install.sh`, you can start the service with:
 
 ```bash
-cat /tmp/omega13.pid
-ps -p $(cat /tmp/omega13.pid)
+systemctl --user start omega13
 ```
 
-You should see the process in the output.
+### 2. Verify its status
+
+Check the service status:
+
+```bash
+systemctl --user status omega13
+```
+
+You should see it marked as `active (running)`.
 
 ### 3. Attach the TUI
 
-To use the Textual TUI, start the app with `--tui`. Add `--no-daemon` to keep it in the foreground:
+To use the Textual TUI to configure your JACK port and API keys, run it in the foreground:
 
 ```bash
-uv run python -m omega13 --no-daemon --tui
+omega13 --no-daemon --tui
 ```
 
 ### 4. Send a test control command
 
-Toggle recording without touching the TUI:
+Toggle recording:
 
 ```bash
-uv run python -m omega13 --toggle
+omega13 --toggle
 ```
 
-If the instance is running, this sends a D-Bus-style control request and prints the new recording state.
-
-Additional signals and shortcuts:
-
-```bash
-# Trigger capture via SIGUSR1
-kill -USR1 $(cat /tmp/omega13.pid)
-```
+If the daemon is running on Wayland, you should see the GTK4 OSD popup indicating recording status!
 
 ## Development
 

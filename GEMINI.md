@@ -12,7 +12,8 @@
 
 ### Technology Stack
 - **Language:** Python 3.12+
-- **TUI Framework:** [Textual](https://textual.textualize.io/)
+- **OSD Framework:** GTK4 Layer Shell (via `PyGObject` and `pycairo`) for Wayland-native overlays
+- **Legacy TUI Framework:** [Textual](https://textual.textualize.io/)
 - **Audio Engine:** JACK (via `JACK-Client`), NumPy for buffer management
 - **Audio Processing:** FFmpeg and SoX for silence trimming and downsampling
 - **IPC:** D-Bus (`dbus-next`), `pynput` (injection), `pyperclip` (clipboard)
@@ -21,9 +22,11 @@
 ---
 
 ## Architecture
-The project follows a modular, event-driven architecture centered around the Textual `App` loop.
+The project follows a modular, event-driven architecture designed to run as a headless background daemon with an optional GTK4 OSD or Textual configuration TUI.
 
-- **`omega13.app`**: Main entry point and TUI coordinator.
+- **`omega13.app`**: Main entry point handling CLI arguments and legacy TUI.
+- **`omega13.headless_service`**: The primary background daemon coordinating the `RecordingController`, `AudioEngine`, and `osd_manager`.
+- **`omega13.ui.osd`**: Wayland-native GTK4 Layer Shell OSD rendering via Cairo.
 - **`omega13.audio`**: The `AudioEngine` manages the JACK client, the 13s ring buffer, and real-time recording.
 - **`omega13.recording_controller`**: Orchestrates state transitions (ARMED, RECORDING, IDLE) and handles VAD triggers.
 - **`omega13.audio_processor`**: Pipeline for post-processing audio (trimming silence, resampling to 16kHz mono) using FFmpeg/SoX.
@@ -37,15 +40,15 @@ The project follows a modular, event-driven architecture centered around the Tex
 
 ### Prerequisites
 - Linux with JACK or PipeWire (with `pipewire-jack` bridge).
+- `gtk4-layer-shell`, `cairo`, and `gobject-introspection` libraries.
 - Python 3.12+.
 - `ffmpeg` and `sox` installed in system PATH.
 
 ### Commands
-- **Install Dependencies:** `uv sync`
-- **Run Application:** `uv run omega13`
-- **Run Test Suite:** `uv run pytest`
-- **Run TUI Tests:** `uv run pytest tests/test_tui_bindings.py -v`
-- **External Trigger:** `kill -USR1 $(cat /tmp/omega13.pid)` or `uv run omega13 --toggle`
+- **Local User Installation (XDG):** `./install.sh`
+- **Install Development Dependencies:** `uv sync`
+- **Run Application:** `omega13 --no-daemon`
+- **External Trigger:** `omega13 --toggle`
 
 ---
 

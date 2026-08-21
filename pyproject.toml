@@ -13,6 +13,8 @@ dependencies = [
     "pyperclip>=1.8.0",
     "pynput>=1.7.6",
     "dbus-next>=0.2.3",
+    "pygobject>=3.56.3",
+    "pycairo>=1.29.1",
 ]
 [project.scripts]
 omega13 = "omega13.app:main"

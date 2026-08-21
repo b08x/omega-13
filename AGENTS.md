@@ -14,10 +14,11 @@
 
 ```
 app.py / __main__.py          ← entry points
-  ├─ Omega13App (TUI)         ← Textual app, wires everything together
-  └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service
+  ├─ Omega13App (TUI)         ← Textual app (legacy configuration UI)
+  └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service, Systemd primary
+       ├─ OSDManager          ← GTK4 Layer Shell on-screen display (ui.osd)
        ├─ RecordingController ← state machine (IDLE→ARMED→RECORDING→STOPPING)
-       ├─ RecordingEventHandler ← business logic, dispatches events to UI callbacks
+       ├─ RecordingEventHandler ← business logic, dispatches events to UI/OSD callbacks
        ├─ SessionManager      ← session lifecycle, recording metadata
        ├─ AudioEngine         ← JACK client, ring buffer, file writer
        ├─ SignalDetector      ← RMS/silence threshold detection
@@ -37,8 +38,9 @@ app.py / __main__.py          ← entry points
 | `signal_detector.py:SignalDetector` | RMS calculation, silence detection | None (pure math) |
 | `audio_processor.py:AudioProcessor` | ffmpeg/sox pipeline, trim/downsample | None (subprocess wrapper) |
 | `transcription.py:TranscriptionService` | Groq/local whisper backends | ConfigManager |
-| `app.py:Omega13App` | Textual TUI, wires all components | All of the above |
-| `headless_service.py:HeadlessOmega13` | Daemon mode, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager |
+| `app.py:Omega13App` | Textual TUI, wires components for legacy config | All of the above |
+| `headless_service.py:HeadlessOmega13` | Daemon mode, Systemd, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager, OSDManager |
+| `ui/osd.py:OSDManager` | GTK4 Layer Shell on-screen display | PyGObject, Gtk4LayerShell, cairo |
 | `dbus_service.py:DBusService` | D-Bus interface for TUI mode | Omega13App |
 | `ui/screens.py` | TUI screens (dir selection, input, settings) | Textual |
 | `ui/layout.py` | Main layout, status bars | Textual |
@@ -50,6 +52,7 @@ app.py / __main__.py          ← entry points
 | `injection.py` | Type into active window | ydotool |
 | `obsidian_cli.py:ObsidianCLI` | Obsidian daily note integration | None |
 | `hotkeys.py:GlobalHotkeyListener` | Global hotkey via pynput | D-Bus (for toggle) |
+| `install.sh` / `uninstall.sh` | XDG user-local installer scripts | `gum` CLI toolkit |
 
 ### Data Flow
 
