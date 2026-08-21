@@ -243,15 +243,15 @@ class RecordingEventHandler:
         if self.config_manager.get_auto_transcribe() and self.transcription_service:
             def on_clipboard_error(error_msg: str):
                 if self.notifier:
-                    self.notifier.notify(f"Clipboard copy failed: {error_msg}", urgency="normal")
+                    self.notifier.notify("Clipboard Error", error_msg, urgency="normal")
                     
             def on_injection_error(error_msg: str):
                 if self.notifier:
-                    self.notifier.notify(f"Text injection failed: {error_msg}", urgency="critical")
+                    self.notifier.notify("Injection Error", error_msg, urgency="critical")
                     
             def on_daily_note_error(error_msg: str):
                 if self.notifier:
-                    self.notifier.notify(f"Daily note failed: {error_msg}", urgency="normal")
+                    self.notifier.notify("Daily Note Error", error_msg, urgency="normal")
 
             def wrapped_on_complete(result):
                 self._on_transcription_complete(result, path)

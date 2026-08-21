@@ -1,3 +1,6 @@
+.codebase-memory/
+.trackboi/
+graphify-out/
 .env
 *.wav
 **/logs/
