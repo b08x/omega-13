@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**omega-13** is a retroactive audio recorder and transcription daemon (v2.3.0) with optional Textual TUI. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
+**omega-13** is a retroactive audio recorder and transcription daemon (v2.3.0) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
 
 - Python >=3.12, hatchling build, `src/omega13/` layout
 - Entry point: `omega13.app:main` (CLI: `omega13`)
-- Run tests: `pytest` (dev deps: pytest, pytest-asyncio, pytest-textual-snapshot)
+- Run tests: `pytest` (dev deps: pytest, pytest-asyncio)
 
 ## Architecture
 
@@ -14,7 +14,6 @@
 
 ```
 app.py / __main__.py          ← entry points
-  ├─ Omega13App (TUI)         ← Textual app (legacy configuration UI)
   └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service, Systemd primary
        ├─ OSDManager          ← GTK4 Layer Shell on-screen display (ui.osd)
        ├─ RecordingController ← state machine (IDLE→ARMED→RECORDING→STOPPING)
@@ -38,13 +37,8 @@ app.py / __main__.py          ← entry points
 | `signal_detector.py:SignalDetector` | RMS calculation, silence detection | None (pure math) |
 | `audio_processor.py:AudioProcessor` | ffmpeg/sox pipeline, trim/downsample | None (subprocess wrapper) |
 | `transcription.py:TranscriptionService` | Groq/local whisper backends | ConfigManager |
-| `app.py:Omega13App` | Textual TUI, wires components for legacy config | All of the above |
 | `headless_service.py:HeadlessOmega13` | Daemon mode, Systemd, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager, OSDManager |
 | `ui/osd.py:OSDManager` | GTK4 Layer Shell on-screen display | PyGObject, Gtk4LayerShell, cairo |
-| `dbus_service.py:DBusService` | D-Bus interface for TUI mode | Omega13App |
-| `ui/screens.py` | TUI screens (dir selection, input, settings) | Textual |
-| `ui/layout.py` | Main layout, status bars | Textual |
-| `ui/widgets.py` | VU meter, transcription display, countdown | Textual |
 | `pidfile.py` | PID file management, stale detection | None |
 | `signals.py` | Unix signal handling (shutdown, reload, status) | None |
 | `notifications.py:DesktopNotifier` | Desktop notifications | None |
@@ -65,8 +59,8 @@ app.py / __main__.py          ← entry points
 
 ## Conventions
 
-- **Textual-free core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero Textual imports. Headless and TUI share them.
-- **Lazy imports**: `__init__.py` uses `__getattr__` to defer heavy deps (JACK, Textual)
+- **Textual-free core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
+- **Lazy imports**: `__init__.py` uses `__getattr__` to defer heavy deps (JACK, PyGObject)
 - **ConfigManager is a leaf**: it imports nothing from omega13. All other modules import it, never the reverse.
 - **Event-driven**: `RecordingController` fires events via callback, never directly calls UI code
 - **Thread safety**: `RecordingController` uses `threading.Lock` for state transitions
@@ -77,7 +71,6 @@ app.py / __main__.py          ← entry points
 - `tests/` — pytest, ~20 test files
 - Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, TUI bindings, Obsidian integration
 - Run: `pytest` or `pytest -x` (stop on first failure)
-- Snapshot tests: `pytest-textual-snapshot` for TUI rendering
 
 <trackboi>
 ## trackboi Skill

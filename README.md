@@ -101,14 +101,7 @@ You can also run it manually from the terminal for debugging:
 omega13 --no-daemon
 ```
 
-### The TUI
-To use the legacy Textual TUI configuration screen, run:
 
-```bash
-omega13 --no-daemon --tui
-```
-
-On first launch with the TUI, the Input Selection screen prompts for JACK port selection. The choice persists to `~/.config/omega13/config.json`.
 
 ### Keyboard Shortcuts
 
@@ -136,9 +129,6 @@ systemctl --user start omega13
 
 # Run in foreground mode (for debugging)
 omega13 --no-daemon
-
-# Launch the Textual TUI in the foreground
-omega13 --no-daemon --tui
 
 # Trigger a capture from an external script (e.g., a Hyprland keybind)
 omega13 --toggle
@@ -261,13 +251,6 @@ Complete these steps in order. After this, the app is running and controllable f
 
 1. Ensure the daemon is running
 2. Verify its status
-3. Attach the TUI to configure settings
-4. Send a test control command
-
-### 1. Ensure the daemon is running
-
-If you installed via `./install.sh`, you can start the service with:
-
 ```bash
 systemctl --user start omega13
 ```
@@ -282,13 +265,6 @@ systemctl --user status omega13
 
 You should see it marked as `active (running)`.
 
-### 3. Attach the TUI
-
-To use the Textual TUI to configure your JACK port and API keys, run it in the foreground:
-
-```bash
-omega13 --no-daemon --tui
-```
 
 ### 4. Send a test control command
 
@@ -305,7 +281,6 @@ If the daemon is running on Wayland, you should see the GTK4 OSD popup indicatin
 Most tests mock the full app and JACK-dependent audio engine so they run without hardware:
 
 ```bash
-uv run pytest tests/test_tui_bindings.py -v
 ```
 
 The `tests/` directory also includes demo and integration scripts that do require real JACK access and a reachable `whisper-server`.

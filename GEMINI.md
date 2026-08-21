@@ -13,7 +13,6 @@
 ### Technology Stack
 - **Language:** Python 3.12+
 - **OSD Framework:** GTK4 Layer Shell (via `PyGObject` and `pycairo`) for Wayland-native overlays
-- **Legacy TUI Framework:** [Textual](https://textual.textualize.io/)
 - **Audio Engine:** JACK (via `JACK-Client`), NumPy for buffer management
 - **Audio Processing:** FFmpeg and SoX for silence trimming and downsampling
 - **IPC:** D-Bus (`dbus-next`), `pynput` (injection), `pyperclip` (clipboard)
@@ -22,7 +21,7 @@
 ---
 
 ## Architecture
-The project follows a modular, event-driven architecture designed to run as a headless background daemon with an optional GTK4 OSD or Textual configuration TUI.
+The project follows a modular, event-driven architecture designed to run as a headless background daemon with a GTK4 OSD.
 
 - **`omega13.app`**: Main entry point handling CLI arguments and legacy TUI.
 - **`omega13.headless_service`**: The primary background daemon coordinating the `RecordingController`, `AudioEngine`, and `osd_manager`.
@@ -72,5 +71,4 @@ Configuration resides in `~/.config/omega13/config.json`. Always use `ConfigMana
 
 ### Testing
 - Place new tests in the `tests/` directory.
-- Use `pytest-textual-snapshot` for TUI regression testing.
 - Mock the `AudioEngine` and `obsidian_cli` when testing UI logic to avoid hardware/dependency requirements.

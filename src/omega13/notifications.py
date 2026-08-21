@@ -2,6 +2,7 @@ import logging
 import subprocess
 import shutil
 from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -48,3 +49,33 @@ class DesktopNotifier:
 
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
+
+    def play_sound(self, sound_name: str = "device-added") -> None:
+        """
+        Play a short notification sound using paplay and standard freedesktop sounds.
+        
+        Args:
+            sound_name: The base name of the sound in /usr/share/sounds/freedesktop/stereo/
+                        (e.g., 'device-added', 'device-removed', 'complete')
+        """
+        sound_path = Path(f"/usr/share/sounds/freedesktop/stereo/{sound_name}.oga")
+        if not sound_path.exists():
+            # Fallback to beep if specific file doesn't exist
+            sound_path = Path("/usr/share/sounds/freedesktop/stereo/bell.oga")
+            
+        if not sound_path.exists():
+            return
+            
+        paplay_path = shutil.which("paplay")
+        if not paplay_path:
+            return
+            
+        try:
+            # Run asynchronously so we don't block
+            subprocess.Popen(
+                [paplay_path, str(sound_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            logger.debug(f"Failed to play sound: {e}")

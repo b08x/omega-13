@@ -9,6 +9,8 @@ import logging
 import signal
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 from dbus_next.errors import DBusError
 from dbus_next.service import ServiceInterface, method, signal as dbus_signal
 from dbus_next.aio.message_bus import MessageBus
@@ -27,7 +29,10 @@ from .notifications import DesktopNotifier
 try:
     from .ui.osd import osd_manager
     OSD_AVAILABLE = True
-except (ImportError, ValueError):
+except Exception as e:
+    logger.error(f"Failed to load OSD: {e}")
+    import traceback
+    logger.error(traceback.format_exc())
     osd_manager = None
     OSD_AVAILABLE = False
 # Optional import for transcription - same pattern as app.py
@@ -40,8 +45,6 @@ try:
     TRANSCRIPTION_AVAILABLE = True
 except ImportError:
     TRANSCRIPTION_AVAILABLE = False
-
-logger = logging.getLogger(__name__)
 
 # D-Bus constants
 DBUS_SERVICE_NAME = "org.omega13.Recorder"
@@ -321,10 +324,10 @@ class HeadlessOmega13:
             osd_manager.run_in_background()
             self._recording_event_handler.set_callbacks(
                 RecordingEventCallbacks(
-                    on_recording_started=lambda path, mode: osd_manager.update("Recording (13s buffer)", recording=True),
-                    on_recording_stopped=lambda path: osd_manager.update("Processing...", recording=False),
-                    on_transcription_started=lambda path: osd_manager.update("Transcribing...", recording=False),
-                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:20]}...", timeout_ms=3000) if hasattr(result, "text") else osd_manager.update("Transcription Done", timeout_ms=3000),
+                    on_recording_started=lambda path, mode: osd_manager.update("Recording", state_type="recording"),
+                    on_recording_stopped=lambda path: osd_manager.update("Processing...", state_type="processing"),
+                    on_transcription_started=lambda path: osd_manager.update("Transcribing...", state_type="processing"),
+                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:20]}...", state_type="success", timeout_ms=4000) if hasattr(result, "text") else osd_manager.update("Transcription Done", state_type="success", timeout_ms=4000),
                 )
             )
 
