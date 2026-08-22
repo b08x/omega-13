@@ -1,0 +1,4 @@
+interface:
+  display_name: "trackboi"
+  short_description: "Use trackboi when available."
+  default_prompt: "Use orient_agent when trackboi MCP tools are available; otherwise read existing trackboi files only for context."

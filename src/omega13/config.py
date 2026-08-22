@@ -37,11 +37,11 @@ class ConfigManager:
                 "server_url": "http://localhost:8080",
                 "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
-                "groq_api_key": "",
                 "groq_model": "whisper-large-v3-turbo",
                 "save_to_file": True,
                 "copy_to_clipboard": False,
                 "inject_to_active_window": False,
+                "write_to_daily_note": False,
             },
             "desktop_notifications": True,
             "sessions": {
@@ -141,6 +141,13 @@ class ConfigManager:
     def get_auto_transcribe(self) -> bool:
         return self.config.get("transcription", {}).get("auto_transcribe", True)
 
+    def set_auto_transcribe(self, enabled: bool) -> None:
+        """Set whether to automatically transcribe after each capture."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["auto_transcribe"] = enabled
+        self.save_config(self.config)
+
     def get_transcription_model(self) -> str:
         return self.config.get("transcription", {}).get("model_size", "large-v3-turbo")
 
@@ -159,20 +166,10 @@ class ConfigManager:
         self.save_config(self.config)
 
     def get_groq_api_key(self) -> str:
-        """Get Groq API key, checking environment variable first."""
+        """Get Groq API key from environment variable."""
         import os
 
-        env_key = os.environ.get("GROQ_API_KEY")
-        if env_key:
-            return env_key
-        return self.config.get("transcription", {}).get("groq_api_key", "")
-
-    def set_groq_api_key(self, api_key: str) -> None:
-        """Set Groq API key."""
-        if "transcription" not in self.config:
-            self.config["transcription"] = {}
-        self.config["transcription"]["groq_api_key"] = api_key
-        self.save_config(self.config)
+        return os.environ.get("GROQ_API_KEY", "")
 
     def get_groq_model(self) -> str:
         """Get Groq model name."""
@@ -233,6 +230,17 @@ class ConfigManager:
         if "transcription" not in self.config:
             self.config["transcription"] = {}
         self.config["transcription"]["inject_to_active_window"] = enabled
+        self.save_config(self.config)
+
+    def get_write_to_daily_note(self) -> bool:
+        """Get whether to write transcription results to Obsidian daily note."""
+        return self.config.get("transcription", {}).get("write_to_daily_note", False)
+
+    def set_write_to_daily_note(self, enabled: bool) -> None:
+        """Set whether to write transcription results to Obsidian daily note."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["write_to_daily_note"] = enabled
         self.save_config(self.config)
 
     # Session Getters

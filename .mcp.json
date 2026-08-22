@@ -1,0 +1,10 @@
+{
+	"mcpServers": {
+		"trackboi": {
+			"command": "trackboi",
+			"args": [
+				"mcp"
+			]
+		}
+	}
+}

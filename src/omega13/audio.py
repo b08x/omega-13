@@ -282,6 +282,11 @@ class AudioEngine:
         self.is_recording = False
         self.stop_event.set()
 
+        # Flush the ring buffer immediately so any audio arriving while the writer 
+        # thread finishes is kept for the next retroactive buffer, but old audio is discarded
+        self.write_ptr = 0
+        self.buffer_filled = False
+
         if self.writer_thread and self.writer_thread.is_alive():
             logger.info("Waiting for writer thread (5s timeout)...")
             # Wait up to 5 seconds for writer thread to finish
@@ -298,11 +303,11 @@ class AudioEngine:
                 logger.info("Writer thread completed successfully")
 
         # Clear any remaining queue items
-        try:
-            while not self.record_queue.empty():
+        while not self.record_queue.empty():
+            try:
                 self.record_queue.get_nowait()
-        except Exception as e:
-            logger.debug(f"Queue cleanup error (non-critical): {e}")
+            except queue.Empty:
+                break
 
     def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
         """Write audio data to WAV file (16kHz mono)."""

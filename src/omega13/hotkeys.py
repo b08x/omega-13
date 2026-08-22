@@ -21,10 +21,11 @@ except ImportError:
     logger.warning("pynput not installed. Global hotkeys will be disabled.")
     PYNPUT_AVAILABLE = False
 
+
 class GlobalHotkeyListener:
     """
     Listens for a global hotkey combination.
-    
+
     On X11: Uses pynput for direct keyboard capture.
     On Wayland: pynput cannot capture global hotkeys reliably.
     Configure your desktop environment to run 'omega13 --toggle'
@@ -87,7 +88,7 @@ class GlobalHotkeyListener:
         if len(lower_hotkey) > 1:
             logger.error(f"Could not resolve special key '{lower_hotkey}'. Global hotkey disabled.")
             return None
-        
+
         return lower_hotkey
 
     def start(self) -> bool:
@@ -103,15 +104,14 @@ class GlobalHotkeyListener:
             return False
 
         try:
-
-
+            # Check if we're on Wayland
             if IS_WAYLAND:
                 logger.warning(
                     "Running on Wayland. pynput global hotkeys are unreliable. "
                     "Configure your desktop environment to run 'omega13 --toggle' "
                     "as a system-wide hotkey for reliable D-Bus-based recording toggle."
                 )
-            
+
             # Fallback to standard string-based GlobalHotKeys
             self.listener = keyboard.GlobalHotKeys({
                 self.resolved_hotkey_str: self.callback

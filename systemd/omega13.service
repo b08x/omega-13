@@ -1,0 +1,16 @@
+[Unit]
+Description=Omega-13 Retroactive Audio Recorder
+After=sound.target pipewire.service jack.service
+Wants=sound.target
+
+[Service]
+Type=simple
+ExecStart=/home/b08x/.local/share/omega13/.venv/bin/omega13 --no-daemon
+WorkingDirectory=/home/b08x/.local/share/omega13
+Restart=on-failure
+RestartSec=5
+Environment="DISPLAY=:0"
+Environment="WAYLAND_DISPLAY=wayland-0"
+
+[Install]
+WantedBy=default.target

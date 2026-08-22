@@ -293,6 +293,11 @@ class RecordingController:
             return is_valid
 
         except Exception as e:
+            # soundfile doesn't support .mp4/.m4a natively. Just return True without erroring.
+            if "Format not recognised" in str(e) and file_path.suffix in [".mp4", ".m4a"]:
+                logger.debug(f"Skipping energy validation for unsupported format {file_path.suffix}")
+                return True
+                
             logger.error(f"Error validating recording energy: {e}")
             # On error, keep the recording (fail-safe)
             return True

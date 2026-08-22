@@ -1,9 +1,12 @@
+.codebase-memory/
+.trackboi/
+graphify-out/
 .env
 *.wav
 **/logs/
 **/results/
 **__pycache__
-*.venv
+.venv/
 .code-packager-*
 omega-13.json
 omega-13.csv
@@ -23,3 +26,28 @@ backlog.md
 .worktrees/
 
 .sisyphus/evidence/
+
+.codemap/
+.claude/
+
+logs/
+.cache/
+
+.ruff_cache/
+
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/cost.json
+.graphify_cached.json
+.graphify_uncached.txt
+.graphifyignore
+.graphify_labels.json
+.graphify_ast.json
+.graphify_extract.json
+.graphify_incremental.json
+.graphify_semantic.json
+.graphify_all_semantic.txt
+.graphify_root
+
+# codemap
+.codemap/

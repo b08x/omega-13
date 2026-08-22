@@ -1,173 +1,79 @@
-# AGENTS.md
+# Agent Guide
 
-**Generated:** Thu Feb 05 2026 08:41:33  
-**Commit:** fa8d1c0  
-**Branch:** development
+## Project Overview
 
-## OVERVIEW
+**omega-13** is a retroactive audio recorder and transcription daemon (v2.4.0) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
 
-Omega-13: retroactive audio recorder with 13-second ring buffer + transcription. Python 3.12+, Textual TUI, JACK/PipeWire audio, local whisper.cpp inference via Docker.
+- Python >=3.12, hatchling build, `src/omega13/` layout
+- Entry point: `omega13.app:main` (CLI: `omega13`)
+- Run tests: `pytest` (dev deps: pytest, pytest-asyncio)
 
-### Use Context7 MCP for Loading Documentation
+## Architecture
 
-Context7 MCP is available to fetch up-to-date documentation with code examples.
-
-**Recommended library IDs**:
-
-- `/websites/ffmpeg_documentation` - Official FFmpeg documentation for audio/video transcoding, filtering, and streaming
-- `/rbouqueau/sox` - SoX (Sound eXchange) command-line audio processing tool, Swiss Army knife for audio manipulation
-- `/websites/ccrma_stanford_edu_planetccrma_man` - SoX man page
-- `/websites/jackclient-python_readthedocs_io_en_0_5_5` - Python module providing bindings for JACK Audio Connection Kit, enabling audio and MIDI processing with JACK server
-- `/websites/textual_textualize_io` - Rapid application development framework for Python, build sophisticated user interfaces that run in terminal or web browser
-
-## STRUCTURE
+### Dependency Flow (top-down)
 
 ```
-omega-13/
-├── src/omega13/           # 14 modules, ~4000 lines
-│   ├── app.py             # Main entry, Textual app lifecycle
-│   ├── audio.py           # JACK client, ring buffer (NumPy)
-│   ├── audio_processor.py # FFmpeg/sox CLI subprocess wrapper (~400 lines)
-│   ├── app.py             # Main entry, Textual app lifecycle
-│   ├── audio.py           # JACK client, ring buffer (NumPy)
-│   ├── recording_controller.py  # State machine (IDLE→ARMED→RECORDING→STOPPING)
-│   ├── signal_detector.py # RMS-based voice activity detection
-│   ├── transcription.py   # HTTP client for whisper.cpp
-│   ├── session.py         # Recording metadata, deduplication
-│   ├── ui.py              # Textual widgets (VUMeter, TranscriptionDisplay)
-│   ├── hotkeys.py         # Global keyboard (pynput)
-│   ├── injection.py       # ydotool text injection
-│   ├── clipboard.py       # Cross-platform clipboard
-│   └── notifications.py   # D-Bus notifications
-├── tests/                 # 6 test files, pytest + textual-snapshot
-├── bootstrap.sh           # Distro-agnostic installer
-└── compose.yml            # whisper-server (CUDA-accelerated)
+app.py / __main__.py          ← entry points
+  └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service, Systemd primary
+       ├─ OSDManager          ← GTK4 Layer Shell on-screen display (ui.osd)
+       ├─ RecordingController ← state machine (IDLE→ARMED→RECORDING→STOPPING)
+       ├─ RecordingEventHandler ← business logic, dispatches events to UI/OSD callbacks
+       ├─ SessionManager      ← session lifecycle, recording metadata
+       ├─ AudioEngine         ← JACK client, ring buffer, file writer
+       ├─ SignalDetector      ← RMS/silence threshold detection
+       ├─ ConfigManager       ← persistent JSON config (~/.config/omega13/config.json)
+       └─ GlobalHotkeyListener ← pynput hotkey → D-Bus toggle
 ```
 
-## WHERE TO LOOK
+### Key Components
 
-| Task | Location | Notes |
-|------|----------|-------|
-|| Ring buffer logic | `audio.py:_write_to_ring_buffer()` | Modulo wrapping, buffer_filled flag |
-|| Recording state | `recording_controller.py` | State machine with 5 states |
-|| Audio processing | `audio_processor.py` | FFmpeg CLI subprocess, MP3/WAV/PCM conversion |
-|| Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
-| Recording state | `recording_controller.py` | State machine with 5 states |
-| Voice detection | `signal_detector.py` | RMS thresholds, sustained signal validation |
-| Transcription retry | `transcription.py:_transcribe_worker()` | 3 attempts, exponential backoff |
-| Deduplication | `session.py:add_transcription()` | Overlap detection for consecutive recordings |
-| PID-based IPC | `app.py:main()` + hotkeys setup | SIGUSR1 signal handling for Wayland |
-| Test patterns | `tests/test_*.py` | Standalone runners, heavy mocking |
+| Module | Role | Key dependency |
+|---|---|---|
+| `config.py:ConfigManager` | Pure config getters/setters, no UI deps | None (leaf) |
+| `audio.py:AudioEngine` | JACK client, ring buffer, file writing | ConfigManager, AudioProcessor, SignalDetector |
+| `recording_controller.py:RecordingController` | State machine, auto-record orchestration | AudioEngine, SignalDetector, ConfigManager |
+| `core/recording_events.py:RecordingEventHandler` | Event dispatch, register-and-transcribe | RecordingController, SessionManager, AudioEngine, ConfigManager |
+| `session.py:SessionManager` | Session lifecycle, temp/save paths | None (uses ConfigManager at init) |
+| `signal_detector.py:SignalDetector` | RMS calculation, silence detection | None (pure math) |
+| `audio_processor.py:AudioProcessor` | ffmpeg/sox pipeline, trim/downsample | None (subprocess wrapper) |
+| `transcription.py:TranscriptionService` | Groq/local whisper backends | ConfigManager |
+| `headless_service.py:HeadlessOmega13` | Daemon mode, Systemd, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager, OSDManager |
+| `ui/osd.py:OSDManager` | GTK4 Layer Shell on-screen display | PyGObject, Gtk4LayerShell, cairo |
+| `pidfile.py` | PID file management, stale detection | None |
+| `signals.py` | Unix signal handling (shutdown, reload, status) | None |
+| `notifications.py:DesktopNotifier` | Desktop notifications | None |
+| `clipboard.py` | Copy to clipboard | pyperclip |
+| `injection.py` | Type into active window | ydotool |
+| `obsidian_cli.py:ObsidianCLI` | Obsidian daily note integration | None |
+| `hotkeys.py:GlobalHotkeyListener` | Global hotkey via pynput | D-Bus (for toggle) |
+| `install.sh` / `uninstall.sh` | XDG user-local installer scripts | `gum` CLI toolkit |
 
-## COMMANDS
+### Data Flow
 
-```bash
-# Setup (recommended)
-./bootstrap.sh --build                     # Auto-install deps + build CUDA image
-source .venv/bin/activate
+1. Audio captured by `AudioEngine` (JACK callback → ring buffer)
+2. `SignalDetector` evaluates RMS thresholds on each audio block
+3. `RecordingController` fires `RecordingEvent` (SIGNAL_DETECTED, AUTO_STARTED, etc.)
+4. `RecordingEventHandler` receives events → registers recording in session → starts transcription
+5. `TranscriptionService` runs async → calls `_on_transcription_complete`
+6. Results routed via config: clipboard, injection, Obsidian daily note
 
-# Setup (manual)
-uv sync                                    # Or: python3.12 -m venv .venv && pip install -e .
-docker compose up -d                       # Start whisper-server
+## Conventions
 
-# Run
-omega13                                    # Console script
-python -m omega13                          # Module execution
-omega13 --toggle                           # IPC: send SIGUSR1 to running instance
-omega13 --log-level DEBUG                  # Debug logging
+- **Textual-free core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
+- **Lazy imports**: `__init__.py` uses `__getattr__` to defer heavy deps (JACK, PyGObject)
+- **ConfigManager is a leaf**: it imports nothing from omega13. All other modules import it, never the reverse.
+- **Event-driven**: `RecordingController` fires events via callback, never directly calls UI code
+- **Thread safety**: `RecordingController` uses `threading.Lock` for state transitions
+- **File naming**: snake_case modules, PascalCase classes, snake_case functions
 
-# Test
-python -m pytest tests/                    # All tests
-python -m pytest tests/test_deduplication.py -v
-python tests/test_deduplication.py         # Standalone runner (unique pattern)
+## Tests
 
-# Build
-git cliff --tag v2.3.0 -o CHANGELOG.md     # Conventional commits
-CUDA_ARCHITECTURES="86" ./bootstrap.sh --build  # Custom GPU arch
-```
+- `tests/` — pytest, ~20 test files
+- Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, TUI bindings, Obsidian integration
+- Run: `pytest` or `pytest -x` (stop on first failure)
 
-## BUILD SYSTEM
+<trackboi>
+## trackboi Skill
 
-- **Package manager:** `uv` (fallback: pip + venv)
-- **Build backend:** `hatchling` (NOT setuptools)
-- **Entry point:** `omega13 = "omega13.app:main"`
-- **Installer:** `bootstrap.sh` supports dnf/apt/pacman/zypper
-- **No CI/CD:** Local-first development workflow
-- **Launcher:** `omega13.sh` activates venv + starts podman services
-
-## CRITICAL IMPLEMENTATION DETAILS
-
-### Ring Buffer Mechanics
-
-`AudioEngine._write_to_ring_buffer()` uses modulo wrapping:
-
-- When `write_ptr + frames > ring_size`: write part1 to buffer end, part2 to start
-- `buffer_filled` flag: has buffer wrapped ≥1 time?
-- Record start reconstruction differs based on `buffer_filled` state
-
-### Thread Safety (NEVER VIOLATE)
-
-- JACK `process()` callback: **NO locks, NO allocations, NO blocking** (>1ms = xruns)
-- Audio → writer thread: `queue.Queue(maxsize=200)`
-- `TranscriptionService`: tracks threads for clean shutdown (60s deadline)
-
-### Signal Detection
-
-`has_audio_activity()` prevents empty recordings:
-
-- RMS threshold: -70 dB (default)
-- Window: 0.5s sustained signal required
-- Fallback: if JACK ports connected, allow recording
-
-### PID-Based IPC (Wayland workaround)
-
-1. App writes PID → `~/.local/share/omega13/omega13.pid`
-2. System hotkey → `omega13 --toggle`
-3. Reads PID → sends `SIGUSR1`
-4. Signal handler → `call_from_thread(action_toggle_record)`
-
-### Auto-Record State Machine
-
-`RecordingController` states:
-
-- IDLE → ARMED (ports connected)
-- ARMED → RECORDING_AUTO (voice detected: RMS > -35 dB for 0.5s+)
-- RECORDING_AUTO → STOPPING (silence: 10s default)
-- Discards recordings with avg RMS < -50 dB
-
-### Transcription Retry
-
-`_transcribe_worker()` smart retries:
-
-- 3 attempts, backoff: `2^retry_count` seconds
-- Shutdown mode: 3s timeout (fail fast)
-- Checks `_shutdown_event` before HTTP POST
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-1. **Blocking JACK callback:** >1ms operations in `AudioEngine.process()` → xruns
-2. **Missing thread joins:** Transcription threads MUST join with timeout on exit
-3. **Forgetting temp cleanup:** Sessions in `/tmp` deleted unless user saves
-4. **Platform assumptions:** `signal.SIGUSR1` missing on non-Linux (code has `hasattr` check)
-5. **Docker model mismatch:** Whisper model path MUST match `WHISPER_MODEL` env var
-6. **SELinux volumes:** Docker mounts need `:Z` suffix on Fedora/RHEL
-
-## TESTING CONVENTIONS
-
-- **Standalone runners:** Many tests have `if __name__ == "__main__"` (unusual for pytest)
-- **Heavy mocking:** `unittest.mock` for all external deps (JACK, Docker, HTTP, subprocess)
-- **Async TUI:** `pytest-asyncio` + `run_test()` context manager
-- **Error-first:** Emphasize failure paths over happy paths
-- **No shared fixtures:** Each test file self-contained
-
-## CONVENTIONAL COMMITS
-
-Enforced by git-cliff:
-
-- `feat:` New features
-- `fix:` Bug fixes  
-- `refactor:` Restructuring
-- `perf:` Performance
-- `docs:` Documentation
-- `test:` Tests
-- `chore:` Build/config
+When trackboi MCP tools are available, agents can load `.agents/skills/trackboi/SKILL.md` for details, then call `orient_agent` to catch up before updating cards, tracks, boards, or handoff notes. If `.trackboi`, `.etc/.trackboi`, or `.etc/trackboi` files are present but MCP tools are not available, agents may read those files to catch up on local context. Do not manually create, update, or delete trackboi records in the filesystem; use MCP tools for mutations.
+</trackboi>

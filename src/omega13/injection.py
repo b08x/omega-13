@@ -45,12 +45,15 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
             logger.info(f"Successfully injected {len(text)} characters via ydotool")
             return True, None
         else:
-            error_msg = result.stderr.strip() if result.stderr else f"Exit code {result.returncode}"
-            # Common error: ydotoold not running or permission denied on /dev/uinput
+            out_msg = result.stdout.strip() if result.stdout else ""
+            err_msg = result.stderr.strip() if result.stderr else ""
+            error_msg = err_msg or out_msg or f"Exit code {result.returncode}"
+            
+            # Common error: ydotoold not running or permission denied on socket
             if "failed to connect" in error_msg.lower():
-                error_msg = "ydotoold daemon not running or unreachable"
+                error_msg = "ydotoold daemon not running or socket unreachable (check permissions)"
             elif "permission denied" in error_msg.lower():
-                error_msg = "Permission denied for /dev/uinput (check uinput group)"
+                error_msg = "Permission denied for ydotool socket or /dev/uinput"
                 
             logger.warning(f"ydotool injection failed: {error_msg}")
             return False, error_msg
