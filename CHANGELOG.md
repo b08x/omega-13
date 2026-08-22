@@ -1,6 +1,10 @@
-## [2.4.0] - 2026-02-28
+## [2.4.0] - 2026-08-21
 
 ### 🚀 Features
+- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Add graceful Desktop Notification fallback for GNOME Wayland.
+- Add freedesktop audible feedback for recording states.
+- Rebuild app.py as a lightweight CLI proxy.
 
 - Add TUI key bindings for toggling app features, introduce new tests, and update project dependencies.
 - Add UI and configuration for transcription server inference path.
@@ -51,6 +55,10 @@
 ## [2.3.0] - 2025-12-26
 
 ### 🚀 Features
+- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Add graceful Desktop Notification fallback for GNOME Wayland.
+- Add freedesktop audible feedback for recording states.
+- Rebuild app.py as a lightweight CLI proxy.
 
 - *(app)* Implement new session command and confirmation workflow
 - *(transcription)* Add health check for transcription server with UI feedback
@@ -72,6 +80,10 @@
 ## [2.2.0] - 2025-12-24
 
 ### 🚀 Features
+- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Add graceful Desktop Notification fallback for GNOME Wayland.
+- Add freedesktop audible feedback for recording states.
+- Rebuild app.py as a lightweight CLI proxy.
 
 - Introduce clipboard copy functionality with UI toggle, configuration, and extensive documentation.
 - Restructure app layout to centralize transcription controls and update default session samplerate.
@@ -99,6 +111,10 @@
 ## [2.1.0] - 2025-12-22
 
 ### 🚀 Features
+- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Add graceful Desktop Notification fallback for GNOME Wayland.
+- Add freedesktop audible feedback for recording states.
+- Rebuild app.py as a lightweight CLI proxy.
 
 - Implement graceful shutdown, structured logging, and robust resource cleanup, removing refactoring plan files.
 
@@ -128,6 +144,10 @@
 ## [2.0.0] - 2025-12-22
 
 ### 🚀 Features
+- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Add graceful Desktop Notification fallback for GNOME Wayland.
+- Add freedesktop audible feedback for recording states.
+- Rebuild app.py as a lightweight CLI proxy.
 
 - Implement multi-channel input support and add mono/stereo selection to UI.
 - Add decibel (dB) level calculation and display to audio meters.
