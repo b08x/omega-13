@@ -289,9 +289,27 @@ class HeadlessOmega13:
         )
         self.audio_engine.start()
 
-        # Connect saved inputs
+        # Connect saved inputs or fallback to defaults
+        connection_success = False
         if saved_ports:
-            self.audio_engine.connect_inputs(saved_ports)
+            connection_success = self.audio_engine.connect_inputs(saved_ports)
+            if not connection_success:
+                logger.warning(f"Failed to connect saved ports {saved_ports}, falling back to defaults")
+
+        if not connection_success:
+            logger.info("Attempting to auto-connect to default capture ports")
+            available_ports = self.audio_engine.get_available_output_ports()
+            default_ports = [p.name for p in available_ports if "system:capture" in p.name]
+            if not default_ports and available_ports:
+                default_ports = [p.name for p in available_ports]
+            
+            if default_ports:
+                if len(default_ports) < self.audio_engine.channels:
+                    default_ports.extend([default_ports[0]] * (self.audio_engine.channels - len(default_ports)))
+                default_ports = default_ports[:self.audio_engine.channels]
+                logger.info(f"Auto-connecting to: {default_ports}")
+                self.audio_engine.connect_inputs(default_ports)
+                self.config_manager.set_input_ports(default_ports)
 
         # Initialize signal detector and recording controller
         # Use audio engine's samplerate and channels (available after start())
