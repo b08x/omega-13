@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--tui", action="store_true", help="Launch with the Textual TUI (Removed: now defaults to headless)")
     parser.add_argument("--daemon", action="store_true", default=True, help="Run as background daemon (default)")
     parser.add_argument("--no-daemon", action="store_false", dest="daemon", help="Run in foreground without daemonizing")
+    parser.add_argument("--config", action="store_true", help="Launch the interactive configuration wizard")
     parser.add_argument("--log-level", default="INFO", help="Set logging level")
     args = parser.parse_args()
 
@@ -73,6 +74,15 @@ def main():
     if args.tui:
         print("Warning: The Textual TUI has been removed in favor of the GTK4 OSD.")
         print("Falling back to headless daemon mode.")
+
+    if args.config:
+        try:
+            from .config_ui import run_config_ui
+            run_config_ui()
+            sys.exit(0)
+        except ImportError as e:
+            print(f"Error: Could not load configuration UI. Make sure 'rich' is installed. ({e})")
+            sys.exit(1)
 
     # Main execution (daemon mode handles its own PID file internally)
     print("Starting Omega-13 headless service...")
