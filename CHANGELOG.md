@@ -1,3 +1,20 @@
+## [2.4.1] - 2026-08-31
+
+### 🚀 Features
+- Add audio and hotkey config, support daemon restart.
+- Add interactive CLI configuration wizard.
+- Auto-connect to default audio capture ports on fallback.
+- Integrate 'feature/quickshell' enhancements into development.
+
+### 🐛 Fixes
+- Resolve ydotool socket path dynamically for user sessions.
+- Check for display before starting OSD GTK thread.
+- Ensure headless daemon waits for graphical session.
+- Resolve unawaited dbus_next coroutine warning.
+
+### 🔧 Chore
+- Fix pytest config and broken imports from TUI removal.
+
 ## [2.4.0] - 2026-08-21
 
 ### 🚀 Features

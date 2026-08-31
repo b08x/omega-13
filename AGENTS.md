@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**omega-13** is a retroactive audio recorder and transcription daemon (v2.4.0) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
+**omega-13** is a retroactive audio recorder and transcription daemon (v2.4.1) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
 
 - Python >=3.12, hatchling build, `src/omega13/` layout
 - Entry point: `omega13.app:main` (CLI: `omega13`)
