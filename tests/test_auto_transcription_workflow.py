@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from omega13.config import ConfigManager
-from omega13.app import Omega13App
+# from omega13.app import Omega13App
 
 
 @pytest.fixture

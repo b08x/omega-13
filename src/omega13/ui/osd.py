@@ -205,6 +205,16 @@ class OSDManager:
     def run_in_background(self):
         if not self._started:
             self._started = True
+            
+            # Check if a display is available before starting GTK
+            import gi
+            gi.require_version('Gtk', '4.0')
+            from gi.repository import Gtk, Gdk
+            Gtk.init_check()
+            if not Gdk.Display.get_default():
+                logger.warning("No display found. OSD will be disabled (fallback to notify-send).")
+                return
+                
             logger.info("Starting OSD GTK thread...")
             import threading
             def run_app():

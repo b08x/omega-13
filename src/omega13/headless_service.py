@@ -131,16 +131,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         except Exception as e:
             raise DBusError("org.omega13.Recorder.StateError", str(e))
 
-    @method()
-    async def GetHealth(self) -> "a{sv}":  # type: ignore
-        """Get comprehensive health status.
-
-        Returns:
-            dict: Health status including state, audio, session, transcription
-
-        Raises:
-            DBusError: If health query fails
-        """
+    def _get_health_data(self) -> dict:
         try:
             session = self.session_manager.current_session
             health = {
@@ -168,6 +159,18 @@ class HeadlessRecorderInterface(ServiceInterface):
             return health
         except Exception as e:
             raise DBusError("org.omega13.Recorder.HealthError", str(e))
+
+    @method()
+    async def GetHealth(self) -> "a{sv}":  # type: ignore
+        """Get comprehensive health status.
+
+        Returns:
+            dict: Health status including state, audio, session, transcription
+
+        Raises:
+            DBusError: If health query fails
+        """
+        return self._get_health_data()
 
     @dbus_signal()
     def RecordingToggled(self, is_recording: "b") -> None:  # type: ignore
@@ -247,7 +250,7 @@ class HeadlessDBusService:
     async def get_health(self) -> dict:
         if self.interface is None:
             raise DBusError("org.omega13.Recorder.HealthError", "D-Bus interface not initialized")
-        return await self.interface.GetHealth()
+        return self.interface._get_health_data()
 
 
 class HeadlessOmega13:

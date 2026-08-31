@@ -1,6 +1,6 @@
 [Unit]
 Description=Omega-13 Retroactive Audio Recorder
-After=sound.target pipewire.service jack.service
+After=sound.target pipewire.service jack.service graphical-session.target
 Wants=sound.target
 
 [Service]
@@ -13,4 +13,4 @@ Environment="DISPLAY=:0"
 Environment="WAYLAND_DISPLAY=wayland-0"
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

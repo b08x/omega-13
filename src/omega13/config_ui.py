@@ -1,9 +1,11 @@
 import sys
+import subprocess
+import jack
 from typing import Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm, IntPrompt
+from rich.prompt import Prompt, Confirm
 
 from omega13.config import ConfigManager
 
@@ -26,6 +28,9 @@ class ConfigWizard:
         table.add_row("Audio", "Input Ports", str(ports) if ports else "Default System Capture")
         table.add_row("Audio", "Save Path", str(c.get_save_path()))
         
+        # Hotkeys
+        table.add_row("Hotkeys", "Global Hotkey", str(c.get_global_hotkey()))
+        
         # Auto-record
         table.add_row("Auto-Record", "Enabled", str(c.get_auto_record_enabled()))
         table.add_row("Auto-Record", "Begin Threshold", f"{c.get_auto_record_begin_threshold()} dB")
@@ -41,6 +46,59 @@ class ConfigWizard:
         
         console.print(table)
         console.print()
+        
+    def configure_audio(self):
+        console.print(Panel("[bold cyan]Audio Settings[/bold cyan]"))
+        c = self.config_manager
+        
+        # Try to get JACK ports
+        try:
+            client = jack.Client("Omega13_Wizard")
+            available_ports = client.get_ports(is_audio=True, is_output=True)
+            port_names = [p.name for p in available_ports]
+            client.close()
+        except Exception as e:
+            console.print(f"[red]Error fetching JACK ports: {e}[/red]")
+            port_names = []
+            
+        if not port_names:
+            console.print("[yellow]No input ports found or JACK is not running.[/yellow]")
+            return
+            
+        console.print("Available Input Ports:")
+        for i, name in enumerate(port_names):
+            console.print(f"{i + 1}. {name}")
+            
+        console.print("Enter the port numbers to use, separated by commas (e.g. '1, 2').")
+        console.print("Leave blank to keep current settings or use defaults.")
+        
+        choice = Prompt.ask("Select ports")
+        if choice.strip():
+            try:
+                indices = [int(x.strip()) - 1 for x in choice.split(",")]
+                selected_ports = [port_names[i] for i in indices if 0 <= i < len(port_names)]
+                if selected_ports:
+                    c.set_input_ports(selected_ports)
+                    console.print(f"[green]Input ports updated to: {selected_ports}[/green]\n")
+                else:
+                    console.print("[red]No valid ports selected.[/red]\n")
+            except ValueError:
+                console.print("[red]Invalid format. Please enter comma-separated numbers.[/red]\n")
+
+    def configure_hotkeys(self):
+        console.print(Panel("[bold cyan]Hotkey Settings[/bold cyan]"))
+        c = self.config_manager
+        
+        console.print("Enter the global hotkey combination (e.g. '<ctrl>+<alt>+space').")
+        console.print("Leave blank to keep the current hotkey.")
+        current_hotkey = c.get_global_hotkey()
+        
+        new_hotkey = Prompt.ask(f"Global Hotkey", default=current_hotkey)
+        if new_hotkey.strip() and new_hotkey != current_hotkey:
+            # We don't have a direct set_global_hotkey method on ConfigManager, we need to modify the config dict directly
+            c.config["global_hotkey"] = new_hotkey
+            c.save_config(c.config)
+            console.print(f"[green]Global hotkey updated to: {new_hotkey}[/green]\n")
         
     def configure_transcription(self):
         console.print(Panel("[bold cyan]Transcription Settings[/bold cyan]"))
@@ -77,6 +135,19 @@ class ConfigWizard:
         
         console.print("[green]Output settings updated![/green]\n")
         
+    def reload_daemon(self):
+        console.print("[yellow]Reloading Omega-13 daemon...[/yellow]")
+        try:
+            result = subprocess.run(["systemctl", "--user", "restart", "omega13.service"], capture_output=True, text=True)
+            if result.returncode == 0:
+                console.print("[bold green]Daemon restarted successfully![/bold green]")
+            else:
+                console.print(f"[red]Failed to restart daemon. You may need to restart it manually.[/red]")
+                if result.stderr:
+                    console.print(f"[red]Error: {result.stderr}[/red]")
+        except Exception as e:
+            console.print(f"[red]Could not restart daemon: {e}[/red]")
+            
     def run(self):
         console.clear()
         console.print(Panel.fit("[bold magenta]Omega-13 Configuration Wizard[/bold magenta]"))
@@ -85,18 +156,29 @@ class ConfigWizard:
             self.display_current_config()
             
             console.print("What would you like to configure?")
-            console.print("1. Transcription Settings")
-            console.print("2. Output Destinations")
-            console.print("3. Exit")
+            console.print("1. Audio Settings (Input Ports)")
+            console.print("2. Hotkey Settings")
+            console.print("3. Transcription Settings")
+            console.print("4. Output Destinations")
+            console.print("5. Exit & Apply (Restart Daemon)")
+            console.print("6. Exit Without Applying")
             
-            choice = Prompt.ask("Select an option", choices=["1", "2", "3"])
+            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6"])
             
             if choice == "1":
-                self.configure_transcription()
+                self.configure_audio()
             elif choice == "2":
-                self.configure_outputs()
+                self.configure_hotkeys()
             elif choice == "3":
-                console.print("[bold green]Configuration saved! Restart the omega13 daemon to apply changes.[/bold green]")
+                self.configure_transcription()
+            elif choice == "4":
+                self.configure_outputs()
+            elif choice == "5":
+                console.print("[bold green]Configuration saved![/bold green]")
+                self.reload_daemon()
+                break
+            elif choice == "6":
+                console.print("[bold green]Configuration saved (but daemon not restarted).[/bold green]")
                 break
 
 def run_config_ui():
