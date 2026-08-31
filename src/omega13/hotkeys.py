@@ -17,8 +17,8 @@ DBUS_INTERFACE_NAME = "org.omega13.Recorder"
 try:
     from pynput import keyboard
     PYNPUT_AVAILABLE = True
-except ImportError:
-    logger.warning("pynput not installed. Global hotkeys will be disabled.")
+except ImportError as e:
+    logger.warning(f"pynput could not be loaded ({e}). Global hotkeys will be disabled.")
     PYNPUT_AVAILABLE = False
 
 

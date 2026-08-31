@@ -1,3 +1,4 @@
+from unittest.mock import ANY
 import pytest
 from unittest.mock import patch, MagicMock
 import subprocess
@@ -29,7 +30,8 @@ def test_inject_text_success(mock_run, mock_which):
         ["/usr/bin/ydotool", "type", "hello world"],
         capture_output=True,
         text=True,
-        timeout=30
+        timeout=30,
+        env=ANY
     )
 
 @patch("shutil.which")

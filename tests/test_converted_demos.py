@@ -5,7 +5,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from omega13.config import ConfigManager
-from omega13.app import Omega13App
+# from omega13.app import Omega13App
 from omega13.obsidian_cli import obsidian_cli
 from omega13.transcription import TranscriptionStatus, TranscriptionResult
 

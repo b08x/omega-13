@@ -131,16 +131,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         except Exception as e:
             raise DBusError("org.omega13.Recorder.StateError", str(e))
 
-    @method()
-    async def GetHealth(self) -> "a{sv}":  # type: ignore
-        """Get comprehensive health status.
-
-        Returns:
-            dict: Health status including state, audio, session, transcription
-
-        Raises:
-            DBusError: If health query fails
-        """
+    def _get_health_data(self) -> dict:
         try:
             session = self.session_manager.current_session
             health = {
@@ -168,6 +159,18 @@ class HeadlessRecorderInterface(ServiceInterface):
             return health
         except Exception as e:
             raise DBusError("org.omega13.Recorder.HealthError", str(e))
+
+    @method()
+    async def GetHealth(self) -> "a{sv}":  # type: ignore
+        """Get comprehensive health status.
+
+        Returns:
+            dict: Health status including state, audio, session, transcription
+
+        Raises:
+            DBusError: If health query fails
+        """
+        return self._get_health_data()
 
     @dbus_signal()
     def RecordingToggled(self, is_recording: "b") -> None:  # type: ignore
@@ -247,7 +250,7 @@ class HeadlessDBusService:
     async def get_health(self) -> dict:
         if self.interface is None:
             raise DBusError("org.omega13.Recorder.HealthError", "D-Bus interface not initialized")
-        return await self.interface.GetHealth()
+        return self.interface._get_health_data()
 
 
 class HeadlessOmega13:
@@ -289,9 +292,27 @@ class HeadlessOmega13:
         )
         self.audio_engine.start()
 
-        # Connect saved inputs
+        # Connect saved inputs or fallback to defaults
+        connection_success = False
         if saved_ports:
-            self.audio_engine.connect_inputs(saved_ports)
+            connection_success = self.audio_engine.connect_inputs(saved_ports)
+            if not connection_success:
+                logger.warning(f"Failed to connect saved ports {saved_ports}, falling back to defaults")
+
+        if not connection_success:
+            logger.info("Attempting to auto-connect to default capture ports")
+            available_ports = self.audio_engine.get_available_output_ports()
+            default_ports = [p.name for p in available_ports if "system:capture" in p.name]
+            if not default_ports and available_ports:
+                default_ports = [p.name for p in available_ports]
+            
+            if default_ports:
+                if len(default_ports) < self.audio_engine.channels:
+                    default_ports.extend([default_ports[0]] * (self.audio_engine.channels - len(default_ports)))
+                default_ports = default_ports[:self.audio_engine.channels]
+                logger.info(f"Auto-connecting to: {default_ports}")
+                self.audio_engine.connect_inputs(default_ports)
+                self.config_manager.set_input_ports(default_ports)
 
         # Initialize signal detector and recording controller
         # Use audio engine's samplerate and channels (available after start())

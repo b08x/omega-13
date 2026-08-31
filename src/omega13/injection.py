@@ -4,11 +4,33 @@ Uses ydotool for cross-platform (X11/Wayland) input automation.
 """
 
 import logging
+import os
 import subprocess
 import shutil
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+def _get_ydotool_env() -> dict:
+    """Get the environment variables for ydotool, setting YDOTOOL_SOCKET if needed."""
+    env = os.environ.copy()
+    
+    user_socket = f"/run/user/{os.getuid()}/.ydotool_socket"
+    tmp_socket = "/tmp/.ydotool_socket"
+    
+    current_socket = env.get("YDOTOOL_SOCKET")
+    # If the current socket is set and we can write to it, use it
+    if current_socket and os.path.exists(current_socket) and os.access(current_socket, os.W_OK):
+        return env
+        
+    # Otherwise fallback to user socket if it's writable
+    if os.path.exists(user_socket) and os.access(user_socket, os.W_OK):
+        env["YDOTOOL_SOCKET"] = user_socket
+    # Or tmp socket if it's writable
+    elif os.path.exists(tmp_socket) and os.access(tmp_socket, os.W_OK):
+        env["YDOTOOL_SOCKET"] = tmp_socket
+            
+    return env
 
 def inject_text(text: str) -> Tuple[bool, Optional[str]]:
     """
@@ -34,11 +56,13 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
         # 2. Run ydotool type
         # We use a list for subprocess.run to avoid shell injection issues
         # Note: ydotool type can be slow for very long strings
+        env = _get_ydotool_env()
         result = subprocess.run(
             [ydotool_path, "type", text],
             capture_output=True,
             text=True,
-            timeout=30  # Safety timeout
+            timeout=30,  # Safety timeout
+            env=env
         )
 
         if result.returncode == 0:
@@ -51,9 +75,9 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
             
             # Common error: ydotoold not running or permission denied on socket
             if "failed to connect" in error_msg.lower():
-                error_msg = "ydotoold daemon not running or socket unreachable (check permissions)"
+                error_msg = f"ydotoold daemon not running or socket unreachable (socket={env.get('YDOTOOL_SOCKET', 'default')})"
             elif "permission denied" in error_msg.lower():
-                error_msg = "Permission denied for ydotool socket or /dev/uinput"
+                error_msg = f"Permission denied for ydotool socket ({env.get('YDOTOOL_SOCKET', 'default')}) or /dev/uinput"
                 
             logger.warning(f"ydotool injection failed: {error_msg}")
             return False, error_msg
@@ -80,7 +104,8 @@ def is_ydotool_available() -> bool:
         
     try:
         # Just check help or version to see if it executes
-        subprocess.run([ydotool_path, "--help"], capture_output=True, timeout=2)
+        env = _get_ydotool_env()
+        subprocess.run([ydotool_path, "--help"], capture_output=True, timeout=2, env=env)
         return True
     except Exception:
         return False
