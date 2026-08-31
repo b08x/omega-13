@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.omega13.audio_processor import AudioProcessor, CommandExecutionError
+from omega13.audio_processor import AudioProcessor, CommandExecutionError
 
 
 class TestFormatConversion(unittest.TestCase):
