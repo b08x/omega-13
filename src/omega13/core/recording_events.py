@@ -1,7 +1,7 @@
-"""Recording Event Handler - Textual-free business logic for recording events.
+"""Recording Event Handler - Core business logic for recording events.
 
-Extracts recording event handling logic from the Textual TUI app into a
-reusable module that both TUI and headless modes can use.
+Provides a reusable module for recording event handling logic that
+both UI and headless modes can use.
 """
 
 from dataclasses import dataclass
@@ -20,10 +20,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class RecordingEventCallbacks:
-    """Callback protocol for UI updates - implemented by TUI/headless consumers.
+    """Callback protocol for UI updates - implemented by UI/headless consumers.
 
     All callbacks are optional and receive only primitive/serializable data
-    to maintain Textual-free operation.
+    to maintain decoupled operation.
     """
 
     on_recording_started: Optional[Callable[[Path, str], None]] = None
@@ -41,14 +41,14 @@ class RecordingEventCallbacks:
 
 
 class RecordingEventHandler:
-    """Handles recording event business logic without Textual dependencies.
+    """Handles recording event business logic without UI dependencies.
 
     Encapsulates the dispatcher for RecordingEvent enum (SIGNAL_DETECTED,
     AUTO_STARTED, MANUAL_STARTED, SILENCE_DETECTED, AUTO_STOPPED,
     MANUAL_STOPPED, STATE_CHANGED) and the register-and-transcribe logic.
 
     All UI updates are delegated via the RecordingEventCallbacks protocol,
-    allowing TUI and headless modes to register their own update handlers.
+    allowing UI and headless modes to register their own update handlers.
     """
 
     def __init__(
@@ -249,9 +249,9 @@ class RecordingEventHandler:
                 if self.notifier:
                     self.notifier.notify("Injection Error", error_msg, urgency="critical")
                     
-            def on_daily_note_error(error_msg: str):
+            def on_file_write_error(error_msg: str):
                 if self.notifier:
-                    self.notifier.notify("Daily Note Error", error_msg, urgency="normal")
+                    self.notifier.notify("File Write Error", error_msg, urgency="normal")
 
             def wrapped_on_complete(result):
                 self._on_transcription_complete(result, path)
@@ -271,8 +271,8 @@ class RecordingEventHandler:
                 clipboard_error_callback=on_clipboard_error,
                 inject_to_active_window_enabled=self.config_manager.get_inject_to_active_window(),
                 injection_error_callback=on_injection_error,
-                write_to_daily_note_enabled=self.config_manager.get_write_to_daily_note(),
-                daily_note_error_callback=on_daily_note_error,
+                write_to_file_enabled=self.config_manager.get_write_to_file(),
+                file_write_error_callback=on_file_write_error,
             )
 
     def _on_transcription_complete(self, result, path: Optional[Path] = None) -> None:

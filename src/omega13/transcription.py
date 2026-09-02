@@ -16,7 +16,7 @@ import random
 
 from .clipboard import copy_to_clipboard
 from .injection import inject_text
-from .obsidian_cli import obsidian_cli
+from .file_output import file_output
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +200,8 @@ class TranscriptionService:
         clipboard_error_callback: Optional[Callable[[str], None]] = None,
         inject_to_active_window_enabled: bool = False,
         injection_error_callback: Optional[Callable[[str], None]] = None,
-        write_to_daily_note_enabled: bool = False,
-        daily_note_error_callback: Optional[Callable[[str], None]] = None,
+        write_to_file_enabled: bool = False,
+        file_write_error_callback: Optional[Callable[[str], None]] = None,
     ) -> threading.Thread:
         """
         Start async transcription with proper cleanup support.
@@ -214,8 +214,8 @@ class TranscriptionService:
             clipboard_error_callback: Optional callback for clipboard errors (receives error message)
             inject_to_active_window_enabled: Whether to type result into active window
             injection_error_callback: Optional callback for injection errors (receives error message)
-            write_to_daily_note_enabled: Whether to write result to Obsidian daily note
-            daily_note_error_callback: Optional callback for daily note errors (receives error message)
+            write_to_file_enabled: Whether to write result to Obsidian daily note
+            file_write_error_callback: Optional callback for daily note errors (receives error message)
 
         Returns:
             Thread object running the transcription
@@ -230,8 +230,8 @@ class TranscriptionService:
                 clipboard_error_callback,
                 inject_to_active_window_enabled,
                 injection_error_callback,
-                write_to_daily_note_enabled,
-                daily_note_error_callback,
+                write_to_file_enabled,
+                file_write_error_callback,
             ),
             daemon=True,  # Daemon thread allows clean shutdown without blocking
             name=f"transcription-{audio_path.stem}",  # Added name for debugging
@@ -255,8 +255,8 @@ class TranscriptionService:
         clipboard_error_callback: Optional[Callable[[str], None]] = None,
         inject_to_active_window_enabled: bool = False,
         injection_error_callback: Optional[Callable[[str], None]] = None,
-        write_to_daily_note_enabled: bool = False,
-        daily_note_error_callback: Optional[Callable[[str], None]] = None,
+        write_to_file_enabled: bool = False,
+        file_write_error_callback: Optional[Callable[[str], None]] = None,
     ):
         try:
             # Check cancellation before expensive operations
@@ -374,12 +374,14 @@ class TranscriptionService:
                     # Invoke error callback if injection failed
                     injection_error_callback(error_msg)
 
-            # Write to Obsidian daily note if enabled
-            if write_to_daily_note_enabled and transcribed_text:
-                result = obsidian_cli.append_to_daily_note(transcribed_text)
-                if not result.success and daily_note_error_callback:
-                    # Invoke error callback if daily note writing failed
-                    daily_note_error_callback(result.message)
+            # Write to generic output file if enabled
+            if write_to_file_enabled and transcribed_text:
+                from .config import ConfigManager
+                config = ConfigManager()
+                output_dir = config.get_output_file_directory()
+                result = file_output.append_to_daily_file(transcribed_text, output_dir)
+                if not result.success and file_write_error_callback:
+                    file_write_error_callback(result.message)
 
             if progress_callback:
                 progress_callback(1.0)

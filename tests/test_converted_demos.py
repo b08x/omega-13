@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from omega13.config import ConfigManager
 # from omega13.app import Omega13App
-from omega13.obsidian_cli import obsidian_cli
+from omega13.file_output import file_output
 from omega13.transcription import TranscriptionStatus, TranscriptionResult
 
 
@@ -43,10 +43,10 @@ def test_config_persistence(temp_dir):
 @pytest.mark.asyncio
 async def test_app_mutual_exclusivity():
     """Test mutual exclusivity logic in Omega13App (from demo_daily_note_feature.py)."""
-    with patch('omega13.app.obsidian_cli') as mock_obsidian:
+    with patch('omega13.transcription.file_output') as mock_file_output:
         mock_result = MagicMock()
         mock_result.success = True
-        mock_obsidian.open_daily_note_if_enabled.return_value = mock_result
+        mock_file_output.open_daily_note_if_enabled.return_value = mock_result
         
         app = Omega13App()
         async with app.run_test() as pilot:
@@ -96,14 +96,14 @@ def test_transcription_display_status_updates():
 
 
 def test_obsidian_cli_result_structure():
-    """Test ObsidianResult structure (from demo_daily_note_feature.py)."""
-    from omega13.obsidian_cli import ObsidianResult
+    """Test FileOutputResult structure (from demo_daily_note_feature.py)."""
+    from omega13.file_output import FileOutputResult
     
-    res = ObsidianResult(success=True, message="Test success")
+    res = FileOutputResult(success=True, message="Test success")
     assert res.success is True
     assert res.message == "Test success"
     
-    res = ObsidianResult(success=False, message="Test failure", error_code=1)
+    res = FileOutputResult(success=False, message="Test failure", error_code=1)
     assert res.success is False
     assert res.error_code == 1
 
@@ -130,7 +130,7 @@ async def test_transcription_settings_screen_init():
 @pytest.mark.asyncio
 async def test_recording_to_transcription_workflow():
     """Test that transcription is triggered when recording stops (from example_auto_transcription.py)."""
-    with patch('omega13.app.obsidian_cli'), \
+    with patch('omega13.transcription.file_output'), \
          patch('omega13.app.AudioEngine') as mock_engine_class, \
          patch('omega13.app.TranscriptionService') as mock_trans_service_class:
         
