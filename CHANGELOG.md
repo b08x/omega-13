@@ -1,3 +1,14 @@
+## [2.4.2] - 2026-09-02
+
+### 🚜 Refactor
+- Replace Obsidian CLI dependency with generic configurable file output.
+
+### 📝 Documentation
+- Remove Textual references from recording event handlers.
+
+### ✨ Features
+- Add force_osd configuration to bypass GNOME compositor check.
+
 ## [2.4.1] - 2026-08-31
 
 ### 🚀 Features
