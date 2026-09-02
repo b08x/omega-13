@@ -21,7 +21,7 @@ def test_auto_transcribe_config_persistence(temp_config_path):
     """Test that auto-transcribe setting is persisted in config."""
     # Session 1: Enable auto-transcription
     config1 = ConfigManager(temp_config_path)
-    config1.set_write_to_daily_note(False) # Initial state
+    config1.set_write_to_file(False) # Initial state
     
     # Transcription section doesn't have a direct setter for auto_transcribe in config.py
     # but app.py uses it. Let's check config.py again.

@@ -42,7 +42,8 @@ class ConfigWizard:
         # Output Destinations
         table.add_row("Outputs", "Copy to Clipboard", str(c.get_copy_to_clipboard()))
         table.add_row("Outputs", "Inject to Window", str(c.get_inject_to_active_window()))
-        table.add_row("Outputs", "Obsidian Daily Note", str(c.get_write_to_daily_note()))
+        table.add_row("Outputs", "Append to Output File", str(c.get_write_to_file()))
+        table.add_row("Outputs", "Output File Directory", str(c.get_output_file_directory()) or "Not set")
         
         console.print(table)
         console.print()
@@ -130,8 +131,13 @@ class ConfigWizard:
         inject = Confirm.ask("Type transcription into active window (requires ydotool)?", default=c.get_inject_to_active_window())
         c.set_inject_to_active_window(inject)
         
-        obs = Confirm.ask("Append transcription to Obsidian Daily Note?", default=c.get_write_to_daily_note())
-        c.set_write_to_daily_note(obs)
+        file_out = Confirm.ask("Append transcription to a daily markdown file?", default=c.get_write_to_file())
+        c.set_write_to_file(file_out)
+        
+        if file_out:
+            current_dir = c.get_output_file_directory()
+            new_dir = Prompt.ask("Output Directory (e.g., ~/Documents/Notes)", default=current_dir)
+            c.set_output_file_directory(new_dir)
         
         console.print("[green]Output settings updated![/green]\n")
         

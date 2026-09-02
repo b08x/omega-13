@@ -249,9 +249,9 @@ class RecordingEventHandler:
                 if self.notifier:
                     self.notifier.notify("Injection Error", error_msg, urgency="critical")
                     
-            def on_daily_note_error(error_msg: str):
+            def on_file_write_error(error_msg: str):
                 if self.notifier:
-                    self.notifier.notify("Daily Note Error", error_msg, urgency="normal")
+                    self.notifier.notify("File Write Error", error_msg, urgency="normal")
 
             def wrapped_on_complete(result):
                 self._on_transcription_complete(result, path)
@@ -271,8 +271,8 @@ class RecordingEventHandler:
                 clipboard_error_callback=on_clipboard_error,
                 inject_to_active_window_enabled=self.config_manager.get_inject_to_active_window(),
                 injection_error_callback=on_injection_error,
-                write_to_daily_note_enabled=self.config_manager.get_write_to_daily_note(),
-                daily_note_error_callback=on_daily_note_error,
+                write_to_file_enabled=self.config_manager.get_write_to_file(),
+                file_write_error_callback=on_file_write_error,
             )
 
     def _on_transcription_complete(self, result, path: Optional[Path] = None) -> None:

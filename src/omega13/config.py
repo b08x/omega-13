@@ -41,10 +41,14 @@ class ConfigManager:
                 "save_to_file": True,
                 "copy_to_clipboard": False,
                 "inject_to_active_window": False,
-                "write_to_daily_note": False,
+                "write_to_file": False,
             },
             "desktop_notifications": True,
             "force_osd": False,
+            "output_file": {
+                "enabled": False,
+                "directory": ""
+            },
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
@@ -241,15 +245,24 @@ class ConfigManager:
         self.config["transcription"]["inject_to_active_window"] = enabled
         self.save_config(self.config)
 
-    def get_write_to_daily_note(self) -> bool:
-        """Get whether to write transcription results to Obsidian daily note."""
-        return self.config.get("transcription", {}).get("write_to_daily_note", False)
+    def get_write_to_file(self) -> bool:
+        """Get whether to write transcription results to daily markdown file."""
+        return self.config.get("transcription", {}).get("write_to_file", False)
 
-    def set_write_to_daily_note(self, enabled: bool) -> None:
-        """Set whether to write transcription results to Obsidian daily note."""
+    def set_write_to_file(self, enabled: bool) -> None:
+        """Set whether to write transcription results to daily markdown file."""
         if "transcription" not in self.config:
             self.config["transcription"] = {}
-        self.config["transcription"]["write_to_daily_note"] = enabled
+        self.config["transcription"]["write_to_file"] = enabled
+        self.save_config(self.config)
+
+    def get_output_file_directory(self) -> str:
+        return self.config.get("output_file", {}).get("directory", "")
+
+    def set_output_file_directory(self, path: str) -> None:
+        if "output_file" not in self.config:
+            self.config["output_file"] = {}
+        self.config["output_file"]["directory"] = path
         self.save_config(self.config)
 
     # Session Getters
