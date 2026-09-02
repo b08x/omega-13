@@ -44,6 +44,7 @@ class ConfigManager:
                 "write_to_daily_note": False,
             },
             "desktop_notifications": True,
+            "force_osd": False,
             "sessions": {
                 "temp_root": "/tmp/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
@@ -122,6 +123,14 @@ class ConfigManager:
     def get_desktop_notifications_enabled(self) -> bool:
         """Check if desktop notifications are enabled."""
         return self.config.get("desktop_notifications", True)
+
+    def get_force_osd(self) -> bool:
+        """Check if OSD is forced (bypassing compositor compatibility checks)."""
+        return self.config.get("force_osd", False)
+
+    def set_force_osd(self, force: bool) -> None:
+        self.config["force_osd"] = force
+        self.save_config(self.config)
 
     def validate_ports_exist(self, client: jack.Client) -> tuple[bool, list[str]]:
         saved_ports = self.get_input_ports()

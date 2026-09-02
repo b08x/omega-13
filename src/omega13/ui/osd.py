@@ -241,9 +241,13 @@ class OSDManager:
         # Determine fallback behavior based on GNOME/compositor
         is_gnome = "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", "")
         
+        from ..config import ConfigManager
+        config = ConfigManager()
+        force_osd = config.get_force_osd()
+        
         def _do_update():
             # If we are on GNOME or window creation failed, fallback to notify-send
-            if is_gnome or not self.window:
+            if (is_gnome and not force_osd) or not self.window:
                 urgency = "normal" if state_type == "recording" else "low"
                 self._notifier.notify(f"Omega-13: {state_type.title()}", text, urgency=urgency, timeout=max(2000, timeout_ms))
             else:
