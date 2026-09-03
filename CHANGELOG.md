@@ -4,7 +4,7 @@
 - Replace Obsidian CLI dependency with generic configurable file output.
 
 ### 📝 Documentation
-- Remove Textual references from recording event handlers.
+- Remove legacy UI references from recording event handlers.
 
 ### ✨ Features
 - Add force_osd configuration to bypass GNOME compositor check.
@@ -24,17 +24,17 @@
 - Resolve unawaited dbus_next coroutine warning.
 
 ### 🔧 Chore
-- Fix pytest config and broken imports from TUI removal.
+- Fix pytest config and broken imports from UI refactor.
 
 ## [2.4.0] - 2026-08-21
 
 ### 🚀 Features
-- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Introduce a minimalist GTK4 Wayland OSD and headless daemon.
 - Add graceful Desktop Notification fallback for GNOME Wayland.
 - Add freedesktop audible feedback for recording states.
 - Rebuild app.py as a lightweight CLI proxy.
 
-- Add TUI key bindings for toggling app features, introduce new tests, and update project dependencies.
+- Add Global key bindings for toggling app features, introduce new tests, and update project dependencies.
 - Add UI and configuration for transcription server inference path.
 - Refine signal detection with noise immunity and sustained signal logic, and improve signal metrics data flow.
 - Embed large-v3-turbo-q5_0 model and quantize binary into container, update model path configuration, and ignore pytest cache.
@@ -69,7 +69,7 @@
 
 ### 🎨 Styling
 
-- *(ui)* Update TUI color scheme and styling
+- *(ui)* Update OSD color scheme and styling
 - *(ui)* Standardize button layouts and dialog sizes in modal screens
 
 ### 🧪 Testing
@@ -83,7 +83,7 @@
 ## [2.3.0] - 2025-12-26
 
 ### 🚀 Features
-- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Introduce a minimalist GTK4 Wayland OSD and headless daemon.
 - Add graceful Desktop Notification fallback for GNOME Wayland.
 - Add freedesktop audible feedback for recording states.
 - Rebuild app.py as a lightweight CLI proxy.
@@ -108,7 +108,7 @@
 ## [2.2.0] - 2025-12-24
 
 ### 🚀 Features
-- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Introduce a minimalist GTK4 Wayland OSD and headless daemon.
 - Add graceful Desktop Notification fallback for GNOME Wayland.
 - Add freedesktop audible feedback for recording states.
 - Rebuild app.py as a lightweight CLI proxy.
@@ -139,7 +139,7 @@
 ## [2.1.0] - 2025-12-22
 
 ### 🚀 Features
-- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Introduce a minimalist GTK4 Wayland OSD and headless daemon.
 - Add graceful Desktop Notification fallback for GNOME Wayland.
 - Add freedesktop audible feedback for recording states.
 - Rebuild app.py as a lightweight CLI proxy.
@@ -172,7 +172,7 @@
 ## [2.0.0] - 2025-12-22
 
 ### 🚀 Features
-- Remove Textual TUI in favor of a minimalist GTK4 Wayland OSD and headless daemon.
+- Introduce a minimalist GTK4 Wayland OSD and headless daemon.
 - Add graceful Desktop Notification fallback for GNOME Wayland.
 - Add freedesktop audible feedback for recording states.
 - Rebuild app.py as a lightweight CLI proxy.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Omega-13 is a Textual TUI application for retroactive audio recording and transcription on Linux. It maintains a 13-second JACK audio ring buffer and saves/transcribes on demand. Requires a running JACK/PipeWire server and optionally a local `whisper-server` or Groq API key for transcription.
+Omega-13 is a headless application with a GTK4 OSD for retroactive audio recording and transcription on Linux. It maintains a 13-second JACK audio ring buffer and saves/transcribes on demand. Requires a running JACK/PipeWire server and optionally a local `whisper-server` or Groq API key for transcription.
 
 ## Commands
 
@@ -19,10 +19,10 @@ uv run omega13
 uv run pytest
 
 # Run a single test file
-uv run pytest tests/test_tui_bindings.py -v
+uv run pytest tests/test_headless_acceptance.py -v
 
 # Run a single test by name
-uv run pytest tests/test_tui_bindings.py::test_toggle_bindings -v
+uv run pytest tests/test_headless_acceptance.py::test_toggle_bindings -v
 ```
 
 Config is stored at `~/.config/omega13/config.json`. Sessions land in `/tmp/omega13/` until saved.
@@ -34,7 +34,7 @@ JACK Audio → AudioEngine (ring buffer) → SignalDetector (RMS)
                                                ↓
                                     RecordingController (state machine)
                                                ↓ RecordingEvent
-                                         Omega13App (Textual)
+                                         HeadlessOmega13
                                                ↓
                                     TranscriptionService (async threads)
                                                ↓
@@ -53,7 +53,6 @@ JACK Audio → AudioEngine (ring buffer) → SignalDetector (RMS)
 
 - **`ConfigManager`** (`src/omega13/config.py`) persists JSON to `~/.config/omega13/config.json`. It is the single source of truth for thresholds, paths, provider selection, and feature flags. Many modules accept it as an optional constructor argument.
 
-- **`ui.py`** contains all Textual `Screen` and `Widget` subclasses (VUMeter, TranscriptionDisplay, modal screens). CSS is embedded directly in `Omega13App` rather than in a separate `.tcss` file.
 
 - **IPC**: The app responds to `SIGUSR1` via a PID file so that external tools (global hotkeys, D-Bus, `dbus_service.py`) can trigger recording without keyboard focus.
 
@@ -67,15 +66,14 @@ Modifying these affects many dependents — check importers before changing sign
 
 ## Testing
 
-Tests use `pytest-asyncio` and `pytest-textual-snapshot`. Tests that instantiate `Omega13App` must mock `omega13.app.obsidian_cli` (to prevent subprocess calls) and mock `AudioEngine` (to prevent JACK connection). See `tests/test_tui_bindings.py` for the pattern.
+Tests use `pytest-asyncio` . See tests for the pattern.
 
-Most tests in `tests/` are demo scripts or integration-style tests that require real hardware (JACK, whisper-server). Run `pytest tests/test_tui_bindings.py` for the reliably unit-testable suite.
+Most tests in `tests/` are demo scripts or integration-style tests that require real hardware (JACK, whisper-server). Run `pytest tests/test_headless_acceptance.py` for the reliably unit-testable suite.
 
 ## Context7 MCP Documentation
 
 - `/websites/ffmpeg_documentation` — FFmpeg audio/video
 - `/ggml-org/whisper.cpp` — Whisper ASR C++ implementation
-- `/websites/textual_textualize_io` — Textual TUI framework
 - `/websites/jackclient-python_readthedocs_io_en_0_5_5` — JACK Python bindings
 - `/rbouqueau/sox` — SoX audio processing
 - `/websites/help_obsidian_md_cli` — Obsidian CLI

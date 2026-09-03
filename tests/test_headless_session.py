@@ -10,7 +10,7 @@ from omega13.file_output import file_output
 
 
 def test_session_creation_headless():
-    """Test session creation without TUI."""
+    """Test session creation."""
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_root = Path(tmpdir)
         manager = SessionManager(temp_root=temp_root)

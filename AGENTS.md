@@ -59,7 +59,7 @@ app.py / __main__.py          ← entry points
 
 ## Conventions
 
-- **Textual-free core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
+- **Headless core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
 - **Lazy imports**: `__init__.py` uses `__getattr__` to defer heavy deps (JACK, PyGObject)
 - **ConfigManager is a leaf**: it imports nothing from omega13. All other modules import it, never the reverse.
 - **Event-driven**: `RecordingController` fires events via callback, never directly calls UI code
@@ -69,7 +69,7 @@ app.py / __main__.py          ← entry points
 ## Tests
 
 - `tests/` — pytest, ~20 test files
-- Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, TUI bindings, Obsidian integration
+- Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, Obsidian integration
 - Run: `pytest` or `pytest -x` (stop on first failure)
 
 <trackboi>

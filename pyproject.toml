@@ -1,7 +1,7 @@
 [project]
 name = "omega13"
 version = "2.4.2"
-description = "Retroactive audio recorder and transcription daemon with optional TUI"
+description = "Retroactive audio recorder and transcription daemon with GTK4 OSD"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

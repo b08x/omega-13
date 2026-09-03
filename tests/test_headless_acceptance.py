@@ -1,7 +1,7 @@
 """Acceptance test suite for Omega-13 headless D-Bus mode.
 
 Validates the complete headless daemon workflow:
-1. Daemon launches and registers D-Bus service without TUI
+1. Daemon launches and registers D-Bus service
 2. D-Bus toggle signal starts recording
 3. D-Bus health signal confirms valid response
 4. D-Bus toggle signal stops recording
@@ -69,7 +69,7 @@ def headless_daemon(mock_audio_engine):
 
 @pytest.mark.asyncio
 async def test_daemon_registers_without_tui(headless_daemon):
-    """(1) Daemon launches, (2) verify running without TUI."""
+    """(1) Daemon launches, (2) verify running."""
     headless = await headless_daemon()
     assert headless.dbus_service is not None
     assert headless.dbus_service.is_registered() is True
@@ -163,7 +163,7 @@ async def test_dbus_toggle_stops_recording(headless_daemon):
 async def test_full_headless_acceptance_workflow(headless_daemon):
     """End-to-end acceptance test covering all 6 criteria in sequence.
 
-    1. Daemon launches, registers D-Bus, no TUI
+    1. Daemon launches, registers D-Bus
     2. Initial state is idle
     3. Toggle starts recording -> state becomes recording_manual
     4. Recording began (controller confirms)

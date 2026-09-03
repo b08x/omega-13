@@ -1,7 +1,7 @@
 # GEMINI.md - Omega-13 Project Context
 
 ## Project Overview
-**Omega-13** is a high-performance Linux TUI application for retroactive audio recording and transcription. It captures the last 13 seconds of audio on demand, transcribes it (locally or via cloud), and routes the results to various destinations (clipboard, active window, Obsidian).
+**Omega-13** is a high-performance Linux daemon application for retroactive audio recording and transcription. It captures the last 13 seconds of audio on demand, transcribes it (locally or via cloud), and routes the results to various destinations (clipboard, active window, Obsidian).
 
 ### Core Features
 - **Retroactive Ring Buffer:** Continuously maintains 13 seconds of JACK/PipeWire audio in memory.
@@ -23,7 +23,7 @@
 ## Architecture
 The project follows a modular, event-driven architecture designed to run as a headless background daemon with a GTK4 OSD.
 
-- **`omega13.app`**: Main entry point handling CLI arguments and legacy TUI.
+- **`omega13.app`**: Main entry point handling CLI arguments.
 - **`omega13.headless_service`**: The primary background daemon coordinating the `RecordingController`, `AudioEngine`, and `osd_manager`.
 - **`omega13.ui.osd`**: Wayland-native GTK4 Layer Shell OSD rendering via Cairo.
 - **`omega13.audio`**: The `AudioEngine` manages the JACK client, the 13s ring buffer, and real-time recording.
@@ -56,7 +56,7 @@ The project follows a modular, event-driven architecture designed to run as a he
 ### Coding Style
 - **Type Hinting:** Strictly required for all new functions and class methods.
 - **Logging:** Use the standard `logging` module. Real-time audio callbacks (JACK process) should only log at `DEBUG` level to avoid performance issues.
-- **Concurrency:** Audio capture happens in the JACK process thread. File writing and transcription must be handled in separate threads (managed by `AudioEngine` and `TranscriptionService`) to avoid blocking the TUI.
+- **Concurrency:** Audio capture happens in the JACK process thread. File writing and transcription must be handled in separate threads (managed by `AudioEngine` and `TranscriptionService`) to avoid blocking the main event loop.
 
 ### Audio Processing Pipeline
 When saving a recording:
