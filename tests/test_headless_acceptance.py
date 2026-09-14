@@ -40,7 +40,20 @@ def mock_audio_engine():
     Synchronous setup contract: plain MagicMock values only; tests are
     responsible for awaiting async life-cycle steps on the D-Bus loop.
     """
-    with patch('omega13.headless_service.AudioEngine') as MockEngine:
+    with patch('omega13.headless_service.AudioEngine') as MockEngine, \
+         patch('omega13.headless_service.ConfigManager') as MockConfig:
+        
+        # Setup config mock
+        config = MockConfig.return_value
+        config.get_input_ports.return_value = ["port1", "port2"]
+        config.get_auto_record_enabled.return_value = False
+        config.get_desktop_notifications_enabled.return_value = False
+        config.get_transcription_enabled.return_value = False
+        config.get_auto_record_begin_threshold.return_value = -25.0
+        config.get_auto_record_end_threshold.return_value = -35.0
+        config.get_auto_record_silence_duration.return_value = 2.5
+        config.get_session_temp_root.return_value = Path("/tmp/omega13")
+        
         ae = MockEngine.return_value
         ae.samplerate = 48000
         ae.channels = 2
