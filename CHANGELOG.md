@@ -1,4 +1,4 @@
-## [Unreleased]
+## [2.5.0] - 2026-09-14
 
 ### ✨ Features
 - Add 3-tier OSD architecture with native GNOME Shell Extension (>= 45) and wlroots GTK4 layer shell support.
