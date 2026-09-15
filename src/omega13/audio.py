@@ -236,12 +236,13 @@ class AudioEngine:
         dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in peaks_list]
         return peaks_list, dbs
 
-    def start_recording(self, output_path: Path) -> Path | None:
+    def start_recording(self, output_path: Path, streaming_callback=None) -> Path | None:
         """
         Start recording to specified output path.
 
         Args:
             output_path: Full path where recording should be saved
+            streaming_callback: Optional callback for real-time chunks
 
         Returns:
             Path object of the recording file, or None if already recording
@@ -265,7 +266,7 @@ class AudioEngine:
 
         self.writer_thread = threading.Thread(
             target=self._file_writer,
-            args=(str(output_path), past_data),
+            args=(str(output_path), past_data, streaming_callback),
             daemon=True,  # Daemon thread allows clean shutdown without blocking
         )
         self.writer_thread.start()
@@ -309,7 +310,7 @@ class AudioEngine:
             except queue.Empty:
                 break
 
-    def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
+    def _file_writer(self, filename: str, pre_buffer_data: np.ndarray, streaming_callback=None) -> None:
         """Write audio data to WAV file (16kHz mono)."""
         import tempfile
         import os
@@ -332,6 +333,9 @@ class AudioEngine:
                 temp_wav, mode="w", samplerate=self.samplerate, channels=self.channels
             ) as wav_file:
                 wav_file.write(pre_buffer_data)
+                
+                if streaming_callback:
+                    streaming_callback(pre_buffer_data.tobytes())
 
                 # Continue writing blocks from queue
                 while self.is_recording or not self.record_queue.empty():
@@ -343,6 +347,8 @@ class AudioEngine:
                         else:
                             block = item
                         wav_file.write(block)
+                        if streaming_callback:
+                            streaming_callback(block.tobytes())
                     except queue.Empty:
                         if not self.is_recording:
                             break

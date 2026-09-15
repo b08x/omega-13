@@ -63,6 +63,22 @@ class TranscriptionProvider:
     def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
         raise NotImplementedError
 
+    def transcribe_chunk(self, chunk_data: bytes) -> str:
+        """Process an audio chunk and return transcription (if supported)."""
+        raise NotImplementedError("Streaming not supported by this provider")
+
+class StubStreamingProvider(TranscriptionProvider):
+    """Stub provider for real-time streaming mode."""
+
+    def check_health(self) -> tuple[bool, Optional[str]]:
+        return True, None
+
+    def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
+        return "[Streaming mode active - full file transcribed]", "en"
+
+    def transcribe_chunk(self, chunk_data: bytes) -> str:
+        return f"[Chunk processed: {len(chunk_data)} bytes]"
+
 
 class LocalTranscriptionProvider(TranscriptionProvider):
     """Local whisper-server backend."""

@@ -452,3 +452,54 @@ class SessionManager:
         if not self.current_session:
             return False
         return len(self.current_session.recordings) > 0
+
+    def get_failed_transcriptions_manifest_path(self) -> Path:
+        """Get the path to the failed transcriptions manifest file."""
+        return self.temp_root / "failed_transcriptions.json"
+
+    def add_failed_transcription(self, filepath: Path, error: str = "") -> None:
+        """Add a failed transcription to the manifest, keeping only the 10 most recent."""
+        manifest_path = self.get_failed_transcriptions_manifest_path()
+        entries = []
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r") as f:
+                    entries = json.load(f)
+            except Exception:
+                pass
+        
+        entries.append({
+            "filepath": str(filepath),
+            "timestamp": datetime.now().isoformat(),
+            "error": error
+        })
+        
+        # Keep only the 10 most recent entries
+        entries = entries[-10:]
+        
+        try:
+            with open(manifest_path, "w") as f:
+                json.dump(entries, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write failed transcriptions manifest: {e}")
+
+    def get_failed_transcriptions(self) -> List[Dict[str, Any]]:
+        """Retrieve the list of failed transcriptions."""
+        manifest_path = self.get_failed_transcriptions_manifest_path()
+        if not manifest_path.exists():
+            return []
+        try:
+            with open(manifest_path, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+    def clear_failed_transcriptions(self) -> None:
+        """Clear the failed transcriptions manifest."""
+        manifest_path = self.get_failed_transcriptions_manifest_path()
+        if manifest_path.exists():
+            try:
+                manifest_path.unlink()
+            except Exception as e:
+                logger.error(f"Failed to delete failed transcriptions manifest: {e}")
+

@@ -134,7 +134,15 @@ class RecordingEventHandler:
         if session:
             recording_path = session.get_next_recording_path()
             self._current_recording_path = recording_path
-            self.recording_controller.manual_start_recording(recording_path)
+            
+            cb = None
+            if self.config_manager.get_streaming_mode() and self.transcription_service:
+                for p in self.transcription_service.providers:
+                    if hasattr(p, "transcribe_chunk"):
+                        cb = lambda chunk: p.transcribe_chunk(chunk)
+                        break
+            
+            self.recording_controller.manual_start_recording(recording_path, streaming_callback=cb)
 
     def _handle_auto_started(self, data: dict) -> None:
         """Handle AUTO_STARTED - recording started automatically."""
@@ -285,6 +293,9 @@ class RecordingEventHandler:
             str(result.status) == "TranscriptionStatus.ERROR"
         ):
             self.last_failed_recording_path = path
+            if path:
+                error_msg = getattr(result, "error_message", "Unknown error")
+                self.session_manager.add_failed_transcription(path, error_msg)
         else:
             # Add to session if successful
             if getattr(result, "status", None) and (
@@ -309,3 +320,22 @@ class RecordingEventHandler:
             self.register_and_transcribe(self.last_failed_recording_path)
             return True
         return False
+
+    def retry_failed_transcriptions(self) -> int:
+        """Retry all failed transcriptions in the manifest."""
+        failures = self.session_manager.get_failed_transcriptions()
+        if not failures:
+            return 0
+        
+        count = 0
+        self.session_manager.clear_failed_transcriptions()
+        for failure in failures:
+            path = Path(failure.get("filepath", ""))
+            if path.exists():
+                self.register_and_transcribe(path)
+                count += 1
+                
+        if count > 0 and self.notifier:
+            self.notifier.notify("Retrying Transcriptions", f"Retrying {count} failed transcriptions")
+            
+        return count

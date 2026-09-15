@@ -191,12 +191,13 @@ class RecordingController:
             logger.info("Auto-record disabled (manual recording continues)")
             return True
 
-    def manual_start_recording(self, output_path: Path) -> bool:
+    def manual_start_recording(self, output_path: Path, streaming_callback=None) -> bool:
         """
         Start recording manually (user-initiated).
 
         Args:
             output_path: Path where recording will be saved
+            streaming_callback: Optional callback for real-time streaming chunks
 
         Returns:
             True if recording started, False if invalid state
@@ -214,7 +215,7 @@ class RecordingController:
         logger.info(f"Manual start: {output_path} (State: {state.value})")
 
         # Start recording via audio engine
-        result = self.audio_engine.start_recording(output_path)
+        result = self.audio_engine.start_recording(output_path, streaming_callback=streaming_callback)
         if result is None:
             logger.error("AudioEngine failed to start recording")
             return False

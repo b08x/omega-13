@@ -11,8 +11,9 @@ class DesktopNotifier:
     Handles sending desktop notifications using system utilities (notify-send).
     """
 
-    def __init__(self, app_name: str = "Omega-13"):
+    def __init__(self, app_name: str = "Omega-13", config_manager=None):
         self.app_name = app_name
+        self.config_manager = config_manager
         self.notify_send_path = shutil.which("notify-send")
         if not self.notify_send_path:
             logger.warning("notify-send not found. Desktop notifications will be disabled.")
@@ -28,6 +29,13 @@ class DesktopNotifier:
             timeout: Expiration time in milliseconds (default 2s).
         """
         if not self.notify_send_path:
+            return
+
+        enabled = True
+        if self.config_manager:
+            enabled = self.config_manager.get_desktop_notifications_enabled()
+
+        if not enabled and urgency != "critical":
             return
 
         try:
