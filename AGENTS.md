@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**omega-13** is a retroactive audio recorder and transcription daemon (v2.4.2) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
+**omega-13** is a retroactive audio recorder and transcription daemon (v2.5.0) with a GTK4 OSD. It records audio via JACK, detects silence/signal for auto-record, transcribes via local whisper-server or Groq, and outputs to clipboard/injection/Obsidian.
 
 - Python >=3.12, hatchling build, `src/omega13/` layout
 - Entry point: `omega13.app:main` (CLI: `omega13`)
@@ -15,7 +15,7 @@
 ```
 app.py / __main__.py          ← entry points
   └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service, Systemd primary
-       ├─ OSDManager          ← GTK4 Layer Shell on-screen display (ui.osd)
+       ├─ OSDManager          ← 3-Tier OSD Architecture (GNOME native, wlroots GTK4, transient notifications)
        ├─ RecordingController ← state machine (IDLE→ARMED→RECORDING→STOPPING)
        ├─ RecordingEventHandler ← business logic, dispatches events to UI/OSD callbacks
        ├─ SessionManager      ← session lifecycle, recording metadata
@@ -38,12 +38,13 @@ app.py / __main__.py          ← entry points
 | `audio_processor.py:AudioProcessor` | ffmpeg/sox pipeline, trim/downsample | None (subprocess wrapper) |
 | `transcription.py:TranscriptionService` | Groq/local whisper backends | ConfigManager |
 | `headless_service.py:HeadlessOmega13` | Daemon mode, Systemd, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager, OSDManager |
-| `ui/osd.py:OSDManager` | GTK4 Layer Shell on-screen display | PyGObject, Gtk4LayerShell, cairo |
+| `ui/osd.py:OSDManager` | 3-Tier OSD Architecture (GNOME native, wlroots GTK4 layer shell, transient notifications) | PyGObject, Gtk4LayerShell, cairo, D-Bus |
+| `gnome-extension/` | GNOME Shell Extension for native OSD | D-Bus (`org.gnome.Shell.Extensions.Omega13`) |
 | `pidfile.py` | PID file management, stale detection | None |
 | `signals.py` | Unix signal handling (shutdown, reload, status) | None |
 | `notifications.py:DesktopNotifier` | Desktop notifications | None |
 | `clipboard.py` | Copy to clipboard | pyperclip |
-| `injection.py` | Type into active window | ydotool |
+| `injection.py` | Type into 'Whisp' window (requires 'Whisp' window focus instead of active window) | ydotool |
 | `obsidian_cli.py:ObsidianCLI` | Obsidian daily note integration | None |
 | `hotkeys.py:GlobalHotkeyListener` | Global hotkey via pynput | D-Bus (for toggle) |
 | `install.sh` / `uninstall.sh` | XDG user-local installer scripts | `gum` CLI toolkit |
@@ -59,7 +60,7 @@ app.py / __main__.py          ← entry points
 
 ## Conventions
 
-- **Textual-free core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
+- **Headless core**: `recording_controller.py`, `core/recording_events.py`, `session.py`, `signal_detector.py` have zero UI imports.
 - **Lazy imports**: `__init__.py` uses `__getattr__` to defer heavy deps (JACK, PyGObject)
 - **ConfigManager is a leaf**: it imports nothing from omega13. All other modules import it, never the reverse.
 - **Event-driven**: `RecordingController` fires events via callback, never directly calls UI code
@@ -69,7 +70,7 @@ app.py / __main__.py          ← entry points
 ## Tests
 
 - `tests/` — pytest, ~20 test files
-- Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, TUI bindings, Obsidian integration
+- Key test areas: daemon lifecycle, headless acceptance, PID file, transcription workflow, audio processing, Obsidian integration
 - Run: `pytest` or `pytest -x` (stop on first failure)
 
 <trackboi>

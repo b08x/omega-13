@@ -18,7 +18,6 @@ def main():
         "--stop", action="store_true", help="Stop a running instance"
     )
     # Keeping these for backwards compatibility with any existing scripts, but they are no-ops or default
-    parser.add_argument("--tui", action="store_true", help="Launch with the Textual TUI (Removed: now defaults to headless)")
     parser.add_argument("--daemon", action="store_true", default=True, help="Run as background daemon (default)")
     parser.add_argument("--no-daemon", action="store_false", dest="daemon", help="Run in foreground without daemonizing")
     parser.add_argument("--config", action="store_true", help="Launch the interactive configuration wizard")
@@ -71,8 +70,6 @@ def main():
                 pass
         sys.exit(0)
 
-    if args.tui:
-        print("Warning: The Textual TUI has been removed in favor of the GTK4 OSD.")
         print("Falling back to headless daemon mode.")
 
     if args.config:

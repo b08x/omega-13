@@ -41,7 +41,8 @@ class DesktopNotifier:
                 "-u", urgency,
                 "-t", str(timeout),
                 title,
-                message
+                message,
+                "--hint=string:transient:true"
             ]
             
             subprocess.run(cmd, check=False)

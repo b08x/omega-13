@@ -1,6 +1,6 @@
 """Omega-13 Core Package.
 
-Textual-free business logic modules for headless and TUI modes.
+Core business logic modules.
 """
 
 from .recording_events import RecordingEventHandler, RecordingEventCallbacks

@@ -29,13 +29,24 @@ if ! gum confirm "Install Omega-13 to $DEST_DIR ?"; then
     exit 0
 fi
 
-# Step 1: Copy files
+# Step 1: Clean up existing installation
+if systemctl --user is-active --quiet omega13 2>/dev/null || systemctl --user is-enabled --quiet omega13 2>/dev/null; then
+    gum spin --title "Stopping existing systemd service..." -- bash -c "systemctl --user disable --now omega13 2>/dev/null || true"
+    gum style --foreground 76 "✅ Stopped existing systemd service"
+fi
+
+if [ -f "$SERVICE_FILE" ]; then
+    rm -f "$SERVICE_FILE"
+    gum spin --title "Reloading systemd user daemon..." -- systemctl --user daemon-reload
+fi
+
+# Step 2: Copy files
 mkdir -p "$DEST_DIR"
 gum spin --title "Copying files to $DEST_DIR..." -- rsync -a --exclude='.git' --exclude='.venv' --exclude='__pycache__' --exclude='.pytest_cache' --exclude='logs' --exclude='tests' ./ "$DEST_DIR/"
 
 gum style --foreground 76 "✅ Files copied to $DEST_DIR"
 
-# Step 2: Setup Python environment
+# Step 3: Setup Python environment
 cd "$DEST_DIR"
 
 if command -v uv >/dev/null; then
@@ -46,12 +57,31 @@ fi
 
 gum style --foreground 76 "✅ Virtual environment prepared"
 
-# Step 3: Symlink
+# Step 4: Symlink
 mkdir -p "$XDG_BIN_HOME"
 ln -sf "$DEST_DIR/.venv/bin/omega13" "$BIN_LINK"
 gum style --foreground 76 "✅ Created symlink at $BIN_LINK"
 
-# Step 4: Systemd user service
+# Step 4.1: GNOME Shell Extension
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *"GNOME"* ]]; then
+    EXT_DIR="$HOME/.local/share/gnome-shell/extensions/omega13@b08x.github.io"
+    mkdir -p "$EXT_DIR"
+    cp -r gnome-extension/omega13@b08x.github.io/* "$EXT_DIR/"
+    gum style --foreground 76 "✅ GNOME Shell Extension copied to $EXT_DIR"
+    gum style --foreground 214 "   Don't forget to enable it with: gnome-extensions enable omega13@b08x.github.io"
+fi
+
+# Step 4.5: Wayland Dependency Checks
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *"GNOME"* ]] && [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    if ! command -v ydotool >/dev/null; then
+        echo ""
+        gum style --foreground 214 "⚠️  ydotool not found in PATH."
+        gum style --foreground 214 "   Text injection requires 'ydotool' to simulate keyboard input on Wayland."
+        echo ""
+    fi
+fi
+
+# Step 5: Systemd user service
 mkdir -p "$SYSTEMD_USER_DIR"
 cat > "$SERVICE_FILE" << EOF
 [Unit]
@@ -75,7 +105,7 @@ EOF
 gum spin --title "Reloading systemd user daemon..." -- systemctl --user daemon-reload
 gum style --foreground 76 "✅ Systemd service installed at $SERVICE_FILE"
 
-# Step 5: Final instructions
+# Step 6: Final instructions
 gum style --border normal --margin "1" --padding "1 2" --border-foreground 76 --foreground 76 "🎉 Installation Complete!"
 
 echo ""

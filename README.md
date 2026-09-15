@@ -14,7 +14,8 @@
 - **Local or cloud transcription** — routes audio to a self-hosted `whisper-server` (HTTP) or the Groq Whisper API; provider and credentials switch at runtime via the Settings screen
 - **Auto-record mode** — RMS-based voice-activity detection arms recording when signal crosses a configurable dB threshold and stops automatically after a configurable silence window
 - **Session management** — recordings accumulate in a timestamped temp session under `/tmp/omega13/`; the session saves to permanent storage on demand, with incremental sync for recordings added after the initial save
-- **Multi-destination output** — transcription results can be written to a Markdown file, copied to the clipboard, typed into the active Wayland window via `pynput`, or appended to an Obsidian daily note
+- **Multi-destination output** — transcription results can be written to a Markdown file, copied to the clipboard, typed via `ydotool` (requires "Whisp" window focus), or appended to an Obsidian daily note
+- **Dual OSD Support & Fallbacks** — 3-tier architecture prioritizing a native GNOME Shell Extension, followed by a GTK4 Layer Shell for wlroots (Hyprland/Sway), falling back to transient desktop notifications
 - **Wayland-native IPC** — the app writes a PID file and handles `SIGUSR1` so external tools (compositor hotkey daemons, D-Bus clients) can trigger recording without requiring keyboard focus
 - **Overlap deduplication** — when auto-record produces consecutive clips with shared audio, the session de-duplicates transcriptions by matching word-level suffix–prefix overlaps before appending
 
@@ -25,6 +26,8 @@
 - Linux with JACK or PipeWire-JACK bridge running
 - Python 3.12+
 - [`uv`](https://github.com/astral-sh/uv) for dependency management
+- `ydotool` (requires running `ydotoold` daemon and uinput permissions) for text injection
+- GNOME Shell >= 45 (if using the native GNOME extension)
 - For local transcription: a running `whisper-server` instance (default: `http://localhost:8080`)
 - For cloud transcription: a Groq API key (set via `GROQ_API_KEY` environment variable)
 - For Obsidian daily note integration: `obsidian-cli` installed and configured
@@ -49,6 +52,7 @@ The installer will:
 2. Create a Python virtual environment and install dependencies
 3. Symlink the executable to `~/.local/bin/omega13`
 4. Register a systemd user service at `~/.config/systemd/user/omega13.service`
+5. Copy the GNOME Shell extension to `~/.local/share/gnome-shell/extensions/omega13@b08x.github.io` (Note: You must manually enable it by running `gnome-extensions enable omega13@b08x.github.io`)
 
 You can safely remove the installation at any time by running `./uninstall.sh`.
 </details>
@@ -80,7 +84,13 @@ This brings up a GPU-accelerated whisper-server on port 8080. Adjust the model i
 
 ## Usage
 
-Omega-13 is designed to run as a **background daemon via systemd**. It features a native **GTK4 Layer Shell OSD** that displays recording and transcription status directly on your screen (Wayland/Hyprland supported).
+Omega-13 is designed to run as a **background daemon via systemd**. It supports a **3-Tier OSD Architecture** to display recording and transcription status directly on your screen.
+
+### 3-Tier OSD Architecture & Fallbacks
+
+1. **GNOME Shell Extension**: For GNOME >= 45, a native extension provides smooth, integrated OSD overlays. (Requires enabling via `gnome-extensions enable omega13@b08x.github.io`).
+2. **GTK4 Layer Shell**: For non-GNOME wlroots-based compositors (like Hyprland and Sway), a GTK4 layer shell provides native on-screen displays.
+3. **Transient Notifications**: If neither is available, it gracefully falls back to sending desktop notifications. These notifications are explicitly marked as *transient*, meaning they disappear automatically and do not pollute your notification history.
 
 ### Managing the Daemon
 
@@ -182,7 +192,7 @@ Config lives at `~/.config/omega13/config.json` and is written on first run with
 - `groq_model`: Groq model identifier (default: `"whisper-large-v3-turbo"`)
 - `auto_transcribe`: Automatically transcribe after each capture (default: `true`)
 - `copy_to_clipboard`: Copy result text to clipboard after transcription (default: `false`)
-- `inject_to_active_window`: Type result into the focused Wayland window (default: `false`)
+- `inject_to_active_window`: Type result via `ydotool` (default: `false`). **Note:** This requires the target window to be named "Whisp" and explicitly focused. If "Whisp" is not found or focused, injection aborts (though clipboard/Obsidian outputs will still work). On non-GNOME compositors (like Hyprland, Sway), targeting "Whisp" via GNOME D-Bus is unavailable. Also requires `ydotoold` daemon and uinput permissions.
 - `write_to_daily_note`: Append result to the current Obsidian daily note (default: `false`)
 
 **Auto-Record**

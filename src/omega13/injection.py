@@ -32,6 +32,101 @@ def _get_ydotool_env() -> dict:
             
     return env
 
+def _focus_whisp_window() -> Tuple[bool, Optional[str]]:
+    """
+    Locate and focus the window named "Whisp" using GNOME Shell D-Bus.
+    Attempts to use the safe 'Activate Window By Title' extension first.
+    Falls back to org.gnome.Shell.Eval if necessary.
+    
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
+    
+    # Attempt 1: Native Omega-13 GNOME Extension
+    try:
+        native_result = subprocess.run(
+            [
+                "busctl", "--user", "call", 
+                "org.gnome.Shell", 
+                "/org/gnome/Shell/Extensions/Omega13", 
+                "org.gnome.Shell.Extensions.Omega13", 
+                "FocusWindow", "s", "Whisp"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if native_result.returncode == 0:
+            out = native_result.stdout.strip()
+            if "true" in out.lower():
+                logger.info("Successfully focused the 'Whisp' window via native Omega-13 extension")
+                return True, None
+            else:
+                return False, "Whisp window not found via Omega-13 extension"
+    except Exception as e:
+        logger.debug(f"Omega-13 native extension not found or failed: {e}")
+
+    # Attempt 2: Safe method using 'Activate Window By Title' extension
+    try:
+        safe_result = subprocess.run(
+            [
+                "busctl", "--user", "call", 
+                "org.gnome.Shell", 
+                "/de/lucaswerkmeister/ActivateWindowByTitle", 
+                "de.lucaswerkmeister.ActivateWindowByTitle", 
+                "activateBySubstring", "s", "Whisp"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if safe_result.returncode == 0:
+            logger.info("Successfully focused the 'Whisp' window via ActivateWindowByTitle D-Bus extension")
+            return True, None
+    except Exception as e:
+        logger.debug(f"ActivateWindowByTitle extension not found or failed: {e}")
+
+    # Attempt 2: Fallback to JS Eval (Requires Unsafe Mode or Eval-GJS)
+    script = (
+        "var w = global.get_window_actors().find(a => a.meta_window && a.meta_window.get_title() === 'Whisp'); "
+        "if (w) { w.meta_window.activate(global.get_current_time()); 'true'; } else { 'false'; }"
+    )
+    
+    try:
+        result = subprocess.run(
+            [
+                "gdbus", "call", "--session", 
+                "--dest", "org.gnome.Shell", 
+                "--object-path", "/org/gnome/Shell", 
+                "--method", "org.gnome.Shell.Eval", 
+                script
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            out = result.stdout.strip()
+            if out.startswith("(true"):
+                if "'true'" in out:
+                    logger.info("Successfully focused the 'Whisp' window via D-Bus Eval")
+                    return True, None
+                elif "'false'" in out:
+                    return False, "Whisp window not found"
+                else:
+                    return False, f"Unexpected D-Bus Eval result: {out}"
+            else:
+                return False, "GNOME Shell Eval is restricted (install 'Activate Window By Title' extension)"
+        else:
+            err = result.stderr.strip()
+            return False, f"D-Bus call failed: {err}"
+            
+    except subprocess.TimeoutExpired:
+        return False, "D-Bus call to GNOME Shell timed out"
+    except Exception as e:
+        return False, f"Error focusing Whisp window: {str(e)}"
+
 def inject_text(text: str) -> Tuple[bool, Optional[str]]:
     """
     Inject text into the currently active window using ydotool.
@@ -44,6 +139,12 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
     """
     if not text or not isinstance(text, str):
         return False, "Invalid text provided for injection"
+
+    # Focus the "Whisp" window before injecting text
+    focus_success, focus_error = _focus_whisp_window()
+    if not focus_success:
+        logger.error(f"Injection aborted: {focus_error}")
+        return False, focus_error
 
     # 1. Check if ydotool is present
     ydotool_path = shutil.which("ydotool")

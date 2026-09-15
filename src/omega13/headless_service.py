@@ -1,6 +1,6 @@
 """Headless D-Bus service for Omega-13.
 
-Provides D-Bus service registration without Textual TUI dependencies.
+Provides D-Bus service registration for the headless daemon.
 Enables global hotkey toggle via `omega13 --toggle` in headless environments.
 """
 
@@ -254,10 +254,10 @@ class HeadlessDBusService:
 
 
 class HeadlessOmega13:
-    """Headless Omega-13 core without TUI.
+    """Headless Omega-13 core .
 
     Initializes audio, recording, session management, and D-Bus service.
-    Runs on asyncio event loop without Textual.
+    Runs on asyncio event loop .
     """
 
     def __init__(self) -> None:
@@ -330,7 +330,7 @@ class HeadlessOmega13:
             config_manager=self.config_manager,
         )
 
-        # Initialize recording event handler (Textual-free business logic)
+        # Initialize recording event handler
         notifier = DesktopNotifier() if self.config_manager.get_desktop_notifications_enabled() else None
         self._recording_event_handler = RecordingEventHandler(
             recording_controller=self.recording_controller,
@@ -342,13 +342,16 @@ class HeadlessOmega13:
         self.recording_controller.set_event_callback(self._recording_event_handler.handle_event)
         
         if OSD_AVAILABLE and osd_manager:
+            osd_manager.set_audio_engine(self.audio_engine)
             osd_manager.run_in_background()
             self._recording_event_handler.set_callbacks(
                 RecordingEventCallbacks(
-                    on_recording_started=lambda path, mode: osd_manager.update("Recording", state_type="recording"),
-                    on_recording_stopped=lambda path: osd_manager.update("Processing...", state_type="processing"),
+                    on_recording_started=lambda path, mode: osd_manager.update(f"Recording ({path.name if path else 'auto'})", state_type="recording"),
+                    on_silence_countdown=lambda rem: osd_manager.update(f"Auto-stop in {rem:.1f}s", state_type="recording"),
+                    on_recording_stopped=lambda path: osd_manager.update(f"Processing ({path.name if path else ''})", state_type="processing"),
                     on_transcription_started=lambda path: osd_manager.update("Transcribing...", state_type="processing"),
-                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:20]}...", state_type="success", timeout_ms=4000) if hasattr(result, "text") else osd_manager.update("Transcription Done", state_type="success", timeout_ms=4000),
+                    on_transcription_progress=lambda p: osd_manager.update(f"Transcribing {int(p*100)}%", state_type="processing"),
+                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:25]}...", state_type="success", timeout_ms=4000) if hasattr(result, "text") else osd_manager.update("Transcription Done", state_type="success", timeout_ms=4000),
                 )
             )
 

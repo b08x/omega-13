@@ -1,0 +1,14 @@
+{
+  "name": "Omega-13 Integration",
+  "description": "Provides native window focusing and OSD waveform rendering for the Omega-13 retroactive audio recorder.",
+  "uuid": "omega13@b08x.github.io",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "url": "https://github.com/b08x/omega-13"
+}

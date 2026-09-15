@@ -3,7 +3,7 @@ Omega-13: Retroactive Audio Recorder
 A tribute to Galaxy Quest's time-rewind device
 """
 
-# Lazy imports to avoid pulling in heavy dependencies (JACK, Textual) at package import time
+# Lazy imports to avoid pulling in heavy dependencies (JACK) at package import time
 def __getattr__(name: str):
     if name == "Omega13App":
         from .app import Omega13App
