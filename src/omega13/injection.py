@@ -157,9 +157,9 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
     try:
         # 2. Run ydotool type
         # We use a list for subprocess.run to avoid shell injection issues
-        # Note: ydotool type can be slow for very long strings
+        # Note: We decrease key-delay and key-hold to speed up long text injections
         env = _get_ydotool_env()
-        cmd = [ydotool_path, "type", text]
+        cmd = [ydotool_path, "type", "--key-delay", "2", "--key-hold", "2", text]
         logger.debug(f"Executing ydotool cmd: {cmd} with env: YDOTOOL_SOCKET={env.get('YDOTOOL_SOCKET', 'Not set')}")
         
         start_time = time.time()

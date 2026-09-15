@@ -55,7 +55,7 @@ class AudioEngine:
             (self.max_block_size, self.channels), dtype="float32"
         )
 
-        self.buffer_pool_size = 200  # Matches record_queue maxsize
+        self.buffer_pool_size = 2000  # Matches record_queue maxsize
         self.buffer_pool = np.zeros(
             (self.buffer_pool_size, self.max_block_size, self.channels), dtype="float32"
         )
@@ -63,7 +63,7 @@ class AudioEngine:
 
         # Recording state
         self.is_recording = False
-        self.record_queue = queue.Queue(maxsize=200)  # ~4s buffer @ 48kHz
+        self.record_queue = queue.Queue(maxsize=2000)  # ~40s buffer @ 48kHz
         self.writer_thread = None
         self.stop_event = threading.Event()
 
@@ -349,8 +349,12 @@ class AudioEngine:
 
             # Apply audio processing pipeline (Trim silence -> Downsample to 16kHz Mono)
             processor = AudioProcessor()
+            trim_db = -35.0
+            if self.config_manager:
+                trim_db = self.config_manager.get_auto_record_settings().get("end_threshold_db", -35.0)
+            
             operations = [
-                {"op": "trim_silence", "threshold_db": -50.0},
+                {"op": "trim_silence", "threshold_db": trim_db},
                 {"op": "downsample", "target_rate": 16000}  # Downsample to target 16kHz Mono
             ]
             
