@@ -142,9 +142,13 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
         return False, "Invalid text provided for injection"
         
     import re
-    # If the user says "new line" at the end of the dictation, replace it with a literal newline
-    # This handles "new line", "New line.", "newline", etc. at the end of the string.
-    formatted_text = re.sub(r'(?i)\bnew\s*line[\.\s]*$', '\n', text)
+    # Check for "return" at the very end of the string (e.g. "return", "Return.", etc.)
+    # If found, replace it with two literal newlines.
+    formatted_text, num_subs = re.subn(r'(?i)\breturn[\.\s]*$', '\n\n', text)
+    
+    # If "return" wasn't found, check for "new line"
+    if num_subs == 0:
+        formatted_text = re.sub(r'(?i)\bnew\s*line[\.\s]*$', '\n', text)
     
     # If the text does not end with a newline, append a space so the next dictation flows naturally
     if not formatted_text.endswith('\n'):
