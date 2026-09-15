@@ -62,6 +62,25 @@ mkdir -p "$XDG_BIN_HOME"
 ln -sf "$DEST_DIR/.venv/bin/omega13" "$BIN_LINK"
 gum style --foreground 76 "✅ Created symlink at $BIN_LINK"
 
+# Step 4.1: GNOME Shell Extension
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *"GNOME"* ]]; then
+    EXT_DIR="$HOME/.local/share/gnome-shell/extensions/omega13@b08x.github.io"
+    mkdir -p "$EXT_DIR"
+    cp -r gnome-extension/omega13@b08x.github.io/* "$EXT_DIR/"
+    gum style --foreground 76 "✅ GNOME Shell Extension copied to $EXT_DIR"
+    gum style --foreground 214 "   Don't forget to enable it with: gnome-extensions enable omega13@b08x.github.io"
+fi
+
+# Step 4.5: Wayland Dependency Checks
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *"GNOME"* ]] && [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    if ! command -v ydotool >/dev/null; then
+        echo ""
+        gum style --foreground 214 "⚠️  ydotool not found in PATH."
+        gum style --foreground 214 "   Text injection requires 'ydotool' to simulate keyboard input on Wayland."
+        echo ""
+    fi
+fi
+
 # Step 5: Systemd user service
 mkdir -p "$SYSTEMD_USER_DIR"
 cat > "$SERVICE_FILE" << EOF

@@ -262,6 +262,7 @@ class OSDManager:
         self._started = False
         self._notifier = DesktopNotifier()
         self._layer_shell_active = False
+        self._dbus_timer_id = 0
 
     def set_audio_engine(self, engine):
         self.audio_engine = engine
@@ -317,8 +318,70 @@ class OSDManager:
         config = ConfigManager()
         force_osd = config.get_force_osd()
         
+        def _get_dbus_proxy():
+            if not hasattr(self, '_dbus_proxy'):
+                try:
+                    self._dbus_proxy = Gio.DBusProxy.new_for_bus_sync(
+                        Gio.BusType.SESSION,
+                        Gio.DBusProxyFlags.DO_NOT_AUTO_START,
+                        None,
+                        "org.gnome.Shell",
+                        "/org/gnome/Shell/Extensions/Omega13",
+                        "org.gnome.Shell.Extensions.Omega13",
+                        None
+                    )
+                except Exception:
+                    self._dbus_proxy = None
+            return self._dbus_proxy
+            
         def _do_update():
-            # If we are on GNOME or window creation failed, fallback to notify-send
+            # If we are on GNOME, try the native Omega-13 extension first
+            if is_gnome:
+                proxy = _get_dbus_proxy()
+                if proxy:
+                    try:
+                        # Check if the extension is actually loaded (has owner)
+                        if proxy.get_name_owner():
+                            # Call ShowOSD async
+                            proxy.call("ShowOSD", None, Gio.DBusCallFlags.NONE, -1, None, None, None)
+                            
+                            # Set up waveform streaming timer
+                            if hasattr(self, '_dbus_timer_id') and self._dbus_timer_id:
+                                GLib.source_remove(self._dbus_timer_id)
+                                self._dbus_timer_id = 0
+                                
+                            if state_type in ("recording", "processing") and self.audio_engine:
+                                def _stream_waveform():
+                                    try:
+                                        import numpy as np
+                                        rms = self.audio_engine.signal_detector.rms_levels
+                                        if len(rms) > 0:
+                                            # Use GLib.Variant to efficiently pack data
+                                            variant = GLib.Variant('(ad)', (rms.tolist(),))
+                                            proxy.call("UpdateWaveform", variant, Gio.DBusCallFlags.NONE, -1, None, None, None)
+                                    except Exception:
+                                        pass
+                                    return True
+                                self._dbus_timer_id = GLib.timeout_add(100, _stream_waveform)
+                            
+                            # Set timeout to hide native OSD
+                            if timeout_ms > 0:
+                                def _hide_native():
+                                    try:
+                                        proxy.call("HideOSD", None, Gio.DBusCallFlags.NONE, -1, None, None, None)
+                                    except Exception:
+                                        pass
+                                    if hasattr(self, '_dbus_timer_id') and self._dbus_timer_id:
+                                        GLib.source_remove(self._dbus_timer_id)
+                                        self._dbus_timer_id = 0
+                                    return False
+                                GLib.timeout_add(timeout_ms, _hide_native)
+                                
+                            return False
+                    except Exception as e:
+                        logger.debug(f"Native extension OSD DBus call failed: {e}")
+
+            # If we reach here and it's GNOME without force_osd, or no window
             if (is_gnome and not force_osd) or not self.window:
                 urgency = "normal" if state_type == "recording" else "low"
                 self._notifier.notify(f"Omega-13: {state_type.title()}", text, urgency=urgency, timeout=max(2000, timeout_ms))

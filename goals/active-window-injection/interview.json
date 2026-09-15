@@ -1,0 +1,48 @@
+{
+  "stage": "interview",
+  "title": "Active Window Injection (Whisp)",
+  "goalSlug": "active-window-injection",
+  "questions": [
+    {
+      "id": "dbus_method",
+      "prompt": "Which desktop environment's D-Bus interface are you targeting to get/focus the window?",
+      "description": "Wayland window management is compositor-specific. What gdbus command or compositor do you have in mind?",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "GNOME Shell (org.gnome.Shell)",
+      "recommendedOptionIds": ["gnome", "kwin", "hyprland", "x11"],
+      "options": [
+        { "id": "gnome", "label": "GNOME Shell" },
+        { "id": "kwin", "label": "KDE / KWin" },
+        { "id": "hyprland", "label": "Hyprland" },
+        { "id": "x11", "label": "X11 (wmctrl / xdotool)" }
+      ],
+      "required": true
+    },
+    {
+      "id": "whisp_window",
+      "prompt": "You mentioned the active window name is 'Whisp'. What is the exact intended behavior?",
+      "description": "Should the system find a window named 'Whisp', focus it, and then inject? Or should it only inject if 'Whisp' is already active?",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Find a window named 'Whisp', focus it via D-Bus, then inject the text.",
+      "recommendedOptionIds": ["always_focus", "only_if_active"],
+      "options": [
+        { "id": "always_focus", "label": "Find 'Whisp', focus it, then inject." },
+        { "id": "only_if_active", "label": "Only inject if the currently active window is named 'Whisp'." }
+      ],
+      "required": true
+    },
+    {
+      "id": "fallback_behavior",
+      "prompt": "What happens if the 'Whisp' window isn't found?",
+      "description": "How should the injection module handle this failure?",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Fallback to standard ydotool injection on whatever window is active.",
+      "recommendedOptionIds": ["fallback", "abort"],
+      "options": [
+        { "id": "fallback", "label": "Fallback: Inject into the currently active window." },
+        { "id": "abort", "label": "Abort: Log an error and do not inject text." }
+      ],
+      "required": true
+    }
+  ]
+}

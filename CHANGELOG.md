@@ -1,3 +1,11 @@
+## [Unreleased]
+
+### ✨ Features
+- Add 3-tier OSD architecture with native GNOME Shell Extension (>= 45) and wlroots GTK4 layer shell support.
+- Implement graceful fallback to transient desktop notifications that don't pollute notification history.
+- Transition text injection from `pynput` to `ydotool`, adding `ydotoold` installer check and uinput permissions documentation.
+- Implement strict "Whisp" window focus requirement for text injection; gracefully aborts injection if not found or focused without breaking other outputs.
+
 ## [2.4.2] - 2026-09-02
 
 ### 🚜 Refactor

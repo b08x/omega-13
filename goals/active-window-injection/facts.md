@@ -1,0 +1,4 @@
+- The injection process uses GNOME Shell D-Bus (org.gnome.Shell) to locate and focus the window named 'Whisp'.
+- Text is only injected via ydotool after the 'Whisp' window is successfully focused.
+- If the 'Whisp' window cannot be found or focused, the injection step displays an error and aborts the text injection.
+- A failure in the text injection step does not abort the rest of the transcription flow, allowing clipboard copy and Obsidian note generation to proceed if enabled.

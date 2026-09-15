@@ -7,15 +7,15 @@
 - **Retroactive Ring Buffer:** Continuously maintains 13 seconds of JACK/PipeWire audio in memory.
 - **Intelligent Auto-Record:** RMS-based voice activity detection (VAD) for automatic capture.
 - **Dual Transcription Backends:** Supports local `whisper-server` (HTTP) and Groq Cloud Whisper API.
-- **Multi-Destination Output:** Clipboard copy, text injection (Wayland/X11), and Obsidian daily note integration.
+- **Multi-Destination Output:** Clipboard copy, text injection ('Whisp' window focus required instead of active window), and Obsidian daily note integration.
 - **Wayland-Native IPC:** D-Bus and SIGUSR1 support for global hotkeys and external triggers.
 
 ### Technology Stack
 - **Language:** Python 3.12+
-- **OSD Framework:** GTK4 Layer Shell (via `PyGObject` and `pycairo`) for Wayland-native overlays
+- **OSD Framework:** 3-Tier Architecture (GNOME native, wlroots GTK4 Layer Shell, transient notifications)
 - **Audio Engine:** JACK (via `JACK-Client`), NumPy for buffer management
 - **Audio Processing:** FFmpeg and SoX for silence trimming and downsampling
-- **IPC:** D-Bus (`dbus-next`), `pynput` (injection), `pyperclip` (clipboard)
+- **IPC:** D-Bus (`dbus-next`), `ydotool` (injection), `pyperclip` (clipboard)
 - **Package Manager:** [`uv`](https://github.com/astral-sh/uv)
 
 ---
@@ -25,7 +25,8 @@ The project follows a modular, event-driven architecture designed to run as a he
 
 - **`omega13.app`**: Main entry point handling CLI arguments.
 - **`omega13.headless_service`**: The primary background daemon coordinating the `RecordingController`, `AudioEngine`, and `osd_manager`.
-- **`omega13.ui.osd`**: Wayland-native GTK4 Layer Shell OSD rendering via Cairo.
+- **`gnome-extension/`**: GNOME Shell extension providing native OSD via public D-Bus interface (`org.gnome.Shell.Extensions.Omega13`).
+- **`omega13.ui.osd`**: 3-Tier OSD Manager coordinating fallbacks (GNOME native, GTK4 Layer Shell, Notifications).
 - **`omega13.audio`**: The `AudioEngine` manages the JACK client, the 13s ring buffer, and real-time recording.
 - **`omega13.recording_controller`**: Orchestrates state transitions (ARMED, RECORDING, IDLE) and handles VAD triggers.
 - **`omega13.audio_processor`**: Pipeline for post-processing audio (trimming silence, resampling to 16kHz mono) using FFmpeg/SoX.

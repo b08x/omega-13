@@ -1,0 +1,39 @@
+{
+  "stage": "facts",
+  "title": "Active Window Injection (Whisp)",
+  "goalSlug": "active-window-injection",
+  "facts": [
+    {
+      "id": "fact-1",
+      "text": "The injection process uses GNOME Shell D-Bus (org.gnome.Shell) to locate and focus the window named 'Whisp'.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": false,
+      "automatedVerification": false
+    },
+    {
+      "id": "fact-2",
+      "text": "Text is only injected via ydotool after the 'Whisp' window is successfully focused.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "fact-3",
+      "text": "If the 'Whisp' window cannot be found or focused, the injection step displays an error and aborts the text injection.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    },
+    {
+      "id": "fact-4",
+      "text": "A failure in the text injection step does not abort the rest of the transcription flow, allowing clipboard copy and Obsidian note generation to proceed if enabled.",
+      "accepted": false,
+      "removed": false,
+      "recommendedAutomatedVerification": true,
+      "automatedVerification": true
+    }
+  ]
+}

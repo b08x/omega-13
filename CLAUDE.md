@@ -35,19 +35,21 @@ JACK Audio → AudioEngine (ring buffer) → SignalDetector (RMS)
                                     RecordingController (state machine)
                                                ↓ RecordingEvent
                                          HeadlessOmega13
-                                               ↓
+                                                ↓
                                     TranscriptionService (async threads)
                                                ↓
-                              clipboard / text injection / Obsidian daily note
+                              clipboard / Whisp window injection / Obsidian daily note
 ```
 
 **Key architectural decisions:**
+
+- **OSD Architecture**: Features a 3-tier fallback architecture: GNOME native extension (via public D-Bus interface `org.gnome.Shell.Extensions.Omega13`), wlroots GTK4 layer shell, and transient notifications.
 
 - **`RecordingController`** owns the recording state machine (`IDLE → ARMED → RECORDING_AUTO/MANUAL → STOPPING`). The app registers a single `set_event_callback` and reacts to typed `RecordingEvent` enums — it never polls state directly.
 
 - **`AudioEngine`** (`src/omega13/audio.py`) runs a zero-copy JACK callback that writes into a `numpy` ring buffer (13s × channels). `start_recording()` drains the ring buffer into a WAV file via a background thread/queue. The scratchpad and buffer pool pre-allocate to avoid GC pressure in the realtime callback.
 
-- **`TranscriptionService`** (`src/omega13/transcription.py`) wraps either `LocalTranscriptionProvider` (whisper-server HTTP) or `GroqTranscriptionProvider`. Each transcription runs in a daemon thread with exponential-backoff retry. A cooperative `_shutdown_event` allows clean teardown. After completion the service optionally copies to clipboard, injects text, or appends to an Obsidian daily note.
+- **`TranscriptionService`** (`src/omega13/transcription.py`) wraps either `LocalTranscriptionProvider` (whisper-server HTTP) or `GroqTranscriptionProvider`. Each transcription runs in a daemon thread with exponential-backoff retry. A cooperative `_shutdown_event` allows clean teardown. After completion the service optionally copies to clipboard, injects text using `ydotool` (requires the 'Whisp' window to have focus instead of injecting into whatever is active), or appends to an Obsidian daily note.
 
 - **`Session` / `SessionManager`** (`src/omega13/session.py`) manages a temp directory under `/tmp/omega13/`. Each session has `recordings/` (WAV/MP4) and `transcriptions/` (Markdown) subdirs. `add_transcription()` performs word-level overlap deduplication across rolling windows to suppress repeated phrases from overlapping audio clips.
 

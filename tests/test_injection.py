@@ -9,16 +9,20 @@ def test_inject_text_invalid_input():
     assert not success
     assert "Invalid text" in error
 
+@patch("omega13.injection._focus_whisp_window")
 @patch("shutil.which")
-def test_inject_text_no_ydotool(mock_which):
+def test_inject_text_no_ydotool(mock_which, mock_focus):
+    mock_focus.return_value = (True, None)
     mock_which.return_value = None
     success, error = inject_text("hello")
     assert not success
     assert "ydotool not found" in error
 
+@patch("omega13.injection._focus_whisp_window")
 @patch("shutil.which")
 @patch("subprocess.run")
-def test_inject_text_success(mock_run, mock_which):
+def test_inject_text_success(mock_run, mock_which, mock_focus):
+    mock_focus.return_value = (True, None)
     mock_which.return_value = "/usr/bin/ydotool"
     mock_run.return_value = MagicMock(returncode=0)
     
@@ -34,9 +38,11 @@ def test_inject_text_success(mock_run, mock_which):
         env=ANY
     )
 
+@patch("omega13.injection._focus_whisp_window")
 @patch("shutil.which")
 @patch("subprocess.run")
-def test_inject_text_daemon_error(mock_run, mock_which):
+def test_inject_text_daemon_error(mock_run, mock_which, mock_focus):
+    mock_focus.return_value = (True, None)
     mock_which.return_value = "/usr/bin/ydotool"
     mock_run.return_value = MagicMock(
         returncode=1, 
@@ -48,9 +54,11 @@ def test_inject_text_daemon_error(mock_run, mock_which):
     assert not success
     assert "daemon not running" in error
 
+@patch("omega13.injection._focus_whisp_window")
 @patch("shutil.which")
 @patch("subprocess.run")
-def test_inject_text_permission_error(mock_run, mock_which):
+def test_inject_text_permission_error(mock_run, mock_which, mock_focus):
+    mock_focus.return_value = (True, None)
     mock_which.return_value = "/usr/bin/ydotool"
     mock_run.return_value = MagicMock(
         returncode=1, 
@@ -61,6 +69,15 @@ def test_inject_text_permission_error(mock_run, mock_which):
     
     assert not success
     assert "Permission denied" in error
+    
+@patch("omega13.injection._focus_whisp_window")
+def test_inject_text_focus_failure(mock_focus):
+    mock_focus.return_value = (False, "Whisp window not found")
+    
+    success, error = inject_text("hello")
+    
+    assert not success
+    assert error == "Whisp window not found"
 
 @patch("shutil.which")
 def test_is_ydotool_available(mock_which):
