@@ -45,8 +45,10 @@ The project follows a modular, event-driven architecture designed to run as a he
 - `ffmpeg` and `sox` installed in system PATH.
 
 ### Commands
-- **Local User Installation (XDG):** `./install.sh`
-- **Install Development Dependencies:** `uv sync`
+- **Local User Installation:** `just install`
+- **Download Models:** `just model dl`
+- **Verify Dependencies:** `just check`
+- **Run Tests:** `just test`
 - **Run Application:** `omega13 --no-daemon`
 - **External Trigger:** `omega13 --toggle`
 

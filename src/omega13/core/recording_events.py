@@ -82,6 +82,7 @@ class RecordingEventHandler:
 
         # Current recording path (tracked for SIGNAL_DETECTED -> manual_start)
         self._current_recording_path: Optional[Path] = None
+        self.last_failed_recording_path: Optional[Path] = None
 
     def set_callbacks(self, callbacks: RecordingEventCallbacks) -> None:
         """Register UI callback handlers.
@@ -171,12 +172,12 @@ class RecordingEventHandler:
         path_str = data.get("path", "")
         path = Path(path_str) if path_str else None
 
+        if self._callbacks.on_recording_stopped:
+            self._callbacks.on_recording_stopped(path)
+
         # Register and transcribe if path is valid
         if path and path.exists():
             self.register_and_transcribe(path)
-
-        if self._callbacks.on_recording_stopped:
-            self._callbacks.on_recording_stopped(path)
 
         if self.notifier:
             self.notifier.notify("Recording Stopped", "Audio capture saved.")
@@ -186,12 +187,12 @@ class RecordingEventHandler:
         path_str = data.get("path", "")
         path = Path(path_str) if path_str else None
 
+        if self._callbacks.on_recording_stopped:
+            self._callbacks.on_recording_stopped(path)
+
         # Register and transcribe if path is valid
         if path and path.exists():
             self.register_and_transcribe(path)
-
-        if self._callbacks.on_recording_stopped:
-            self._callbacks.on_recording_stopped(path)
 
         if self.notifier:
             self.notifier.notify("Recording Stopped", "Audio capture saved.")
@@ -277,16 +278,34 @@ class RecordingEventHandler:
 
     def _on_transcription_complete(self, result, path: Optional[Path] = None) -> None:
         """Handle transcription completion."""
-        # Add to session
+        # Check if transcription failed to track it for retries
         if getattr(result, "status", None) and (
-            getattr(result.status, "name", "") == "COMPLETED" or 
-            getattr(result.status, "value", result.status) == "completed" or 
-            str(result.status) == "TranscriptionStatus.COMPLETED"
-        ) and getattr(result, "text", None):
-            session = self.session_manager.get_current_session()
-            if session:
-                session.add_transcription(result.text)
+            getattr(result.status, "name", "") == "ERROR" or
+            getattr(result.status, "value", result.status) == "error" or
+            str(result.status) == "TranscriptionStatus.ERROR"
+        ):
+            self.last_failed_recording_path = path
+        else:
+            # Add to session if successful
+            if getattr(result, "status", None) and (
+                getattr(result.status, "name", "") == "COMPLETED" or 
+                getattr(result.status, "value", result.status) == "completed" or 
+                str(result.status) == "TranscriptionStatus.COMPLETED"
+            ) and getattr(result, "text", None):
+                session = self.session_manager.get_current_session()
+                if session:
+                    session.add_transcription(result.text)
+                self.last_failed_recording_path = None
                 
         # Notify UI if callback exists
         if self._callbacks.on_transcription_complete:
             self._callbacks.on_transcription_complete(result, path)
+
+    def retry_last_failed_transcription(self) -> bool:
+        """Retry the last failed transcription if available."""
+        if self.last_failed_recording_path and self.last_failed_recording_path.exists():
+            if self.notifier:
+                self.notifier.notify("Retrying Transcription", f"Retrying for {self.last_failed_recording_path.name}")
+            self.register_and_transcribe(self.last_failed_recording_path)
+            return True
+        return False

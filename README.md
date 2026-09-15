@@ -47,26 +47,35 @@ If you're building functional Linux desktop tools right now, you're going to hit
 
 ## Setup
 
-The installer is XDG-compliant. No `sudo` needed. 
+The installation is managed via `just`. No `sudo` needed. 
 
 ```bash
 git clone https://github.com/b08x/omega-13.git
 cd omega-13
-./install.sh
+just install
 ```
 
 What it actually does under the hood:
-1. Drops the app in `~/.local/share/omega13`.
-2. Bootstraps a virtualenv with `uv`.
-3. Symlinks `omega13` to `~/.local/bin/`.
-4. Writes a systemd user service (`~/.config/systemd/user/omega13.service`).
-5. Copies the GNOME extension to `~/.local/share/gnome-shell/extensions/omega13@b08x.github.io`.
+1. Bootstraps a virtualenv with `uv` and installs dependencies.
+2. Dynamically evaluates hardware (CUDA, Vulkan) and compiles `transcribe-cpp` with appropriate acceleration flags (`CMAKE_ARGS`).
+3. Compiles and enables `ydotool` as a user service if it's missing.
 
-**Crucial step**: The extension doesn't enable itself. You have to run:
+To download models, use the dedicated command:
+```bash
+just model dl
+```
+This launches a `gum`-based interactive UI presenting a menu of available GGUF models from HuggingFace (e.g. Parakeet, Nemotron, Whisper Turbo). You pick the ones you want, it downloads them into `~/.local/share/omega13/models`, and prompts you to select your default. It writes those choices into `config.json`. Zero manual `wget` nonsense required.
+
+**Crucial step**: The GNOME extension doesn't enable itself. You have to run:
 ```bash
 gnome-extensions enable omega13@b08x.github.io
 ```
-*(On Wayland, you might need to log out and back in before the extension registers. I plan on adding this to the installer at some point.)*
+*(On Wayland, you might need to log out and back in before the extension registers.)*
+
+To verify your environment has all the necessary dependencies installed (including `ffmpeg`, `sox`, `ydotool`, `gum`, `JACK`, `GTK4 Layer Shell`, etc.), you can run:
+```bash
+just check
+```
 
 ---
 
@@ -136,13 +145,32 @@ The session manager runs suffix-prefix overlap deduplication if auto-record trig
 
 ---
 
-## Roadmap & Known Failure Modes
+## Transcription & Models
 
-Moving from a TUI application to a headless daemon surfaced some architectural gaps that are currently being refactored.
+The daemon operates with a resilient fallback chain for transcription. If configured, it attempts to use a local, in-process GGUF model via python bindings for `transcribe.cpp` ([github.com/handy-computer/transcribe.cpp](https://github.com/handy-computer/transcribe.cpp)) directly on bare metal. If that fails (or isn't installed), it seamlessly falls back to a REST API provider (either a local `whisper-server` or Groq in the cloud).
 
-- **Transcription Failures & Retries**: In the TUI version, if an API transcription failed, there was a manual subcommand to retry it. As a headless daemon, a failed REST API call silently breaks the dictation flow. I am refactoring the GNOME extension to include a system tray menu with a "retry transcription" option.
-- **Local Transcription Fallback Chain**: Currently, the gateway relies on a REST API (local network or external). The next phase involves wiring in Python bindings for `transcribe.cpp` ([github.com/handy-computer/transcribe.cpp](https://github.com/handy-computer/transcribe.cpp)) to execute GGUF models directly on bare metal. This will introduce a fallback chain: attempt local in-process transcription first, and fall back to the REST API if it fails.
-- **The `ydotool` Stuck-Key Bug**: There is a known underlying bug in `ydotool`. If the pipeline fails while `ydotool` is actively sending a keystroke (e.g., the letter "t"), the daemon gets stuck holding that logical key down. That key will remain completely non-functional on your physical keyboard until you manually kill the `ydotoold` service. 
+**How models are acquired:**
+The `just install` target handles the heavy lifting. It uses `ldconfig -p` and `nvidia-smi` to sniff out your GPU hardware. If it finds a CUDA-compatible card or Vulkan runtime, it configures `transcribe-cpp` with hardware acceleration flags (`CMAKE_ARGS`).
+After installation, you run `just model dl` to download models directly into `~/.local/share/omega13/models` interactively.
+
+---
+
+## Roadmap: RPM Packaging
+
+Ultimately, Omega-13 will transition away from virtual environments to a native RPM package format. Doing so provides several crucial benefits:
+1. **No Virtual Environments**: Once packaged as an RPM, the Python source drops directly into the system's `/usr/lib/python3.X/site-packages/`. We bypass PEP 668 and let `dnf` track the installed assets natively.
+2. **First-class Dependencies**: System requirements (like `ffmpeg`, `sox`, `pipewire-jack`, `gtk4-layer-shell`, `ydotool`) will simply be standard `Requires:` declarations in the `.spec` file.
+3. **Automated Placements**: D-Bus interface configs, systemd user service unit files, and GNOME extension directories will be installed deterministically.
+
+Future iterations will incorporate Fedora's standard Python packaging macros (`%pyproject_buildrequires`, `%pyproject_install`) to cleanly bridge the gap between `hatchling` and the OS package manager.
+
+
+## Failure Recovery
+
+Moving from a TUI application to a headless daemon surfaced some architectural gaps that have since been engineered around:
+
+- **Transcription Failures & Retries**: As a headless daemon, a failed REST API call silently breaks the dictation flow. To counter this, the GNOME extension provides a system tray menu with a "Retry failed transcription" action. This triggers a D-Bus method (`org.omega13.Recorder.RetryTranscription`) that re-queues the last failed buffer. You can also trigger this via the CLI: `omega13 --retry`.
+- **The `ydotool` Stuck-Key Bug**: There is a known underlying bug in `ydotool` where if the pipeline fails while actively sending a keystroke, the daemon gets stuck holding that logical key down. To mitigate this, the text injection logic is wrapped in a recovery block. If `ydotool` times out or fails, Omega-13 automatically executes `systemctl --user restart ydotoold` to clear the stuck key state at the system level.
 
 ---
 

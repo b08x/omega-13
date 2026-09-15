@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 import shutil
+import time
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -158,13 +159,22 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
         # We use a list for subprocess.run to avoid shell injection issues
         # Note: ydotool type can be slow for very long strings
         env = _get_ydotool_env()
+        cmd = [ydotool_path, "type", text]
+        logger.debug(f"Executing ydotool cmd: {cmd} with env: YDOTOOL_SOCKET={env.get('YDOTOOL_SOCKET', 'Not set')}")
+        
+        start_time = time.time()
         result = subprocess.run(
-            [ydotool_path, "type", text],
+            cmd,
             capture_output=True,
             text=True,
-            timeout=30,  # Safety timeout
+            timeout=300,  # Safety timeout for long text injections
             env=env
         )
+        exec_time = time.time() - start_time
+        logger.debug(f"ydotool execution finished in {exec_time:.2f}s. Return code: {result.returncode}")
+        logger.debug(f"ydotool stdout: {result.stdout.strip()}")
+        if result.stderr:
+            logger.debug(f"ydotool stderr: {result.stderr.strip()}")
 
         if result.returncode == 0:
             logger.info(f"Successfully injected {len(text)} characters via ydotool")
@@ -181,15 +191,36 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
                 error_msg = f"Permission denied for ydotool socket ({env.get('YDOTOOL_SOCKET', 'default')}) or /dev/uinput"
                 
             logger.warning(f"ydotool injection failed: {error_msg}")
+            
+            try:
+                subprocess.run(["systemctl", "--user", "restart", "ydotoold"], timeout=5, check=False)
+                logger.info("Restarted ydotoold to clear stuck keys.")
+            except Exception as e_restart:
+                logger.warning(f"Failed to restart ydotoold: {e_restart}")
+            
             return False, error_msg
 
     except subprocess.TimeoutExpired:
         error_msg = "ydotool injection timed out"
         logger.error(error_msg)
+        
+        try:
+            subprocess.run(["systemctl", "--user", "restart", "ydotoold"], timeout=5, check=False)
+            logger.info("Restarted ydotoold to clear stuck keys after timeout.")
+        except Exception as e_restart:
+            logger.warning(f"Failed to restart ydotoold: {e_restart}")
+            
         return False, error_msg
     except Exception as e:
         error_msg = str(e)
         logger.exception("Unexpected error during text injection")
+        
+        try:
+            subprocess.run(["systemctl", "--user", "restart", "ydotoold"], timeout=5, check=False)
+            logger.info("Restarted ydotoold to clear stuck keys after exception.")
+        except Exception as e_restart:
+            logger.warning(f"Failed to restart ydotoold: {e_restart}")
+            
         return False, f"Injection error: {error_msg}"
 
 def is_ydotool_available() -> bool:

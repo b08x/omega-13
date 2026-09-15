@@ -17,6 +17,9 @@ def main():
     parser.add_argument(
         "--stop", action="store_true", help="Stop a running instance"
     )
+    parser.add_argument(
+        "--retry", action="store_true", help="Retry the last failed transcription via D-Bus"
+    )
     # Keeping these for backwards compatibility with any existing scripts, but they are no-ops or default
     parser.add_argument("--daemon", action="store_true", default=True, help="Run as background daemon (default)")
     parser.add_argument("--no-daemon", action="store_false", dest="daemon", help="Run in foreground without daemonizing")
@@ -36,6 +39,22 @@ def main():
         try:
             state = send_dbus_toggle()
             print(f"Toggle signal sent. Recording state: {state}")
+            sys.exit(0)
+        except ConnectionError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+    if getattr(args, 'retry', False):
+        try:
+            from .hotkeys import send_dbus_retry
+            started = send_dbus_retry()
+            if started:
+                print("Retry transcription signal sent successfully.")
+            else:
+                print("No failed transcription to retry.")
             sys.exit(0)
         except ConnectionError as e:
             print(f"Error: {e}")

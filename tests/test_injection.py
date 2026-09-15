@@ -34,7 +34,7 @@ def test_inject_text_success(mock_run, mock_which, mock_focus):
         ["/usr/bin/ydotool", "type", "hello world"],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=300,
         env=ANY
     )
 

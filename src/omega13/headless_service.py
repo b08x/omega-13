@@ -8,6 +8,7 @@ import asyncio
 import logging
 import signal
 from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        recording_event_handler,
         transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         super().__init__(DBUS_INTERFACE_NAME)
@@ -68,6 +70,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.recording_event_handler = recording_event_handler
         self.transcription_service = transcription_service
 
     @method()
@@ -114,6 +117,18 @@ class HeadlessRecorderInterface(ServiceInterface):
             raise
         except Exception as e:
             raise DBusError("org.omega13.Recorder.ToggleError", str(e))
+
+    @method()
+    async def RetryTranscription(self) -> "b":  # type: ignore
+        """Retry the last failed transcription.
+
+        Returns:
+            bool: True if a failed transcription was found and retry started, False otherwise.
+        """
+        try:
+            return self.recording_event_handler.retry_last_failed_transcription()
+        except Exception as e:
+            raise DBusError("org.omega13.Recorder.RetryError", str(e))
 
     @method()
     async def GetState(self) -> "s":  # type: ignore
@@ -204,12 +219,14 @@ class HeadlessDBusService:
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        recording_event_handler,
         transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         self.recording_controller = recording_controller
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.recording_event_handler = recording_event_handler
         self.transcription_service = transcription_service
         self.bus: Optional[MessageBus] = None
         self.interface: Optional[HeadlessRecorderInterface] = None
@@ -224,6 +241,7 @@ class HeadlessDBusService:
                 self.audio_engine,
                 self.session_manager,
                 self.config_manager,
+                self.recording_event_handler,
                 self.transcription_service,
             )
             self.bus.export(self.OBJECT_PATH, self.interface)
@@ -360,24 +378,47 @@ class HeadlessOmega13:
             try:
                 provider_type = self.config_manager.get_transcription_provider()
                 logger.info(f"Loading transcription provider: {provider_type}")
+                
+                providers = []
+                
+                # Add local GGUF provider if applicable
+                if provider_type == "local":
+                    model_path = self.config_manager.get_local_model_path()
+                    model_name = self.config_manager.get_local_model_name()
+                    threads = self.config_manager.get_local_model_threads()
+                    
+                    full_model_path = Path(model_path) / model_name
+                    if full_model_path.exists():
+                        try:
+                            import transcribe_cpp
+                            from omega13.transcription import GgufTranscriptionProvider
+                            providers.append(GgufTranscriptionProvider(str(full_model_path), threads))
+                        except ImportError:
+                            logger.info("transcribe-cpp not installed, skipping GGUF local provider")
+                    else:
+                        logger.info(f"GGUF model not found at {full_model_path}, skipping GGUF local provider")
+                
+                # Add fallback/primary API providers
                 if provider_type == "groq":
-                    provider = GroqTranscriptionProvider(
+                    providers.append(GroqTranscriptionProvider(
                         api_key=self.config_manager.get_groq_api_key(),
                         model=self.config_manager.get_groq_model(),
-                    )
+                    ))
                 else:
-                    provider = LocalTranscriptionProvider(
+                    providers.append(LocalTranscriptionProvider(
                         server_url=self.config_manager.get_transcription_server_url(),
                         inference_path=self.config_manager.get_transcription_inference_path(),
-                    )
+                    ))
+                    
                 self.transcription_service = TranscriptionService(
-                    provider=provider, notifier=notifier
+                    providers=providers, notifier=notifier
                 )
                 # Set transcription service on event handler
                 self._recording_event_handler.set_transcription_service(self.transcription_service)
                 logger.info(f"Transcription service initialized with {provider_type} provider")
             except Exception as e:
-                logger.warning(f"Failed to initialize transcription service: {e}")
+                import traceback
+                logger.warning(f"Failed to initialize transcription service: {e}\n{traceback.format_exc()}")
                 self.transcription_service = None
 
         # Enable auto-record if configured
@@ -390,6 +431,7 @@ class HeadlessOmega13:
             self.audio_engine,
             self.session_manager,
             self.config_manager,
+            self._recording_event_handler,
             self.transcription_service,
         )
         await self.dbus_service.register()

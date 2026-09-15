@@ -9,7 +9,7 @@ def test_health_check_success():
     provider = LocalTranscriptionProvider(
         server_url="http://localhost:8080", inference_path="/inference"
     )
-    service = TranscriptionService(provider=provider)
+    service = TranscriptionService(providers=[provider])
 
     with patch("requests.get") as mock_get:
         mock_response = MagicMock()
@@ -27,7 +27,7 @@ def test_health_check_connection_error():
     provider = LocalTranscriptionProvider(
         server_url="http://localhost:8080", inference_path="/inference"
     )
-    service = TranscriptionService(provider=provider)
+    service = TranscriptionService(providers=[provider])
 
     with patch("requests.get") as mock_get:
         mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
@@ -42,7 +42,7 @@ def test_health_check_timeout():
     provider = LocalTranscriptionProvider(
         server_url="http://localhost:8080", inference_path="/inference"
     )
-    service = TranscriptionService(provider=provider)
+    service = TranscriptionService(providers=[provider])
 
     with patch("requests.get") as mock_get:
         mock_get.side_effect = requests.exceptions.Timeout("Timeout")
@@ -57,7 +57,7 @@ def test_health_check_generic_error():
     provider = LocalTranscriptionProvider(
         server_url="http://localhost:8080", inference_path="/inference"
     )
-    service = TranscriptionService(provider=provider)
+    service = TranscriptionService(providers=[provider])
 
     with patch("requests.get") as mock_get:
         mock_get.side_effect = Exception("Generic error")

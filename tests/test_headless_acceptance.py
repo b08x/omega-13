@@ -53,6 +53,7 @@ def mock_audio_engine():
         config.get_auto_record_end_threshold.return_value = -35.0
         config.get_auto_record_silence_duration.return_value = 2.5
         config.get_session_temp_root.return_value = Path("/tmp/omega13")
+        config.get_transcription_provider.return_value = "local"
         
         ae = MockEngine.return_value
         ae.samplerate = 48000

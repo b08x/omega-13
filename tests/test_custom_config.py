@@ -5,7 +5,7 @@ import requests
 
 def test_custom_inference_path():
     provider = LocalTranscriptionProvider(server_url="http://my-whisper-server", inference_path="/my-custom-path")
-    service = TranscriptionService(provider=provider)
+    service = TranscriptionService(providers=[provider])
     
     assert provider.endpoint == "http://my-whisper-server/my-custom-path"
     

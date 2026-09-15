@@ -252,24 +252,22 @@ class AudioProcessor:
             out_p = (
                 Path(output_path)
                 if output_path
-                else self._generate_output_path(in_p, f"_{rate}Hz", ext=".m4a")
+                else self._generate_output_path(in_p, f"_{rate}Hz", ext=".wav")
             )
             info = self.get_audio_info(in_p)
-            if info["sample_rate"] == rate and info["channels"] == channels:
-                if in_p != out_p:
-                    shutil.copy2(in_p, out_p)
-                return out_p
             f_cfg = {"fast": "0", "medium": "1", "high_quality": "1:cutoff=0.98"}
             flt = [
-                f"aresample=resampler=swr:linear_interp={f_cfg.get(filter_type, f_cfg['high_quality'])}"
+                f"aresample=resampler=swr:linear_interp={f_cfg.get(filter_type, f_cfg['high_quality'])}",
+                "highpass=f=80",
+                "lowpass=f=7500"
             ]
             cmd = build_ffmpeg_command(
                 str(in_p),
                 str(out_p),
                 filters=flt,
-                codec_args={"acodec": "aac", "ar": rate, "ac": channels, "f": "mp4"},
+                codec_args={"acodec": "pcm_s16le", "ar": rate, "ac": channels, "f": "wav"},
             )
-            run_command(cmd, description="Audio resampling")
+            run_command(cmd, description="Audio resampling and filtering")
             return out_p
 
     def encode_mp3(

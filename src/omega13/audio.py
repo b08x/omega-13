@@ -314,12 +314,12 @@ class AudioEngine:
         import tempfile
         import os
 
-        # Ensure we use .mp4 extension
-        if not filename.endswith(".mp4"):
-            if filename.endswith(".wav") or filename.endswith(".mp3"):
-                filename = filename[:-4] + ".mp4"
+        # Ensure we use .wav extension
+        if not filename.endswith(".wav"):
+            if filename.endswith(".mp4") or filename.endswith(".mp3"):
+                filename = filename[:-4] + ".wav"
             else:
-                filename = filename + ".mp4"
+                filename = filename + ".wav"
 
         # Create temporary WAV file for intermediate processing
         temp_wav = None

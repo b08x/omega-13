@@ -38,6 +38,9 @@ class ConfigManager:
                 "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
                 "groq_model": "whisper-large-v3-turbo",
+                "local_model_path": str(Path.home() / ".local" / "share" / "omega13" / "models"),
+                "local_model_name": "ggml-base.en.bin",
+                "local_model_threads": 4,
                 "save_to_file": True,
                 "copy_to_clipboard": False,
                 "inject_to_active_window": False,
@@ -177,6 +180,21 @@ class ConfigManager:
             self.config["transcription"] = {}
         self.config["transcription"]["provider"] = provider
         self.save_config(self.config)
+
+    def get_local_model_path(self) -> str:
+        return self.config.get("transcription", {}).get(
+            "local_model_path", str(Path.home() / ".local" / "share" / "omega13" / "models")
+        )
+
+    def get_local_model_name(self) -> str:
+        return self.config.get("transcription", {}).get(
+            "local_model_name", "ggml-base.en.bin"
+        )
+
+    def get_local_model_threads(self) -> int:
+        return self.config.get("transcription", {}).get(
+            "local_model_threads", 4
+        )
 
     def get_groq_api_key(self) -> str:
         """Get Groq API key from environment variable."""
