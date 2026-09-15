@@ -350,8 +350,8 @@ class AudioEngine:
             # Apply audio processing pipeline (Trim silence -> Downsample to 16kHz Mono)
             processor = AudioProcessor()
             trim_db = -35.0
-            if self.config_manager:
-                trim_db = self.config_manager.get_auto_record_settings().get("end_threshold_db", -35.0)
+            if self.config_manager and hasattr(self.config_manager, "get_auto_record_end_threshold"):
+                trim_db = self.config_manager.get_auto_record_end_threshold()
             
             operations = [
                 {"op": "trim_silence", "threshold_db": trim_db},
