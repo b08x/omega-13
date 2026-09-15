@@ -140,6 +140,15 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
     """
     if not text or not isinstance(text, str):
         return False, "Invalid text provided for injection"
+        
+    import re
+    # If the user says "new line" at the end of the dictation, replace it with a literal newline
+    # This handles "new line", "New line.", "newline", etc. at the end of the string.
+    formatted_text = re.sub(r'(?i)\bnew\s*line[\.\s]*$', '\n', text)
+    
+    # If the text does not end with a newline, append a space so the next dictation flows naturally
+    if not formatted_text.endswith('\n'):
+        formatted_text += ' '
 
     # Focus the "Whisp" window before injecting text
     focus_success, focus_error = _focus_whisp_window()
@@ -159,7 +168,7 @@ def inject_text(text: str) -> Tuple[bool, Optional[str]]:
         # We use a list for subprocess.run to avoid shell injection issues
         # Note: We decrease key-delay and key-hold to speed up long text injections
         env = _get_ydotool_env()
-        cmd = [ydotool_path, "type", "--key-delay", "2", "--key-hold", "2", text]
+        cmd = [ydotool_path, "type", "--key-delay", "2", "--key-hold", "2", formatted_text]
         logger.debug(f"Executing ydotool cmd: {cmd} with env: YDOTOOL_SOCKET={env.get('YDOTOOL_SOCKET', 'Not set')}")
         
         start_time = time.time()
