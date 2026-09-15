@@ -64,19 +64,21 @@ def mock_audio_engine():
         ae.is_recording = False
         ae.client = MagicMock()
         ae.client.__class__.__name__ = 'MockClient'
-        yield ae
+        yield ae, MockConfig
 
 
 @pytest.fixture
 def headless_daemon(mock_audio_engine):
     """Factory fixture: call `headless_daemon()` inside each async test to
     build a fresh HeadlessOmega13 on the current event loop."""
-    ae = mock_audio_engine
+    ae, MockConfig = mock_audio_engine
 
     async def factory():
-        headless = HeadlessOmega13()
-        await headless.initialize()
-        return headless
+        with patch('omega13.headless_service.AudioEngine', return_value=ae), \
+             patch('omega13.headless_service.ConfigManager', return_value=MockConfig.return_value):
+            headless = HeadlessOmega13()
+            await headless.initialize()
+            return headless
 
     return factory
 

@@ -31,7 +31,7 @@ def test_inject_text_success(mock_run, mock_which, mock_focus):
     assert success
     assert error is None
     mock_run.assert_called_once_with(
-        ["/usr/bin/ydotool", "type", "hello world"],
+        ["/usr/bin/ydotool", "type", "--key-delay", "2", "--key-hold", "2", "hello world "],
         capture_output=True,
         text=True,
         timeout=300,
