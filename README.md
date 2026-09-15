@@ -1,45 +1,53 @@
 # Omega-13
 
-> Retroactive audio capture — holds 13 seconds in a ring buffer, transcribes on demand, routes the result wherever it needs to go.
+Short version: A retroactive audio daemon. It continuously buffers 13 seconds of audio in memory. When triggered, it stops, transcribes the buffer (locally or via Groq), and routes the text to your clipboard, a dedicated scratchpad window, or an Obsidian daily note.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-[![uv](https://img.shields.io/badge/managed%20by-uv-7c3aed)](https://github.com/astral-sh/uv)
+What it is: The daemon runs a JACK/PipeWire client in a background systemd service. It maintains a circular ring buffer in memory. On capture, it pulls the segments, reconstructs a linear WAV, downsamples it for Whisper via `ffmpeg`, and fires it off to a local HTTP server or the cloud. No re-recording. Zero disk I/O until capture.
 
 ---
 
-## Features
+## The Origin Story
 
-- **Retroactive ring buffer** — continuously holds 13 seconds of JACK/PipeWire audio in memory; saving reconstructs a linear WAV from circular segments with zero re-recording
-- **Local or cloud transcription** — routes audio to a self-hosted `whisper-server` (HTTP) or the Groq Whisper API; provider and credentials switch at runtime via the Settings screen
-- **Auto-record mode** — RMS-based voice-activity detection arms recording when signal crosses a configurable dB threshold and stops automatically after a configurable silence window
-- **Session management** — recordings accumulate in a timestamped temp session under `/tmp/omega13/`; the session saves to permanent storage on demand, with incremental sync for recordings added after the initial save
-- **Multi-destination output** — transcription results can be written to a Markdown file, copied to the clipboard, typed via `ydotool` (requires "Whisp" window focus), or appended to an Obsidian daily note
-- **Dual OSD Support & Fallbacks** — 3-tier architecture prioritizing a native GNOME Shell Extension, followed by a GTK4 Layer Shell for wlroots (Hyprland/Sway), falling back to transient desktop notifications
-- **Wayland-native IPC** — the app writes a PID file and handles `SIGUSR1` so external tools (compositor hotkey daemons, D-Bus clients) can trigger recording without requiring keyboard focus
-- **Overlap deduplication** — when auto-record produces consecutive clips with shared audio, the session de-duplicates transcriptions by matching word-level suffix–prefix overlaps before appending
+The baseline inspiration for this was Steve Harris's `time machine`—an old JACK application with a GTK2 overlay that captured the last 10 seconds of the audio buffer when you hit record. He built it to emulate an old mini-disc recorder for studio riffing.
+
+I applied that concept to a dictation pipeline. If I start rambling into the microphone to capture notes and forget to hit the hotkey, the thought is gone. It's a frustrating failure point. I wanted to see how large a buffer I could maintain without impacting system performance. I bumped it from 10 to 13 seconds with nominal impact. (As for the name: while brainstorming the hotkey toggle flow, my partner pointed out the 13-second rollback sounded exactly like the Omega-13 device from *Galaxy Quest*).
+
+However, I haven't worked out the math yet for sustaining a much longer buffer without affecting the pipeline flow, and there are definitely times I've neglected to hit the button for more than 13 seconds. That gap is why the **auto-record** threshold was implemented. By combining a 13-second retroactive buffer for manual triggers, an auto-record threshold for longer rambles, and immediate saves to temporary space, the system covers the major failure modes where dictation would otherwise be lost.
+
+---
+
+## The Architecture
+
+This is built as a headless daemon first. The UI is just an overlay. 
+
+- **Audio Engine**: Hooks into JACK. Captures raw float32 into a ring buffer.
+- **State Machine**: Idle -> Armed -> Recording -> Stopping. RMS-based silence detection controls the transitions.
+- **IPC**: Wayland is locked down. I use D-Bus (`org.gnome.Shell.Extensions.Omega13`) to bypass keyboard focus restrictions and `SIGUSR1` for dumb hotkey triggers. I map these to a physical Nuance Dictaphone device to paste, undo, and swap windows.
+- **Output Routing**: `ydotool` for text injection (requires `/dev/uinput`), `pyperclip` for clipboard, native file I/O for Obsidian. In a forked process, outputs happen concurrently.
+
+## Abstraction Leaks & Trade-offs
+
+If you're building functional Linux desktop tools right now, you're going to hit the Wayland security model. Here's where I ran into trouble and how I decided to handle that:
+
+- **Targeted Window Injection**: Injecting long-winded transcriptions into whatever window happens to be active is dangerous. If you get distracted and change focus, you might dump a paragraph into a terminal session. Instead, text injection strictly targets a specific ephemeral scratchpad application called "Whisp". To achieve this on Wayland, I had to generate a native GNOME Shell Extension just to expose a D-Bus method (`FocusWindow`). If the Whisp window isn't found, injection fails safely.
+- **OSD Fallbacks**: Native GTK4 Layer Shell (`zwlr_layer_shell_v1`) doesn't work on Mutter (GNOME). So I built a 3-tier fallback: GNOME extension first (Cairo overlay), GTK4 Layer Shell for wlroots (Hyprland/Sway), and transient `notify-send` for everything else.
+- **Audio Routing**: You need JACK or `pipewire-jack`. If your audio graph isn't wired right at the system level, you capture silence. The daemon can't fix your routing.
 
 ---
 
 ## Requirements
 
-- Linux with JACK or PipeWire-JACK bridge running
-- Python 3.12+
-- [`uv`](https://github.com/astral-sh/uv) for dependency management
-- `ydotool` (requires running `ydotoold` daemon and uinput permissions) for text injection
-- GNOME Shell >= 45 (if using the native GNOME extension)
-- For local transcription: a running `whisper-server` instance (default: `http://localhost:8080`)
-- For cloud transcription: a Groq API key (set via `GROQ_API_KEY` environment variable)
-- For Obsidian daily note integration: `obsidian-cli` installed and configured
+- Python 3.12+ (managed by `uv`)
+- JACK or PipeWire-JACK bridge running
+- `ydotool` + `ydotoold` daemon (if you want text injection)
+- GNOME Shell >= 45 (for the native OSD and window focus bypass)
+- A running `whisper-server` (or Groq API key in your env)
 
 ---
 
-## Installation
+## Setup
 
-<details open>
-<summary>System-wide User Installation (Recommended)</summary>
-
-Omega-13 provides an interactive, XDG-compliant installer powered by [gum](https://github.com/charmbracelet/gum). It safely installs to your local user directories without requiring `sudo`.
+The installer is XDG-compliant. No `sudo` needed. 
 
 ```bash
 git clone https://github.com/b08x/omega-13.git
@@ -47,262 +55,99 @@ cd omega-13
 ./install.sh
 ```
 
-The installer will:
-1. Copy the application to `~/.local/share/omega13`
-2. Create a Python virtual environment and install dependencies
-3. Symlink the executable to `~/.local/bin/omega13`
-4. Register a systemd user service at `~/.config/systemd/user/omega13.service`
-5. Copy the GNOME Shell extension to `~/.local/share/gnome-shell/extensions/omega13@b08x.github.io` (Note: You must manually enable it by running `gnome-extensions enable omega13@b08x.github.io`)
+What it actually does under the hood:
+1. Drops the app in `~/.local/share/omega13`.
+2. Bootstraps a virtualenv with `uv`.
+3. Symlinks `omega13` to `~/.local/bin/`.
+4. Writes a systemd user service (`~/.config/systemd/user/omega13.service`).
+5. Copies the GNOME extension to `~/.local/share/gnome-shell/extensions/omega13@b08x.github.io`.
 
-You can safely remove the installation at any time by running `./uninstall.sh`.
-</details>
-
-<details>
-<summary>Development Setup (From source)</summary>
-
+**Crucial step**: The extension doesn't enable itself. You have to run:
 ```bash
-git clone https://github.com/b08x/omega-13.git
-cd omega-13
-uv sync
+gnome-extensions enable omega13@b08x.github.io
 ```
-</details>
-
-<details>
-<summary>Docker (whisper-server)</summary>
-
-A `compose.yml` is included for running the whisper-server dependency:
-
-```bash
-docker compose up -d
-```
-
-This brings up a GPU-accelerated whisper-server on port 8080. Adjust the model in `compose.yml` as needed.
-
-</details>
+*(On Wayland, you might need to log out and back in before the extension registers. I plan on adding this to the installer at some point.)*
 
 ---
 
-## Usage
+## Running It
 
-Omega-13 is designed to run as a **background daemon via systemd**. It supports a **3-Tier OSD Architecture** to display recording and transcription status directly on your screen.
-
-### 3-Tier OSD Architecture & Fallbacks
-
-1. **GNOME Shell Extension**: For GNOME >= 45, a native extension provides smooth, integrated OSD overlays. (Requires enabling via `gnome-extensions enable omega13@b08x.github.io`).
-2. **GTK4 Layer Shell**: For non-GNOME wlroots-based compositors (like Hyprland and Sway), a GTK4 layer shell provides native on-screen displays.
-3. **Transient Notifications**: If neither is available, it gracefully falls back to sending desktop notifications. These notifications are explicitly marked as *transient*, meaning they disappear automatically and do not pollute your notification history.
-
-### Managing the Daemon
-
+Start the daemon:
 ```bash
-# Start the daemon
 systemctl --user start omega13
-
-# Enable to run automatically on login
 systemctl --user enable omega13
+```
 
-# Check logs
+Check the logs when it breaks:
+```bash
 journalctl --user -fu omega13
 ```
 
-You can also run it manually from the terminal for debugging:
-
+Debug in the foreground:
 ```bash
 omega13 --no-daemon
 ```
 
+## Control
 
-
-### Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Space` / global hotkey | Capture last 13 seconds |
-| `a` | Toggle auto-record mode |
-| `t` | Manually trigger transcription |
-| `c` | Toggle clipboard copy |
-| `j` | Toggle text injection to active window |
-| `d` | Toggle Obsidian daily note output |
-| `i` | Open input port selector |
-| `n` | Start a new session |
-| `s` | Save current session to permanent storage |
-| `p` | Open transcription settings |
-| `q` | Quit |
-
-The global hotkey defaults to `Ctrl+Alt+Space` and can be changed in `~/.config/omega13/config.json`.
-
-### Examples
-
+Send the signal to trigger capture:
 ```bash
-# Start the daemon via systemd
-systemctl --user start omega13
-
-# Run in foreground mode (for debugging)
-omega13 --no-daemon
-
-# Trigger a capture from an external script (e.g., a Hyprland keybind)
 omega13 --toggle
-
-# Override Groq API key at runtime
-GROQ_API_KEY=gsk_... omega13 --no-daemon
 ```
+Map `omega13 --toggle` to a global hotkey in your compositor.
 
----
+### Settings
 
-## Configuration
-
-Config lives at `~/.config/omega13/config.json` and is written on first run with defaults. The Settings screen (`p`) handles most options at runtime; manual edits require a restart.
+The config lives at `~/.config/omega13/config.json`. The Settings screen (`p`) handles most options at runtime if you run it interactively. For a headless setup, just edit the JSON and restart the service.
 
 ```json
 {
-  "input_ports": ["system:capture_1", "system:capture_2"],
-  "save_path": "/home/user/Recordings",
-  "global_hotkey": "<ctrl>+<alt>+space",
   "transcription": {
     "provider": "local",
     "server_url": "http://localhost:8080",
-    "inference_path": "/inference",
-    "groq_model": "whisper-large-v3-turbo",
-    "auto_transcribe": true,
-    "copy_to_clipboard": false,
-    "inject_to_active_window": false,
-    "write_to_daily_note": false
+    "inject_to_active_window": false
   },
   "auto_record": {
     "enabled": false,
     "begin_threshold_db": -35.0,
     "end_threshold_db": -35.0,
     "silence_duration_seconds": 10.0
-  },
-  "sessions": {
-    "temp_root": "/tmp/omega13",
-    "default_save_location": "/home/user/Recordings",
-    "auto_cleanup_days": 7
   }
 }
 ```
 
-### Configuration Options
+---
 
-**Transcription**
+## Workflow
 
-- `provider`: Transcription backend — `"local"` (whisper-server) or `"groq"`
-- `server_url`: Base URL for the local whisper-server (default: `"http://localhost:8080"`)
-- `inference_path`: Endpoint path on the local server (default: `"/inference"`)
-- `groq_model`: Groq model identifier (default: `"whisper-large-v3-turbo"`)
-- `auto_transcribe`: Automatically transcribe after each capture (default: `true`)
-- `copy_to_clipboard`: Copy result text to clipboard after transcription (default: `false`)
-- `inject_to_active_window`: Type result via `ydotool` (default: `false`). **Note:** This requires the target window to be named "Whisp" and explicitly focused. If "Whisp" is not found or focused, injection aborts (though clipboard/Obsidian outputs will still work). On non-GNOME compositors (like Hyprland, Sway), targeting "Whisp" via GNOME D-Bus is unavailable. Also requires `ydotoold` daemon and uinput permissions.
-- `write_to_daily_note`: Append result to the current Obsidian daily note (default: `false`)
+Using Omega-13 fits into a few distinct modes depending on how you've configured your compositor and `auto_record` settings:
 
-**Auto-Record**
-
-- `begin_threshold_db`: RMS level above which recording starts (default: `-35.0`)
-- `end_threshold_db`: RMS level below which the silence timer starts (default: `-35.0`)
-- `silence_duration_seconds`: Seconds of silence before auto-stop (default: `10.0`)
-
-**Sessions**
-
-- `temp_root`: Working directory for in-progress sessions (default: `"/tmp/omega13"`)
-- `default_save_location`: Destination for saved sessions (default: `~/Recordings`)
-- `auto_cleanup_days`: Age in days before unsaved temp sessions are pruned (default: `7`)
+1. **Manual Capture**: Map `omega13 --toggle` (or the internal `Ctrl+Alt+Space` hotkey) to trigger a 13-second retroactive recording. This is the core workflow for capturing something you *just* heard or said.
+2. **Auto-Record Mode**: Press `a` (if running interactively) to arm the state machine. When the input audio crosses the `-35.0 dB` threshold, recording starts. When it drops below the threshold for a set silence duration, it stops, transcribes, and re-arms itself automatically.
+3. **Transcription & Output**: By default (`auto_transcribe: true`), saving a capture automatically kicks off the transcription process. The text is sent concurrently to multiple destinations: it can be injected into the target "Whisp" window via `ydotool`, copied to the clipboard, and appended to an Obsidian daily note notebook.
 
 ---
 
-## Session Structure
+## Session Management
 
-Each saved session is a directory under the configured save location:
+Recordings accumulate in `/tmp/omega13/`. When you save (e.g., by pressing `s` in the interactive UI or via D-Bus/hotkeys), they move to permanent storage. 
 
-```
-omega13_session_2024-01-15_10-30-00/
-├── session.json          # metadata: timestamps, recording list, transcriptions
-├── recordings/
-│   ├── 001.mp4
-│   └── 002.mp4
-└── transcriptions/
-    ├── 001.md
-    └── 002.md
-```
-
-Sessions accumulate incrementally — recordings added after an initial save are synced to the permanent location automatically.
+The session manager runs suffix-prefix overlap deduplication if auto-record triggers back-to-back clips. It's a text-level heuristic. It's not perfect, but it prevents duplicate sentences in your notes when the RMS threshold flaps.
 
 ---
 
-## Auto-Record Mode
+## Roadmap & Known Failure Modes
 
-Pressing `a` arms the auto-record state machine. From that point:
+Moving from a TUI application to a headless daemon surfaced some architectural gaps that are currently being refactored.
 
-1. Signal above `begin_threshold_db` triggers a capture automatically
-2. When the signal drops below `end_threshold_db`, a silence countdown begins
-3. After `silence_duration_seconds` of continuous silence, the recording stops and (if `auto_transcribe` is on) transcription starts
-4. The system returns to armed state, ready for the next event
-
-Recordings with average RMS below -50 dB (near-silence false triggers) are discarded silently before transcription begins.
+- **Transcription Failures & Retries**: In the TUI version, if an API transcription failed, there was a manual subcommand to retry it. As a headless daemon, a failed REST API call silently breaks the dictation flow. I am refactoring the GNOME extension to include a system tray menu with a "retry transcription" option.
+- **Local Transcription Fallback Chain**: Currently, the gateway relies on a REST API (local network or external). The next phase involves wiring in Python bindings for `transcribe.cpp` ([github.com/handy-computer/transcribe.cpp](https://github.com/handy-computer/transcribe.cpp)) to execute GGUF models directly on bare metal. This will introduce a fallback chain: attempt local in-process transcription first, and fall back to the REST API if it fails.
+- **The `ydotool` Stuck-Key Bug**: There is a known underlying bug in `ydotool`. If the pipeline fails while `ydotool` is actively sending a keystroke (e.g., the letter "t"), the daemon gets stuck holding that logical key down. That key will remain completely non-functional on your physical keyboard until you manually kill the `ydotoold` service. 
 
 ---
-
-## Bootstrap
-
-`bootstrap.sh` handles system dependencies and the local Python environment.
-
-```bash
-cd omega-13
-./bootstrap.sh
-```
-
-After bootstrap, activate the environment if needed and launch the app.
-
----
-
-
-## First Run
-
-Complete these steps in order. After this, the app is running and controllable from the command line.
-
-1. Ensure the daemon is running
-2. Verify its status
-```bash
-systemctl --user start omega13
-```
-
-### 2. Verify its status
-
-Check the service status:
-
-```bash
-systemctl --user status omega13
-```
-
-You should see it marked as `active (running)`.
-
-
-### 4. Send a test control command
-
-Toggle recording:
-
-```bash
-omega13 --toggle
-```
-
-If the daemon is running on Wayland, you should see the GTK4 OSD popup indicating recording status!
 
 ## Development
 
-Most tests mock the full app and JACK-dependent audio engine so they run without hardware:
+Use `uv sync` to grab deps. Run `pytest`. 
 
-```bash
-```
-
-The `tests/` directory also includes demo and integration scripts that do require real JACK access and a reachable `whisper-server`.
-
----
-
-## Contributing
-
-Issues and pull requests are welcome. For significant changes, opening an issue first to discuss the approach tends to save iteration time.
-
----
-
-## License
-
-MIT
+Most tests mock JACK so you don't need a live audio graph to verify the state machine logic. Integration tests will require the `whisper-server` and a real JACK connection.
