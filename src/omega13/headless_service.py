@@ -319,18 +319,45 @@ class HeadlessOmega13:
 
         if not connection_success:
             logger.info("Attempting to auto-connect to default capture ports")
-            available_ports = self.audio_engine.get_available_output_ports()
-            default_ports = [p.name for p in available_ports if "system:capture" in p.name]
-            if not default_ports and available_ports:
-                default_ports = [p.name for p in available_ports]
+            import subprocess
+            default_ports = []
+            
+            try:
+                # 1. Ask PulseAudio for the default source name
+                res = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True, check=True)
+                default_name = res.stdout.strip()
+                
+                # 2. Match it against the description
+                res = subprocess.run(["pactl", "list", "sources"], capture_output=True, text=True, check=True)
+                desc = None
+                in_default = False
+                for line in res.stdout.splitlines():
+                    if line.startswith(f"\tName: {default_name}"):
+                        in_default = True
+                    elif in_default and line.startswith("\tDescription: "):
+                        desc = line.split(": ", 1)[1].strip()
+                        break
+                        
+                if desc:
+                    available = self.audio_engine.get_available_output_ports()
+                    default_ports = [p.name for p in available if p.name.startswith(f"{desc}:capture")]
+            except Exception as e:
+                logger.debug(f"Failed to resolve default PipeWire source via pactl: {e}")
+                
+            if not default_ports:
+                # Fallback to older logic if pactl fails
+                available_ports = self.audio_engine.get_available_output_ports()
+                default_ports = [p.name for p in available_ports if "system:capture" in p.name]
+                if not default_ports and available_ports:
+                    default_ports = [p.name for p in available_ports]
             
             if default_ports:
                 if len(default_ports) < self.audio_engine.channels:
-                    default_ports.extend([default_ports[0]] * (self.audio_engine.channels - len(default_ports)))
+                    default_ports.extend([default_ports[-1]] * (self.audio_engine.channels - len(default_ports)))
                 default_ports = default_ports[:self.audio_engine.channels]
-                logger.info(f"Auto-connecting to: {default_ports}")
+                logger.info(f"Auto-connecting to dynamically resolved default ports: {default_ports}")
                 self.audio_engine.connect_inputs(default_ports)
-                self.config_manager.set_input_ports(default_ports)
+                # DO NOT save these to config, so that it remains fully dynamic on next boot
 
         # Initialize signal detector and recording controller
         # Use audio engine's samplerate and channels (available after start())
