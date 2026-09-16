@@ -121,9 +121,16 @@ def main():
             print(f"Error: Could not load configuration UI. Make sure 'rich' is installed. ({e})")
             sys.exit(1)
 
-    # Main execution (daemon mode handles its own PID file internally)
+    # Main execution
     print("Starting Omega-13 headless service...")
-    main_headless()
+    from .pidfile import pid_file_context, PidAlreadyRunningError
+    
+    try:
+        with pid_file_context(Path("/tmp/omega13.pid")):
+            main_headless()
+    except PidAlreadyRunningError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

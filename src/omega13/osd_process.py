@@ -20,6 +20,10 @@ class OSDProcess:
         self.bus = None
 
     def _on_activate(self, app):
+        if self.window is not None:
+            self.window.present()
+            return
+            
         self.window = Omega13OSD()
         self.window.set_application(app)
         
