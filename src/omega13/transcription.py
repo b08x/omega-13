@@ -180,6 +180,12 @@ class GroqTranscriptionProvider(TranscriptionProvider):
         raise PermanentTranscriptionError(f"Missing 'text' in response: {result}")
 
 
+def _run_transcribe_worker_process(model_path, audio_data, threads):
+    """Top-level function for multiprocessing to avoid pickling errors."""
+    import transcribe_cpp
+    res = transcribe_cpp.transcribe(model_path, audio_data, n_threads=threads)
+    return res.text.strip(), res.language
+
 class GgufTranscriptionProvider(TranscriptionProvider):
     """Local GGUF whisper backend using transcribe-cpp."""
 
@@ -208,14 +214,22 @@ class GgufTranscriptionProvider(TranscriptionProvider):
         try:
             import soundfile as sf
             import numpy as np
+            import concurrent.futures
             
             data, samplerate = sf.read(str(audio_path))
             if data.ndim > 1:
                 data = data.mean(axis=1) # mix down to mono
             data = data.astype(np.float32)
             
-            result = transcribe_cpp.transcribe(self.model_path, data, n_threads=self.threads)
-            return result.text.strip(), result.language
+            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                # We submit to the process pool and wait with timeout
+                future = executor.submit(_run_transcribe_worker_process, self.model_path, data, self.threads)
+                text, lang = future.result(timeout=timeout)
+                return text, lang
+                
+        except concurrent.futures.TimeoutError:
+            logger.error(f"GGUF Transcription timed out after {timeout}s")
+            raise TranscriptionError(f"GGUF Transcription timed out", retryable=True)
         except Exception as e:
             logger.error(f"GGUF Transcription failed: {e}")
             raise TranscriptionError(f"GGUF Transcription failed: {e}", retryable=False)

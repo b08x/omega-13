@@ -366,7 +366,7 @@ class AudioEngine:
             
             final_path = processor.process_pipeline(temp_wav, filename, operations)
             
-            logger.info(f"Audio processed and saved as M4A: {final_path}")
+            logger.info(f"Audio processed and saved as WAV: {final_path}")
 
         except Exception as e:
             logger.error(f"File writer error: {e}")

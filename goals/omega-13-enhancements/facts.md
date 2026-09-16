@@ -1,0 +1,8 @@
+- The GNOME extension has a toggle option to turn the OSD display on and off.
+- The GNOME extension has an auto-record toggle and a slider/input to adjust the threshold value.
+- Temporary session storage is moved from /tmp/omega13 to /run/user/1000/omega13.
+- A manifest of failed transcriptions is maintained, retaining up to the last 10 failed recordings.
+- The GNOME extension menu has a 'Retry failed transcription' button that processes recordings from the failed manifest (and turns red when a failed transcription is detected).
+- A new 'Streaming Mode' is introduced as a separate toggleable feature for real-time transcription.
+- Standard notifications (notify-send) are disabled by default, but critical error notifications are still displayed.
+- The project 'just' file provides a robust modern menu (using 'gum') for updating configuration options.

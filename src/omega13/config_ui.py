@@ -134,11 +134,17 @@ class ConfigWizard:
             streaming = Confirm.ask("Enable Real-Time Streaming Mode?", default=c.get_streaming_mode())
             c.set_streaming_mode(streaming)
             
-            provider = Prompt.ask("Provider (local or groq)", choices=["local", "groq"], default=c.get_transcription_provider())
+            provider = Prompt.ask(
+                "Provider (local, whisper-server, or groq)", 
+                choices=["local", "whisper-server", "groq"], 
+                default=c.get_transcription_provider()
+            )
             c.set_transcription_provider(provider)
             
             if provider == "local":
-                url = Prompt.ask("Local Server URL", default=c.get_transcription_server_url())
+                console.print("[dim]Using local GGUF model on-device. Manage models with `just model dl`.[/dim]")
+            elif provider == "whisper-server":
+                url = Prompt.ask("Local Network Server URL", default=c.get_transcription_server_url())
                 c.set_transcription_server_url(url)
             elif provider == "groq":
                 model = Prompt.ask("Groq Model", default=c.get_groq_model())

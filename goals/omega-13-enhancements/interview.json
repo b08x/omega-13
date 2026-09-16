@@ -1,0 +1,60 @@
+{
+  "stage": "interview",
+  "title": "Omega-13 Enhancements Setup",
+  "goalSlug": "omega-13-enhancements",
+  "questions": [
+    {
+      "id": "auto_record_ui",
+      "prompt": "For the auto-record extension feature, do you just need an on/off toggle, or should the UI also allow adjusting the threshold value?",
+      "description": "Currently there's a threshold value in the config.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Just an on/off toggle for now",
+      "recommendedOptionIds": ["toggle_only"],
+      "options": [
+        { "id": "toggle_only", "label": "Just an on/off toggle" },
+        { "id": "toggle_and_slider", "label": "Toggle AND a slider/input for the threshold" }
+      ],
+      "required": true
+    },
+    {
+      "id": "manifest_retention",
+      "prompt": "For the failed transcriptions manifest, how should we manage retention to avoid filling up temp space?",
+      "description": "Recordings are currently in /tmp/omega13.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Keep only the last 10 failed recordings",
+      "recommendedOptionIds": ["last_10"],
+      "options": [
+        { "id": "last_10", "label": "Keep only the last 10 failed recordings" },
+        { "id": "24_hours", "label": "Keep everything from the last 24 hours" },
+        { "id": "clear_on_restart", "label": "Keep all, but clear on daemon restart" }
+      ],
+      "required": true
+    },
+    {
+      "id": "streaming_mode",
+      "prompt": "How should the new real-time streaming transcription (e.g., Nematron) integrate?",
+      "description": "It transcribes as you speak instead of retroactively.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Add it as a separate 'Streaming Mode' that can be toggled",
+      "recommendedOptionIds": ["separate_mode"],
+      "options": [
+        { "id": "separate_mode", "label": "Add it as a separate toggleable 'Streaming Mode'" },
+        { "id": "replace_retro", "label": "Completely replace the retroactive architecture" }
+      ],
+      "required": true
+    },
+    {
+      "id": "notifications_disabled",
+      "prompt": "When disabling notifications (notify-send) by default, should we still show critical errors?",
+      "description": "This helps if the backend crashes.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Silence normal events but show critical errors",
+      "recommendedOptionIds": ["errors_only"],
+      "options": [
+        { "id": "errors_only", "label": "Silence normal events but show critical errors" },
+        { "id": "silence_all", "label": "Silence absolutely everything by default" }
+      ],
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "stage": "interview",
+  "title": "Justfile Migration and Installer Update",
+  "goalSlug": "justfile-migration",
+  "questions": [
+    {
+      "id": "vulkan_check",
+      "prompt": "How should we check for Vulkan hardware support?",
+      "description": "We need to dynamically set TRANSCRIBE_VULKAN=ON if active.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Check for vulkaninfo and look for supported devices.",
+      "recommendedOptionIds": ["vulkaninfo"],
+      "options": [
+        { "id": "vulkaninfo", "label": "Use `vulkaninfo` or `vulkaninfo --summary`" },
+        { "id": "lspci", "label": "Use `lspci | grep -i vga`" }
+      ],
+      "required": true
+    },
+    {
+      "id": "model_selection",
+      "prompt": "How should the model download menu be presented in `just model dl`?",
+      "description": "Omega-13 currently uses `gum` for UI in its bash scripts.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Use `gum choose` to list the models.",
+      "recommendedOptionIds": ["gum"],
+      "options": [
+        { "id": "gum", "label": "Use `gum choose` (consistent with install.sh)" },
+        { "id": "fzf", "label": "Use `fzf`" }
+      ],
+      "required": true
+    },
+    {
+      "id": "script_removal",
+      "prompt": "Should we delete the old bash scripts (`install.sh`, `uninstall.sh`, `bootstrap.sh`) after migration?",
+      "answerMode": "single",
+      "recommendedAnswer": "Yes, replace them entirely with the Justfile.",
+      "recommendedOptionIds": ["yes"],
+      "options": [
+        { "id": "yes", "label": "Yes, delete them" },
+        { "id": "no", "label": "No, keep them as fallbacks" }
+      ],
+      "required": true
+    }
+  ]
+}

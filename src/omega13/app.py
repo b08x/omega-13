@@ -20,6 +20,9 @@ def main():
     parser.add_argument(
         "--retry", action="store_true", help="Retry the last failed transcription via D-Bus"
     )
+    parser.add_argument(
+        "--status", action="store_true", help="Check if Omega-13 is running"
+    )
     # Keeping these for backwards compatibility with any existing scripts, but they are no-ops or default
     parser.add_argument("--daemon", action="store_true", default=True, help="Run as background daemon (default)")
     parser.add_argument("--no-daemon", action="store_false", dest="daemon", help="Run in foreground without daemonizing")
@@ -61,6 +64,24 @@ def main():
             sys.exit(1)
         except RuntimeError as e:
             print(f"Error: {e}")
+            sys.exit(1)
+
+    if getattr(args, 'status', False):
+        pid_file = Path("/tmp/omega13.pid")
+        if not pid_file.exists() or is_stale(pid_file):
+            print("Omega-13 is not running (no active PID file).")
+            sys.exit(1)
+        pid = read_pid(pid_file)
+        if pid:
+            print(f"Omega-13 is running (PID {pid}).")
+            import subprocess
+            try:
+                subprocess.run(["systemctl", "--user", "status", "omega13", "--no-pager"], check=False)
+            except FileNotFoundError:
+                pass
+            sys.exit(0)
+        else:
+            print("Omega-13 is not running.")
             sys.exit(1)
 
     if args.stop:

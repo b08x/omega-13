@@ -1,5 +1,7 @@
 # Omega-13
 
+![Omega-13 Header](assets/header.png)
+
 Short version: A retroactive audio daemon. It continuously buffers 13 seconds of audio in memory. When triggered, it stops, transcribes the buffer (locally or via Groq), and routes the text to your clipboard, a dedicated scratchpad window, or an Obsidian daily note.
 
 What it is: The daemon runs a JACK/PipeWire client in a background systemd service. It maintains a circular ring buffer in memory. On capture, it pulls the segments, reconstructs a linear WAV, downsamples it for Whisper via `ffmpeg`, and fires it off to a local HTTP server or the cloud. No re-recording. Zero disk I/O until capture.
@@ -47,18 +49,20 @@ If you're building functional Linux desktop tools right now, you're going to hit
 
 ## Setup
 
-The installation is managed via `just`. No `sudo` needed. 
+The installation is completely self-contained with an interactive terminal UI. No `sudo` needed.
 
 ```bash
 git clone https://github.com/b08x/omega-13.git
 cd omega-13
-just install
+./install.sh
 ```
 
 What it actually does under the hood:
 1. Bootstraps a virtualenv with `uv` and installs dependencies.
-2. Dynamically evaluates hardware (CUDA, Vulkan) and compiles `transcribe-cpp` with appropriate acceleration flags (`CMAKE_ARGS`).
+2. Dynamically evaluates hardware (CUDA, Vulkan) and compiles `transcribe-cpp` with appropriate acceleration flags.
 3. Compiles and enables `ydotool` as a user service if it's missing.
+4. Deploys the application code and Python environment to `~/.local/share/omega13`.
+5. Installs the GNOME extension and systemd service automatically.
 
 To download models, use the dedicated command:
 ```bash

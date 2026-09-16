@@ -466,37 +466,44 @@ class HeadlessOmega13:
                 
                 providers = []
                 
-                # Add local GGUF provider if applicable
+                # 1. GGUF Local Model
                 if provider_type == "local":
                     model_path = self.config_manager.get_local_model_path()
                     model_name = self.config_manager.get_local_model_name()
                     threads = self.config_manager.get_local_model_threads()
                     
                     full_model_path = Path(model_path) / model_name
-                    if full_model_path.exists():
+                    if not full_model_path.exists():
+                        logger.error(f"GGUF model not found at {full_model_path}. Please run `just model dl` to download it.")
+                    else:
                         try:
                             import transcribe_cpp
                             from omega13.transcription import GgufTranscriptionProvider
                             providers.append(GgufTranscriptionProvider(str(full_model_path), threads))
                         except ImportError:
-                            logger.info("transcribe-cpp not installed, skipping GGUF local provider")
-                    else:
-                        logger.info(f"GGUF model not found at {full_model_path}, skipping GGUF local provider")
+                            logger.error("transcribe-cpp is not installed. Run `just install` with CUDA enabled, or use a different provider.")
                 
-                # Add fallback/primary API providers
-                if self.config_manager.get_streaming_mode():
-                    from omega13.transcription import StubStreamingProvider
-                    providers.append(StubStreamingProvider())
+                # 2. Whisper-Server (Local Network REST API)
+                elif provider_type == "whisper-server" or (provider_type == "network"):
+                    providers.append(LocalTranscriptionProvider(
+                        server_url=self.config_manager.get_transcription_server_url(),
+                        inference_path=self.config_manager.get_transcription_inference_path(),
+                    ))
+
+                # 3. Groq (Cloud REST API)
                 elif provider_type == "groq":
                     providers.append(GroqTranscriptionProvider(
                         api_key=self.config_manager.get_groq_api_key(),
                         model=self.config_manager.get_groq_model(),
                     ))
-                else:
-                    providers.append(LocalTranscriptionProvider(
-                        server_url=self.config_manager.get_transcription_server_url(),
-                        inference_path=self.config_manager.get_transcription_inference_path(),
-                    ))
+                
+                # Streaming override
+                if self.config_manager.get_streaming_mode():
+                    from omega13.transcription import StubStreamingProvider
+                    providers = [StubStreamingProvider()]
+                
+                if not providers:
+                    logger.error(f"No valid transcription provider could be initialized for type: {provider_type}")
                     
                 self.transcription_service = TranscriptionService(
                     providers=providers, notifier=notifier
