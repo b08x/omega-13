@@ -1,4 +1,4 @@
-## [2.7.0] - 2026-09-15
+## [2.7.1] - 2026-09-15
 
 ### ✨ Features
 - Rewrite extension OSD and introduce GTK4 Layer Shell in a separate subprocess (`osd_process.py`) to prevent GLib event loop blocking.
