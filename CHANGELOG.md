@@ -1,3 +1,13 @@
+## [2.6.0] - 2026-09-15
+
+### ✨ Features
+- Python TUI installer: Migrated from bash/Justfile to a self-contained, interactive Python `rich`-powered installer.
+- Added `--status` flag to CLI to check daemon status.
+
+### 🐛 Bug Fixes
+- Fixed application hang during local `transcribe-cpp` transcription by executing the model in an isolated process pool (releasing the GIL).
+- Fixed silent fallback where the `local` provider would incorrectly fall over to `whisper-server`. Explicit namespaces created for local, REST API, and Groq providers.
+
 ## [2.5.0] - 2026-09-14
 
 ### ✨ Features

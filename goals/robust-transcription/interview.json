@@ -1,0 +1,46 @@
+{
+  "stage": "interview",
+  "title": "Robust Transcription Fallback and System Tray",
+  "goalSlug": "robust-transcription",
+  "questions": [
+    {
+      "id": "menu-structure",
+      "prompt": "How should the 'Retry' option be structured in the new system tray menu to best leave room for future items?",
+      "description": "We need to ensure the menu is extensible for future additions like 'Settings' or 'History'.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "A flat menu for now with 'Retry Transcription' at the top, followed by a separator, leaving room for future items below.",
+      "recommendedOptionIds": ["flat-separator"],
+      "options": [
+        { "id": "flat-separator", "label": "Flat menu with separators for logical grouping" },
+        { "id": "nested-submenu", "label": "Nested under a 'Transcription' submenu" }
+      ],
+      "required": true
+    },
+    {
+      "id": "local-model-config",
+      "prompt": "How should the path and settings for the local GGUF model (transcribe.cpp) be configured?",
+      "description": "The system will try the local model first, then fall back to the REST API.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Add new keys to `config.json` (e.g., `local_model_path`) with a sensible default, falling back to REST API.",
+      "recommendedOptionIds": ["config-json"],
+      "options": [
+        { "id": "config-json", "label": "Add to config.json with a default path" },
+        { "id": "hardcoded", "label": "Hardcode a standard path for now" }
+      ],
+      "required": true
+    },
+    {
+      "id": "ydotool-recovery",
+      "prompt": "How should we recover from the ydotool bug where keys get stuck during a failed injection?",
+      "description": "If ydotool fails mid-injection, keys (like 't') can remain logically held down until the service is killed.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Add a cleanup step that explicitly restarts the `ydotoold` user service if the injection subprocess times out or fails.",
+      "recommendedOptionIds": ["restart-service"],
+      "options": [
+        { "id": "restart-service", "label": "Restart ydotoold service on failure (`systemctl --user restart ydotoold`)" },
+        { "id": "key-up-events", "label": "Attempt to send blanket key-up events" }
+      ],
+      "required": true
+    }
+  ]
+}

@@ -300,3 +300,44 @@ def get_dbus_state() -> str:
         RuntimeError: If D-Bus call fails or dbus-next not installed
     """
     return asyncio.run(_dbus_get_state_async())
+
+async def _dbus_retry_async() -> bool:
+    """Call RetryTranscription() on the running Omega-13 D-Bus service."""
+    try:
+        from dbus_next.aio.message_bus import MessageBus
+        from dbus_next.errors import DBusError
+    except ImportError:
+        raise RuntimeError("dbus-next not installed. Cannot retry transcription.")
+
+    bus = None
+    try:
+        import asyncio
+        bus = await asyncio.wait_for(MessageBus().connect(), timeout=3.0)
+        introspection = await asyncio.wait_for(
+            bus.introspect(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH), timeout=5.0
+        )
+        proxy = bus.get_proxy_object(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH, introspection)
+        iface = proxy.get_interface(DBUS_INTERFACE_NAME)
+        started = await asyncio.wait_for(
+            iface.call_retry_transcription(), timeout=10.0
+        )
+        return started
+    except asyncio.TimeoutError:
+        raise ConnectionError("Timeout: Omega-13 instance found but not responding.")
+    except DBusError as e:
+        if "NameHasNoOwner" in str(e) or "ServiceUnknown" in str(e):
+            raise ConnectionError("No running Omega-13 instance found. Start omega13 first.")
+        else:
+            raise ConnectionError(f"D-Bus communication error: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to retry transcription via D-Bus: {e}")
+    finally:
+        if bus and hasattr(bus, 'disconnect'):
+            try:
+                bus.disconnect()
+            except Exception:
+                pass
+
+def send_dbus_retry() -> bool:
+    """Send RetryTranscription() to the running Omega-13 instance via D-Bus."""
+    return asyncio.run(_dbus_retry_async())

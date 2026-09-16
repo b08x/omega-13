@@ -8,6 +8,7 @@ import asyncio
 import logging
 import signal
 from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        recording_event_handler,
         transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         super().__init__(DBUS_INTERFACE_NAME)
@@ -68,6 +70,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.recording_event_handler = recording_event_handler
         self.transcription_service = transcription_service
 
     @method()
@@ -99,7 +102,15 @@ class HeadlessRecorderInterface(ServiceInterface):
                     )
 
                 recording_path = session.get_next_recording_path()
-                success = self.recording_controller.manual_start_recording(recording_path)
+                
+                cb = None
+                if self.config_manager.get_streaming_mode() and self.transcription_service:
+                    for p in self.transcription_service.providers:
+                        if hasattr(p, "transcribe_chunk"):
+                            cb = lambda chunk: p.transcribe_chunk(chunk)
+                            break
+                            
+                success = self.recording_controller.manual_start_recording(recording_path, streaming_callback=cb)
                 if not success:
                     raise DBusError(
                         "org.omega13.Recorder.StartFailed",
@@ -114,6 +125,68 @@ class HeadlessRecorderInterface(ServiceInterface):
             raise
         except Exception as e:
             raise DBusError("org.omega13.Recorder.ToggleError", str(e))
+
+    @method()
+    async def RetryTranscription(self) -> "b":  # type: ignore
+        """Retry the last failed transcription.
+
+        Returns:
+            bool: True if a failed transcription was found and retry started, False otherwise.
+        """
+        try:
+            return self.recording_event_handler.retry_last_failed_transcription()
+        except Exception as e:
+            raise DBusError("org.omega13.Recorder.RetryError", str(e))
+
+    @method()
+    async def RetryFailedTranscriptions(self) -> "i":  # type: ignore
+        """Retry all failed transcriptions.
+        
+        Returns:
+            int: Number of retried transcriptions.
+        """
+        try:
+            return self.recording_event_handler.retry_failed_transcriptions()
+        except Exception as e:
+            raise DBusError("org.omega13.Recorder.RetryError", str(e))
+
+    @method()
+    async def GetFailedTranscriptionCount(self) -> "i":  # type: ignore
+        """Get the number of failed transcriptions.
+        
+        Returns:
+            int: Count of failures.
+        """
+        try:
+            return len(self.session_manager.get_failed_transcriptions())
+        except Exception as e:
+            raise DBusError("org.omega13.Recorder.Error", str(e))
+
+    @method()
+    async def SetAutoRecordEnabled(self, enabled: "b") -> None:  # type: ignore
+        """Enable or disable auto-record dynamically."""
+        self.config_manager.set_auto_record_enabled(enabled)
+        if enabled:
+            self.recording_controller.enable_auto_record()
+        else:
+            self.recording_controller.disable_auto_record()
+
+    @method()
+    async def SetAutoRecordThreshold(self, threshold: "d") -> None:  # type: ignore
+        """Set auto-record threshold dynamically."""
+        if "auto_record" not in self.config_manager.config:
+            self.config_manager.config["auto_record"] = {}
+        self.config_manager.config["auto_record"]["begin_threshold_db"] = threshold
+        self.config_manager.config["auto_record"]["end_threshold_db"] = threshold
+        self.config_manager.save_config(self.config_manager.config)
+        if hasattr(self.recording_controller, 'signal_detector') and self.recording_controller.signal_detector:
+            self.recording_controller.signal_detector.begin_threshold_db = threshold
+            self.recording_controller.signal_detector.end_threshold_db = threshold
+
+    @method()
+    async def SetOSDEnabled(self, enabled: "b") -> None:  # type: ignore
+        """Enable or disable OSD display."""
+        self.config_manager.set_force_osd(enabled)
 
     @method()
     async def GetState(self) -> "s":  # type: ignore
@@ -204,12 +277,14 @@ class HeadlessDBusService:
         audio_engine: AudioEngine,
         session_manager: SessionManager,
         config_manager: ConfigManager,
+        recording_event_handler,
         transcription_service: Optional[TranscriptionService] = None,
     ) -> None:
         self.recording_controller = recording_controller
         self.audio_engine = audio_engine
         self.session_manager = session_manager
         self.config_manager = config_manager
+        self.recording_event_handler = recording_event_handler
         self.transcription_service = transcription_service
         self.bus: Optional[MessageBus] = None
         self.interface: Optional[HeadlessRecorderInterface] = None
@@ -224,6 +299,7 @@ class HeadlessDBusService:
                 self.audio_engine,
                 self.session_manager,
                 self.config_manager,
+                self.recording_event_handler,
                 self.transcription_service,
             )
             self.bus.export(self.OBJECT_PATH, self.interface)
@@ -301,18 +377,45 @@ class HeadlessOmega13:
 
         if not connection_success:
             logger.info("Attempting to auto-connect to default capture ports")
-            available_ports = self.audio_engine.get_available_output_ports()
-            default_ports = [p.name for p in available_ports if "system:capture" in p.name]
-            if not default_ports and available_ports:
-                default_ports = [p.name for p in available_ports]
+            import subprocess
+            default_ports = []
+            
+            try:
+                # 1. Ask PulseAudio for the default source name
+                res = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True, check=True)
+                default_name = res.stdout.strip()
+                
+                # 2. Match it against the description
+                res = subprocess.run(["pactl", "list", "sources"], capture_output=True, text=True, check=True)
+                desc = None
+                in_default = False
+                for line in res.stdout.splitlines():
+                    if line.startswith(f"\tName: {default_name}"):
+                        in_default = True
+                    elif in_default and line.startswith("\tDescription: "):
+                        desc = line.split(": ", 1)[1].strip()
+                        break
+                        
+                if desc:
+                    available = self.audio_engine.get_available_output_ports()
+                    default_ports = [p.name for p in available if p.name.startswith(f"{desc}:capture")]
+            except Exception as e:
+                logger.debug(f"Failed to resolve default PipeWire source via pactl: {e}")
+                
+            if not default_ports:
+                # Fallback to older logic if pactl fails
+                available_ports = self.audio_engine.get_available_output_ports()
+                default_ports = [p.name for p in available_ports if "system:capture" in p.name]
+                if not default_ports and available_ports:
+                    default_ports = [p.name for p in available_ports]
             
             if default_ports:
                 if len(default_ports) < self.audio_engine.channels:
-                    default_ports.extend([default_ports[0]] * (self.audio_engine.channels - len(default_ports)))
+                    default_ports.extend([default_ports[-1]] * (self.audio_engine.channels - len(default_ports)))
                 default_ports = default_ports[:self.audio_engine.channels]
-                logger.info(f"Auto-connecting to: {default_ports}")
+                logger.info(f"Auto-connecting to dynamically resolved default ports: {default_ports}")
                 self.audio_engine.connect_inputs(default_ports)
-                self.config_manager.set_input_ports(default_ports)
+                # DO NOT save these to config, so that it remains fully dynamic on next boot
 
         # Initialize signal detector and recording controller
         # Use audio engine's samplerate and channels (available after start())
@@ -331,7 +434,7 @@ class HeadlessOmega13:
         )
 
         # Initialize recording event handler
-        notifier = DesktopNotifier() if self.config_manager.get_desktop_notifications_enabled() else None
+        notifier = DesktopNotifier(config_manager=self.config_manager)
         self._recording_event_handler = RecordingEventHandler(
             recording_controller=self.recording_controller,
             session_manager=self.session_manager,
@@ -360,24 +463,57 @@ class HeadlessOmega13:
             try:
                 provider_type = self.config_manager.get_transcription_provider()
                 logger.info(f"Loading transcription provider: {provider_type}")
-                if provider_type == "groq":
-                    provider = GroqTranscriptionProvider(
-                        api_key=self.config_manager.get_groq_api_key(),
-                        model=self.config_manager.get_groq_model(),
-                    )
-                else:
-                    provider = LocalTranscriptionProvider(
+                
+                providers = []
+                
+                # 1. GGUF Local Model
+                if provider_type == "local":
+                    model_path = self.config_manager.get_local_model_path()
+                    model_name = self.config_manager.get_local_model_name()
+                    threads = self.config_manager.get_local_model_threads()
+                    
+                    full_model_path = Path(model_path) / model_name
+                    if not full_model_path.exists():
+                        logger.error(f"GGUF model not found at {full_model_path}. Please run `just model dl` to download it.")
+                    else:
+                        try:
+                            import transcribe_cpp
+                            from omega13.transcription import GgufTranscriptionProvider
+                            providers.append(GgufTranscriptionProvider(str(full_model_path), threads))
+                        except ImportError:
+                            logger.error("transcribe-cpp is not installed. Run `just install` with CUDA enabled, or use a different provider.")
+                
+                # 2. Whisper-Server (Local Network REST API)
+                elif provider_type == "whisper-server" or (provider_type == "network"):
+                    providers.append(LocalTranscriptionProvider(
                         server_url=self.config_manager.get_transcription_server_url(),
                         inference_path=self.config_manager.get_transcription_inference_path(),
-                    )
+                    ))
+
+                # 3. Groq (Cloud REST API)
+                elif provider_type == "groq":
+                    providers.append(GroqTranscriptionProvider(
+                        api_key=self.config_manager.get_groq_api_key(),
+                        model=self.config_manager.get_groq_model(),
+                    ))
+                
+                # Streaming override
+                if self.config_manager.get_streaming_mode():
+                    from omega13.transcription import StubStreamingProvider
+                    providers = [StubStreamingProvider()]
+                
+                if not providers:
+                    logger.error(f"No valid transcription provider could be initialized for type: {provider_type}")
+                    
                 self.transcription_service = TranscriptionService(
-                    provider=provider, notifier=notifier
+                    providers=providers, notifier=notifier
                 )
                 # Set transcription service on event handler
                 self._recording_event_handler.set_transcription_service(self.transcription_service)
                 logger.info(f"Transcription service initialized with {provider_type} provider")
             except Exception as e:
-                logger.warning(f"Failed to initialize transcription service: {e}")
+                import traceback
+                logger.warning(f"Failed to initialize transcription service: {e}\n{traceback.format_exc()}")
                 self.transcription_service = None
 
         # Enable auto-record if configured
@@ -390,6 +526,7 @@ class HeadlessOmega13:
             self.audio_engine,
             self.session_manager,
             self.config_manager,
+            self._recording_event_handler,
             self.transcription_service,
         )
         await self.dbus_service.register()
@@ -504,7 +641,15 @@ class HeadlessOmega13:
                 return
 
             recording_path = session.get_next_recording_path()
-            self.recording_controller.manual_start_recording(recording_path)
+            
+            cb = None
+            if self.config_manager.get_streaming_mode() and self.transcription_service:
+                for p in self.transcription_service.providers:
+                    if hasattr(p, "transcribe_chunk"):
+                        cb = lambda chunk: p.transcribe_chunk(chunk)
+                        break
+                        
+            self.recording_controller.manual_start_recording(recording_path, streaming_callback=cb)
 
     async def run(self) -> None:
         """Run the headless service event loop."""
@@ -544,7 +689,15 @@ class HeadlessOmega13:
                 return
 
             recording_path = session.get_next_recording_path()
-            success = self.recording_controller.manual_start_recording(recording_path)
+            
+            cb = None
+            if self.config_manager.get_streaming_mode() and self.transcription_service:
+                for p in self.transcription_service.providers:
+                    if hasattr(p, "transcribe_chunk"):
+                        cb = lambda chunk: p.transcribe_chunk(chunk)
+                        break
+                        
+            success = self.recording_controller.manual_start_recording(recording_path, streaming_callback=cb)
             if not success:
                 logger.error("Failed to start recording")
 

@@ -63,6 +63,22 @@ class TranscriptionProvider:
     def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
         raise NotImplementedError
 
+    def transcribe_chunk(self, chunk_data: bytes) -> str:
+        """Process an audio chunk and return transcription (if supported)."""
+        raise NotImplementedError("Streaming not supported by this provider")
+
+class StubStreamingProvider(TranscriptionProvider):
+    """Stub provider for real-time streaming mode."""
+
+    def check_health(self) -> tuple[bool, Optional[str]]:
+        return True, None
+
+    def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
+        return "[Streaming mode active - full file transcribed]", "en"
+
+    def transcribe_chunk(self, chunk_data: bytes) -> str:
+        return f"[Chunk processed: {len(chunk_data)} bytes]"
+
 
 class LocalTranscriptionProvider(TranscriptionProvider):
     """Local whisper-server backend."""
@@ -87,14 +103,17 @@ class LocalTranscriptionProvider(TranscriptionProvider):
             return False, str(e)
 
     def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
-        with open(audio_path, "rb") as audio_file:
-            # Detect MIME type from file extension
-            mime_type = "audio/mpeg" if audio_path.suffix == ".mp3" else "audio/wav"
-            files = {"file": (audio_path.name, audio_file, mime_type)}
-            data = {"response_format": "json", "temperature": "0.0"}
-            response = requests.post(
-                self.endpoint, files=files, data=data, timeout=timeout
-            )
+        try:
+            with open(audio_path, "rb") as audio_file:
+                # Detect MIME type from file extension
+                mime_type = "audio/mpeg" if audio_path.suffix == ".mp3" else "audio/wav"
+                files = {"file": (audio_path.name, audio_file, mime_type)}
+                data = {"response_format": "json", "temperature": "0.0"}
+                response = requests.post(
+                    self.endpoint, files=files, data=data, timeout=timeout
+                )
+        except requests.exceptions.ConnectionError as e:
+            raise PermanentTranscriptionError(f"Connection refused to {self.endpoint}: {e}")
 
         response.raise_for_status()
         result = response.json()
@@ -161,14 +180,72 @@ class GroqTranscriptionProvider(TranscriptionProvider):
         raise PermanentTranscriptionError(f"Missing 'text' in response: {result}")
 
 
+def _run_transcribe_worker_process(model_path, audio_data, threads):
+    """Top-level function for multiprocessing to avoid pickling errors."""
+    import transcribe_cpp
+    res = transcribe_cpp.transcribe(model_path, audio_data, n_threads=threads)
+    return res.text.strip(), res.language
+
+class GgufTranscriptionProvider(TranscriptionProvider):
+    """Local GGUF whisper backend using transcribe-cpp."""
+
+    def __init__(self, model_path: str, threads: int = 4):
+        self.model_path = model_path
+        self.threads = threads
+
+    def check_health(self) -> tuple[bool, Optional[str]]:
+        if not Path(self.model_path).exists():
+            return False, f"Model file not found: {self.model_path}"
+        try:
+            import transcribe_cpp
+            return True, None
+        except ImportError:
+            return False, "transcribe-cpp package is not installed"
+
+    def transcribe(self, audio_path: Path, timeout: float) -> tuple[str, Optional[str]]:
+        try:
+            import transcribe_cpp
+        except ImportError:
+            raise PermanentTranscriptionError("transcribe-cpp package is not installed")
+            
+        if not Path(self.model_path).exists():
+            raise PermanentTranscriptionError(f"Model file not found: {self.model_path}")
+            
+        try:
+            import soundfile as sf
+            import numpy as np
+            import concurrent.futures
+            
+            data, samplerate = sf.read(str(audio_path))
+            if data.ndim > 1:
+                data = data.mean(axis=1) # mix down to mono
+            data = data.astype(np.float32)
+            
+            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                # We submit to the process pool and wait with timeout
+                future = executor.submit(_run_transcribe_worker_process, self.model_path, data, self.threads)
+                text, lang = future.result(timeout=timeout)
+                return text, lang
+                
+        except concurrent.futures.TimeoutError:
+            logger.error(f"GGUF Transcription timed out after {timeout}s")
+            raise TranscriptionError(f"GGUF Transcription timed out", retryable=True)
+        except Exception as e:
+            logger.error(f"GGUF Transcription failed: {e}")
+            raise TranscriptionError(f"GGUF Transcription failed: {e}", retryable=False)
+
+
+
 class TranscriptionService:
     def __init__(
         self,
-        provider: TranscriptionProvider,
+        providers: list[TranscriptionProvider],
         timeout: int = 600,
         notifier: Optional[Any] = None,
     ):
-        self.provider = provider
+        if not providers:
+            raise ValueError("At least one provider must be specified")
+        self.providers = providers
         self.timeout = timeout
         self.notifier = notifier
         self.active_threads: list[threading.Thread] = []
@@ -176,8 +253,14 @@ class TranscriptionService:
         self._shutdown_event = threading.Event()  # Cooperative shutdown signal
 
     def check_health(self) -> tuple[bool, Optional[str]]:
-        """Check if the transcription backend is reachable and responding."""
-        return self.provider.check_health()
+        """Check if at least one transcription backend is reachable and responding."""
+        errors = []
+        for p in self.providers:
+            ok, err = p.check_health()
+            if ok:
+                return True, None
+            errors.append(f"{type(p).__name__}: {err}")
+        return False, "; ".join(errors)
 
     def _transcribe_file(
         self, audio_path: Path, current_timeout: Optional[float] = None
@@ -186,10 +269,19 @@ class TranscriptionService:
         timeout = (
             3.0 if self._shutdown_event.is_set() else (current_timeout or self.timeout)
         )
-        logger.info(
-            f"Sending transcription request to provider {type(self.provider).__name__} (timeout={timeout}s)"
-        )
-        return self.provider.transcribe(audio_path, timeout)
+        
+        last_error = None
+        for provider in self.providers:
+            try:
+                logger.info(
+                    f"Sending transcription request to provider {type(provider).__name__} (timeout={timeout}s)"
+                )
+                return provider.transcribe(audio_path, timeout)
+            except Exception as e:
+                logger.warning(f"Provider {type(provider).__name__} failed: {e}")
+                last_error = e
+                
+        raise last_error or TranscriptionError("All transcription providers failed", retryable=False)
 
     def transcribe_async(
         self,

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Optional, Dict
 import jack
@@ -33,24 +34,28 @@ class ConfigManager:
             "transcription": {
                 "enabled": True,
                 "auto_transcribe": True,
+                "streaming_mode": False,
                 "provider": "local",  # "local" or "groq"
                 "server_url": "http://localhost:8080",
                 "inference_path": "/inference",
                 "model_size": "large-v3-turbo",
                 "groq_model": "whisper-large-v3-turbo",
+                "local_model_path": str(Path.home() / ".local" / "share" / "omega13" / "models"),
+                "local_model_name": "ggml-base.en.bin",
+                "local_model_threads": 4,
                 "save_to_file": True,
                 "copy_to_clipboard": False,
                 "inject_to_active_window": False,
                 "write_to_file": False,
             },
-            "desktop_notifications": True,
+            "desktop_notifications": False,
             "force_osd": False,
             "output_file": {
                 "enabled": False,
                 "directory": ""
             },
             "sessions": {
-                "temp_root": "/tmp/omega13",
+                "temp_root": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}") + "/omega13",
                 "default_save_location": str(Path.home() / "Recordings"),
                 "auto_cleanup_days": 7,
             },
@@ -126,7 +131,11 @@ class ConfigManager:
 
     def get_desktop_notifications_enabled(self) -> bool:
         """Check if desktop notifications are enabled."""
-        return self.config.get("desktop_notifications", True)
+        return self.config.get("desktop_notifications", False)
+
+    def set_desktop_notifications_enabled(self, enabled: bool) -> None:
+        self.config["desktop_notifications"] = enabled
+        self.save_config(self.config)
 
     def get_force_osd(self) -> bool:
         """Check if OSD is forced (bypassing compositor compatibility checks)."""
@@ -161,6 +170,16 @@ class ConfigManager:
         self.config["transcription"]["auto_transcribe"] = enabled
         self.save_config(self.config)
 
+    def get_streaming_mode(self) -> bool:
+        return self.config.get("transcription", {}).get("streaming_mode", False)
+
+    def set_streaming_mode(self, enabled: bool) -> None:
+        """Set whether real-time streaming mode is enabled."""
+        if "transcription" not in self.config:
+            self.config["transcription"] = {}
+        self.config["transcription"]["streaming_mode"] = enabled
+        self.save_config(self.config)
+
     def get_transcription_model(self) -> str:
         return self.config.get("transcription", {}).get("model_size", "large-v3-turbo")
 
@@ -177,6 +196,21 @@ class ConfigManager:
             self.config["transcription"] = {}
         self.config["transcription"]["provider"] = provider
         self.save_config(self.config)
+
+    def get_local_model_path(self) -> str:
+        return self.config.get("transcription", {}).get(
+            "local_model_path", str(Path.home() / ".local" / "share" / "omega13" / "models")
+        )
+
+    def get_local_model_name(self) -> str:
+        return self.config.get("transcription", {}).get(
+            "local_model_name", "ggml-base.en.bin"
+        )
+
+    def get_local_model_threads(self) -> int:
+        return self.config.get("transcription", {}).get(
+            "local_model_threads", 4
+        )
 
     def get_groq_api_key(self) -> str:
         """Get Groq API key from environment variable."""
@@ -268,7 +302,8 @@ class ConfigManager:
     # Session Getters
     def get_session_temp_root(self) -> Path:
         """Get temporary root directory for sessions."""
-        temp_root = self.config.get("sessions", {}).get("temp_root", "/tmp/omega13")
+        default_temp_root = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}") + "/omega13"
+        temp_root = self.config.get("sessions", {}).get("temp_root", default_temp_root)
         return Path(temp_root)
 
     def get_default_save_location(self) -> Path:

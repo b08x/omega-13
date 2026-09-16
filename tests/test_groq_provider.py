@@ -105,7 +105,7 @@ def test_service_retry_on_rate_limit():
     ]
 
     audio_path = Path("test.wav")
-    service = TranscriptionService(provider=mock_provider, timeout=10)
+    service = TranscriptionService(providers=[mock_provider], timeout=10)
 
     with patch("time.sleep", return_value=None):  # Skip actual waiting
         with patch("pathlib.Path.exists", return_value=True):
@@ -134,7 +134,7 @@ def test_service_fail_fast_on_permanent_error():
     mock_provider.transcribe.side_effect = PermanentTranscriptionError("Bad Request")
 
     audio_path = Path("test.wav")
-    service = TranscriptionService(provider=mock_provider)
+    service = TranscriptionService(providers=[mock_provider])
 
     with patch("time.sleep", return_value=None):
         with patch("pathlib.Path.exists", return_value=True):

@@ -1,0 +1,7 @@
+{
+  "transcription": {
+    "local_model_path": "/tmp",
+    "local_model_name": "test.bin",
+    "local_model_threads": 4
+  }
+}

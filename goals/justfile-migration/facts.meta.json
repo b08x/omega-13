@@ -1,0 +1,62 @@
+[
+  {
+    "id": "fact-1",
+    "text": "A new `justfile` handles project installation, replacing the old bash scripts.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-2",
+    "text": "The `transcribe-cpp` dependency is installed via `uv pip install` with explicit CMake flags.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-3a",
+    "text": "The CMake flags always include `-DTRANSCRIBE_BUILD_SHARED=ON`.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-3b",
+    "text": "The installer dynamically checks for CUDA support using `ldconfig -p | grep -q 'libcuda.so'` and `command -v nvidia-smi`.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-3c",
+    "text": "If CUDA is detected, `-DTRANSCRIBE_CUDA=ON` and `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` are appended to the CMake flags.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-4",
+    "text": "The installer dynamically checks for Vulkan support using `ldconfig -p | grep -q 'libvulkan.so'`.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-5",
+    "text": "If Vulkan hardware is detected, `-DTRANSCRIBE_VULKAN=ON` is dynamically appended to the CMake flags.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-6",
+    "text": "A `just model dl` recipe provides an interactive selection menu using `gum choose`.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-7",
+    "text": "Selected models are downloaded to the `~/.local/share/omega13/models` directory.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  },
+  {
+    "id": "fact-8",
+    "text": "The old bash scripts (`install.sh`, `uninstall.sh`, `bootstrap.sh`) are completely removed from the repository.",
+    "automatedVerification": true,
+    "recommendedAutomatedVerification": true
+  }
+]

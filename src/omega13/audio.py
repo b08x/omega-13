@@ -55,7 +55,7 @@ class AudioEngine:
             (self.max_block_size, self.channels), dtype="float32"
         )
 
-        self.buffer_pool_size = 200  # Matches record_queue maxsize
+        self.buffer_pool_size = 2000  # Matches record_queue maxsize
         self.buffer_pool = np.zeros(
             (self.buffer_pool_size, self.max_block_size, self.channels), dtype="float32"
         )
@@ -63,7 +63,7 @@ class AudioEngine:
 
         # Recording state
         self.is_recording = False
-        self.record_queue = queue.Queue(maxsize=200)  # ~4s buffer @ 48kHz
+        self.record_queue = queue.Queue(maxsize=2000)  # ~40s buffer @ 48kHz
         self.writer_thread = None
         self.stop_event = threading.Event()
 
@@ -236,12 +236,13 @@ class AudioEngine:
         dbs = [20 * np.log10(p) if p > 1e-5 else -100.0 for p in peaks_list]
         return peaks_list, dbs
 
-    def start_recording(self, output_path: Path) -> Path | None:
+    def start_recording(self, output_path: Path, streaming_callback=None) -> Path | None:
         """
         Start recording to specified output path.
 
         Args:
             output_path: Full path where recording should be saved
+            streaming_callback: Optional callback for real-time chunks
 
         Returns:
             Path object of the recording file, or None if already recording
@@ -265,7 +266,7 @@ class AudioEngine:
 
         self.writer_thread = threading.Thread(
             target=self._file_writer,
-            args=(str(output_path), past_data),
+            args=(str(output_path), past_data, streaming_callback),
             daemon=True,  # Daemon thread allows clean shutdown without blocking
         )
         self.writer_thread.start()
@@ -309,17 +310,17 @@ class AudioEngine:
             except queue.Empty:
                 break
 
-    def _file_writer(self, filename: str, pre_buffer_data: np.ndarray) -> None:
+    def _file_writer(self, filename: str, pre_buffer_data: np.ndarray, streaming_callback=None) -> None:
         """Write audio data to WAV file (16kHz mono)."""
         import tempfile
         import os
 
-        # Ensure we use .mp4 extension
-        if not filename.endswith(".mp4"):
-            if filename.endswith(".wav") or filename.endswith(".mp3"):
-                filename = filename[:-4] + ".mp4"
+        # Ensure we use .wav extension
+        if not filename.endswith(".wav"):
+            if filename.endswith(".mp4") or filename.endswith(".mp3"):
+                filename = filename[:-4] + ".wav"
             else:
-                filename = filename + ".mp4"
+                filename = filename + ".wav"
 
         # Create temporary WAV file for intermediate processing
         temp_wav = None
@@ -332,6 +333,9 @@ class AudioEngine:
                 temp_wav, mode="w", samplerate=self.samplerate, channels=self.channels
             ) as wav_file:
                 wav_file.write(pre_buffer_data)
+                
+                if streaming_callback:
+                    streaming_callback(pre_buffer_data.tobytes())
 
                 # Continue writing blocks from queue
                 while self.is_recording or not self.record_queue.empty():
@@ -343,20 +347,26 @@ class AudioEngine:
                         else:
                             block = item
                         wav_file.write(block)
+                        if streaming_callback:
+                            streaming_callback(block.tobytes())
                     except queue.Empty:
                         if not self.is_recording:
                             break
 
             # Apply audio processing pipeline (Trim silence -> Downsample to 16kHz Mono)
             processor = AudioProcessor()
+            trim_db = -35.0
+            if self.config_manager and hasattr(self.config_manager, "get_auto_record_end_threshold"):
+                trim_db = self.config_manager.get_auto_record_end_threshold()
+            
             operations = [
-                {"op": "trim_silence", "threshold_db": -50.0},
+                {"op": "trim_silence", "threshold_db": trim_db},
                 {"op": "downsample", "target_rate": 16000}  # Downsample to target 16kHz Mono
             ]
             
             final_path = processor.process_pipeline(temp_wav, filename, operations)
             
-            logger.info(f"Audio processed and saved as M4A: {final_path}")
+            logger.info(f"Audio processed and saved as WAV: {final_path}")
 
         except Exception as e:
             logger.error(f"File writer error: {e}")

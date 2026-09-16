@@ -37,6 +37,7 @@ class ConfigWizard:
         
         # Transcription
         table.add_row("Transcription", "Auto-Transcribe", str(c.get_auto_transcribe()))
+        table.add_row("Transcription", "Streaming Mode", str(c.get_streaming_mode()))
         table.add_row("Transcription", "Provider", c.get_transcription_provider())
         
         # Output Destinations
@@ -101,6 +102,27 @@ class ConfigWizard:
             c.save_config(c.config)
             console.print(f"[green]Global hotkey updated to: {new_hotkey}[/green]\n")
         
+    def configure_auto_record(self):
+        console.print(Panel("[bold cyan]Auto-Record Settings[/bold cyan]"))
+        c = self.config_manager
+        
+        enabled = Confirm.ask("Enable Auto-Record?", default=c.get_auto_record_enabled())
+        c.set_auto_record_enabled(enabled)
+        
+        if enabled:
+            begin_str = Prompt.ask("Begin Threshold (dB)", default=str(c.get_auto_record_begin_threshold()))
+            end_str = Prompt.ask("End Threshold (dB)", default=str(c.get_auto_record_end_threshold()))
+            try:
+                if "auto_record" not in c.config:
+                    c.config["auto_record"] = {}
+                c.config["auto_record"]["begin_threshold_db"] = float(begin_str)
+                c.config["auto_record"]["end_threshold_db"] = float(end_str)
+                c.save_config(c.config)
+            except ValueError:
+                console.print("[red]Invalid threshold values. Must be a number.[/red]\n")
+                
+        console.print("[green]Auto-Record settings updated![/green]\n")
+
     def configure_transcription(self):
         console.print(Panel("[bold cyan]Transcription Settings[/bold cyan]"))
         c = self.config_manager
@@ -109,11 +131,20 @@ class ConfigWizard:
         c.set_auto_transcribe(auto)
         
         if auto:
-            provider = Prompt.ask("Provider (local or groq)", choices=["local", "groq"], default=c.get_transcription_provider())
+            streaming = Confirm.ask("Enable Real-Time Streaming Mode?", default=c.get_streaming_mode())
+            c.set_streaming_mode(streaming)
+            
+            provider = Prompt.ask(
+                "Provider (local, whisper-server, or groq)", 
+                choices=["local", "whisper-server", "groq"], 
+                default=c.get_transcription_provider()
+            )
             c.set_transcription_provider(provider)
             
             if provider == "local":
-                url = Prompt.ask("Local Server URL", default=c.get_transcription_server_url())
+                console.print("[dim]Using local GGUF model on-device. Manage models with `just model dl`.[/dim]")
+            elif provider == "whisper-server":
+                url = Prompt.ask("Local Network Server URL", default=c.get_transcription_server_url())
                 c.set_transcription_server_url(url)
             elif provider == "groq":
                 model = Prompt.ask("Groq Model", default=c.get_groq_model())
@@ -164,26 +195,29 @@ class ConfigWizard:
             console.print("What would you like to configure?")
             console.print("1. Audio Settings (Input Ports)")
             console.print("2. Hotkey Settings")
-            console.print("3. Transcription Settings")
-            console.print("4. Output Destinations")
-            console.print("5. Exit & Apply (Restart Daemon)")
-            console.print("6. Exit Without Applying")
+            console.print("3. Auto-Record Settings")
+            console.print("4. Transcription Settings")
+            console.print("5. Output Destinations")
+            console.print("6. Exit & Apply (Restart Daemon)")
+            console.print("7. Exit Without Applying")
             
-            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6"])
+            choice = Prompt.ask("Select an option", choices=["1", "2", "3", "4", "5", "6", "7"])
             
             if choice == "1":
                 self.configure_audio()
             elif choice == "2":
                 self.configure_hotkeys()
             elif choice == "3":
-                self.configure_transcription()
+                self.configure_auto_record()
             elif choice == "4":
-                self.configure_outputs()
+                self.configure_transcription()
             elif choice == "5":
+                self.configure_outputs()
+            elif choice == "6":
                 console.print("[bold green]Configuration saved![/bold green]")
                 self.reload_daemon()
                 break
-            elif choice == "6":
+            elif choice == "7":
                 console.print("[bold green]Configuration saved (but daemon not restarted).[/bold green]")
                 break
 
