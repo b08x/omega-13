@@ -61,11 +61,27 @@ export default class Omega13Extension extends Extension {
 
         Main.panel.addToStatusArea('omega13-indicator', this._indicator);
 
+
         // Poll for failed transcriptions
         this._pollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, () => {
             this._pollFailures();
             return GLib.SOURCE_CONTINUE;
         });
+
+        // Subscribe to OSDStateChanged
+        this._signalSubId = Gio.DBus.session.signal_subscribe(
+            'org.omega13.Recorder',
+            'org.omega13.Recorder',
+            'OSDStateChanged',
+            '/org/omega13/Recorder',
+            null,
+            Gio.DBusSignalFlags.NONE,
+            (connection, sender_name, object_path, interface_name, signal_name, parameters) => {
+                let [state_type, text, timeout_ms] = parameters.deep_unpack();
+                this._dbusService._osd.showState(state_type, text, timeout_ms);
+            }
+        );
+
     }
 
     _callMethod(methodName, params, callback) {
@@ -107,6 +123,11 @@ export default class Omega13Extension extends Extension {
 
     disable() {
         console.log(`[Omega-13] Disabling extension ${this.uuid}`);
+
+        if (this._signalSubId) {
+            Gio.DBus.session.signal_unsubscribe(this._signalSubId);
+            this._signalSubId = null;
+        }
         if (this._pollId) {
             GLib.source_remove(this._pollId);
             this._pollId = null;

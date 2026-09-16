@@ -24,7 +24,9 @@ This is built as a headless daemon first. The UI is just an overlay.
 
 - **Audio Engine**: Hooks into JACK. Captures raw float32 into a ring buffer.
 - **State Machine**: Idle -> Armed -> Recording -> Stopping. RMS-based silence detection controls the transitions.
-- **IPC**: Wayland is locked down. I use D-Bus (`org.gnome.Shell.Extensions.Omega13`) to bypass keyboard focus restrictions and `SIGUSR1` for dumb hotkey triggers. I map these to a physical Nuance Dictaphone device to paste, undo, and swap windows.
+- **IPC & D-Bus**: Wayland is locked down. I use D-Bus for two distinct domains:
+  - `org.gnome.Shell.Extensions.Omega13` to bypass keyboard focus restrictions for the extension.
+  - `org.omega13.Recorder`, a public interface published by the daemon, which provides signals like `OSDStateChanged` and methods like `RetryTranscription` for external integrations.
 - **Output Routing**: `ydotool` for text injection (requires `/dev/uinput`), `pyperclip` for clipboard, native file I/O for Obsidian. In a forked process, outputs happen concurrently.
 
 ## Abstraction Leaks & Trade-offs
@@ -32,7 +34,7 @@ This is built as a headless daemon first. The UI is just an overlay.
 If you're building functional Linux desktop tools right now, you're going to hit the Wayland security model. Here's where I ran into trouble and how I decided to handle that:
 
 - **Targeted Window Injection**: Injecting long-winded transcriptions into whatever window happens to be active is dangerous. If you get distracted and change focus, you might dump a paragraph into a terminal session. Instead, text injection strictly targets a specific ephemeral scratchpad application called "Whisp". To achieve this on Wayland, I had to generate a native GNOME Shell Extension just to expose a D-Bus method (`FocusWindow`). If the Whisp window isn't found, injection fails safely.
-- **OSD Fallbacks**: Native GTK4 Layer Shell (`zwlr_layer_shell_v1`) doesn't work on Mutter (GNOME). So I built a 3-tier fallback: GNOME extension first (Cairo overlay), GTK4 Layer Shell for wlroots (Hyprland/Sway), and transient `notify-send` for everything else.
+- **OSD Subprocess Model & Fallbacks**: Native GTK4 Layer Shell (`zwlr_layer_shell_v1`) doesn't work on Mutter (GNOME). So I built a 3-tier fallback: GNOME extension first (Cairo overlay), GTK4 Layer Shell for wlroots (Hyprland/Sway), and transient `notify-send` for everything else. Because GTK event loops block and PyGObject leaks memory when mixed with complex threads, the GTK4 OSD runs as a completely separate process (`osd_process.py`) spawned via `subprocess`. It receives state updates over standard input (or D-Bus).
 - **Audio Routing**: You need JACK or `pipewire-jack`. If your audio graph isn't wired right at the system level, you capture silence. The daemon can't fix your routing.
 
 ---

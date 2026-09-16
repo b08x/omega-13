@@ -1,6 +1,7 @@
 import Clutter from 'gi://Clutter';
 import St from 'gi://St';
 import Cairo from 'gi://cairo';
+import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 export class Omega13OSD {
@@ -11,8 +12,6 @@ export class Omega13OSD {
             style_class: 'omega13-osd-container'
         });
         
-        // Position it at the bottom center or bottom right.
-        // Let's do bottom center for now.
         this._actor.set_position(
             (global.stage.width / 2) - 200,
             global.stage.height - 150
@@ -22,6 +21,13 @@ export class Omega13OSD {
         
         this._data = [];
         this._visible = false;
+        
+        // State tracking
+        this._stateType = "idle";
+        this._stateText = "";
+        this._animTick = 0;
+        this._animTimerId = null;
+        this._hideTimerId = null;
     }
 
     show() {
@@ -39,6 +45,41 @@ export class Omega13OSD {
             Main.layoutManager.removeChrome(this._actor);
             this._visible = false;
         }
+        if (this._animTimerId) {
+            GLib.source_remove(this._animTimerId);
+            this._animTimerId = null;
+        }
+        if (this._hideTimerId) {
+            GLib.source_remove(this._hideTimerId);
+            this._hideTimerId = null;
+        }
+    }
+
+    showState(stateType, text, timeoutMs) {
+        this._stateType = stateType;
+        this._stateText = text;
+        this.show();
+        
+        if (!this._animTimerId) {
+            this._animTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._animTick++;
+                this._actor.queue_repaint();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+        
+        if (this._hideTimerId) {
+            GLib.source_remove(this._hideTimerId);
+            this._hideTimerId = null;
+        }
+        
+        if (timeoutMs > 0) {
+            this._hideTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
+                this.hide();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        this._actor.queue_repaint();
     }
 
     update(data) {
@@ -67,6 +108,38 @@ export class Omega13OSD {
         cr.closePath();
         cr.fill();
 
+        // Indicator
+        let indicatorX = 30;
+        let indicatorY = height / 2;
+        let indicatorRadius = 8;
+        
+        if (this._stateType === "recording") {
+            if ((this._animTick % 10) < 5) {
+                cr.setSourceRGB(1.0, 0.3, 0.3); // Bright red
+            } else {
+                cr.setSourceRGB(0.5, 0.1, 0.1); // Dim red
+            }
+        } else if (this._stateType === "processing") {
+            let alpha = 0.5 + 0.5 * (Math.abs((this._animTick % 20) - 10) / 10);
+            cr.setSourceRGBA(0.9, 0.8, 0.2, alpha); // Pulsing amber
+        } else if (this._stateType === "success") {
+            cr.setSourceRGB(0.2, 0.9, 0.4); // Solid green
+        } else if (this._stateType === "error") {
+            cr.setSourceRGB(0.9, 0.2, 0.2); // Steady red
+        } else {
+            cr.setSourceRGBA(0.2, 0.9, 0.4, 0.3); // Dim green/blue
+        }
+        
+        cr.arc(indicatorX, indicatorY, indicatorRadius, 0, 2 * Math.PI);
+        cr.fill();
+        
+        // Text
+        cr.setSourceRGB(1.0, 1.0, 1.0);
+        cr.selectFontFace("Sans", Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+        cr.setFontSize(14);
+        cr.moveTo(indicatorX + 20, indicatorY + 5);
+        cr.showText(this._stateText);
+
         if (!this._data || this._data.length === 0) return;
 
         // Draw waveform
@@ -75,18 +148,14 @@ export class Omega13OSD {
         cr.setLineJoin(Cairo.LineJoin.ROUND);
 
         let centerY = height / 2;
-        let step = width / (this._data.length > 1 ? this._data.length - 1 : 1);
+        let meterWidth = 100; // right side
+        let startX = width - meterWidth - 20;
+        let step = meterWidth / (this._data.length > 1 ? this._data.length - 1 : 1);
 
-        cr.moveTo(0, centerY);
+        cr.moveTo(startX, centerY);
         for (let i = 0; i < this._data.length; i++) {
-            // Assume rms values are reasonably small, e.g. 0 to 0.5
-            // Multiply by a factor to make it visible
             let val = Math.min(this._data[i] * height * 1.5, (height / 2) - 10);
-            
-            // Draw a bar or continuous line. Let's do a continuous line for the upper half,
-            // or just vertical bars for each point to look like a waveform.
-            // Let's do a symmetric waveform around the center.
-            let x = i * step;
+            let x = startX + (i * step);
             cr.moveTo(x, centerY - val);
             cr.lineTo(x, centerY + val);
         }

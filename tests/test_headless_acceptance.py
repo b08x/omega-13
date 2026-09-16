@@ -165,6 +165,7 @@ async def test_dbus_toggle_stops_recording(headless_daemon):
         proxy = bus.get_proxy_object(DBUS_SERVICE_NAME, DBUS_OBJECT_PATH, introspection)
         iface = proxy.get_interface(DBUS_INTERFACE_NAME)
 
+        headless.audio_engine.has_audio_activity.return_value = True
         start_state = await iface.call_toggle_recording()
         assert start_state is True
 

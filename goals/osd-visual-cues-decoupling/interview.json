@@ -1,0 +1,80 @@
+{
+  "stage": "interview",
+  "title": "OSD Visual Cues & GTK4 Decoupling",
+  "goalSlug": "osd-visual-cues-decoupling",
+  "questions": [
+    {
+      "id": "state-mapping",
+      "prompt": "Which visual states should the GNOME extension OSD show, and what colors map to each? I'm recommending a recording studio tally-light metaphor.",
+      "description": "The Python GTK4 OSD already has: recording (blinking red), processing (pulsing yellow), success (solid green). The GNOME extension currently only draws a static green waveform with no states.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Recording = blinking red (tally light), Processing/Transcribing = pulsing amber, Success = solid green, Error/Failed = steady red. Pre-roll countdown optional.",
+      "recommendedOptionIds": ["recording", "processing", "success", "error"],
+      "options": [
+        { "id": "recording", "label": "Recording — blinking red" },
+        { "id": "processing", "label": "Processing/Transcribing — pulsing amber" },
+        { "id": "success", "label": "Success — solid green" },
+        { "id": "error", "label": "Error/Failed — steady red" },
+        { "id": "idle", "label": "Idle/Armed — dim green or blue" },
+        { "id": "preroll", "label": "Pre-roll countdown — blinking amber" }
+      ],
+      "required": true
+    },
+    {
+      "id": "osd-process-model",
+      "prompt": "How should the decoupled GTK4 OSD process be launched and managed?",
+      "description": "Currently OSDManager runs a Gtk.Application in a daemon thread inside the daemon process. Decoupling means a separate process. The question is lifecycle management.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Daemon spawns the OSD as a subprocess on startup, communicates via D-Bus signals. Daemon kills it on shutdown. Simpler than a standalone systemd service and keeps lifecycle coupled.",
+      "recommendedOptionIds": ["daemon-spawn"],
+      "options": [
+        { "id": "daemon-spawn", "label": "Daemon spawns subprocess, communicates via D-Bus signals" },
+        { "id": "systemd-service", "label": "Standalone systemd user service, activated on demand" },
+        { "id": "both", "label": "Support both: systemd if available, daemon-spawn as fallback" }
+      ],
+      "required": true
+    },
+    {
+      "id": "dbus-signal-design",
+      "prompt": "Should the D-Bus interface for OSD state updates use signals (push) or method calls (pull)?",
+      "description": "Currently the daemon calls methods on the GNOME extension (ShowOSD, UpdateWaveform, HideOSD). The Python OSD is driven by direct Python calls. For the decoupled OSD, we need a D-Bus protocol for state changes.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Emit D-Bus signals from the daemon (e.g., OSDStateChanged(s state_type, s text, i timeout_ms)) that both the GNOME extension and the decoupled GTK4 OSD subscribe to. Cleaner than method calls for one-to-many fanout.",
+      "recommendedOptionIds": ["signals"],
+      "options": [
+        { "id": "signals", "label": "D-Bus signals (push) — daemon emits, OSD processes subscribe" },
+        { "id": "methods", "label": "D-Bus method calls — daemon calls OSD process methods" },
+        { "id": "mixed", "label": "Signals for state changes, methods for waveform data (high-frequency)" }
+      ],
+      "required": true
+    },
+    {
+      "id": "error-handling-scope",
+      "prompt": "How aggressive should the error handling cleanup be across the 25 broad except blocks (18 in headless_service.py, 7 in transcription.py)?",
+      "description": "Some blocks re-raise as DBusError (correct pattern), some silently swallow, some only log at debug level. The goal mentions ImportError specifically for missing .so files.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "All 25 blocks: narrow catches where possible, replace bare 'except Exception' with specific exception types, use logger.exception() for ImportError/Import-related blocks, upgrade silent swallows to at least logger.warning. Keep DBusError re-raise pattern where it exists.",
+      "recommendedOptionIds": ["all-narrow"],
+      "options": [
+        { "id": "all-narrow", "label": "All 25 blocks — narrow catches + logger.exception() for import errors" },
+        { "id": "critical-only", "label": "Only the silent-swallows and import-related blocks (~5-6)" },
+        { "id": "split", "label": "Do headless_service.py fully, transcription.py only the import/init blocks" }
+      ],
+      "required": true
+    },
+    {
+      "id": "gnome-extension-gap",
+      "prompt": "Should we also extend the GNOME extension D-Bus interface to accept state changes (not just ShowOSD/UpdateWaveform/HideOSD)?",
+      "description": "The extension's dbus.js currently exports ShowOSD(), HideOSD(), UpdateWaveform(ad). To show recording/processing/success states in the extension OSD, we need to pass state_type and text to the extension. This is separate from the GTK4 decoupling — it's about making the GNOME native OSD state-aware.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Yes — add a new method or signal like ShowOSDWithState(s state_type, s text, i timeout_ms) to the extension's D-Bus interface, and update osd.js to draw state-based colors (blinking red, pulsing amber, solid green, steady red for error). This makes the GNOME extension parity with the GTK4 OSD.",
+      "recommendedOptionIds": ["extend"],
+      "options": [
+        { "id": "extend", "label": "Extend interface: add ShowOSDWithState + state drawing in osd.js" },
+        { "id": "reuse-showosd", "label": "Repurpose ShowOSD() to accept optional state params" },
+        { "id": "defer", "label": "Defer GNOME extension changes, focus on GTK4 decoupling first" }
+      ],
+      "required": true
+    }
+  ]
+}

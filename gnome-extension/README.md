@@ -44,6 +44,16 @@ The extension exposes a public D-Bus interface for interacting with the OSD and 
 - **`HideOSD() -> void`**
   Hides the Omega13 On-Screen Display (OSD).
 
+- **`ShowOSDWithState(s state_type, s text, i timeout_ms) -> void`**
+  Displays the OSD with a visual cue corresponding to a specific state, along with a text label and an auto-hide timeout (in milliseconds, 0 for persistent). It follows the **OSD Studio Tally-Light Visual Cue Specification**:
+  - `recording`: Blinking red
+  - `processing`: Pulsing amber
+  - `success`: Solid green
+  - `error`: Steady red
+  - `idle`: Dim green
+
+  *Note:* The extension automatically subscribes to the `OSDStateChanged` signal from `org.omega13.Recorder` to sync state changes.
+
 - **`UpdateWaveform(ad rms_data) -> void`**
   Updates the OSD waveform drawing with an array of double values (`ad`) representing RMS audio data.
 
@@ -67,6 +77,14 @@ busctl --user call org.gnome.Shell \
   /org/gnome/Shell/Extensions/Omega13 \
   org.gnome.Shell.Extensions.Omega13 \
   HideOSD
+```
+
+**Show OSD with State Cue:**
+```bash
+busctl --user call org.gnome.Shell \
+  /org/gnome/Shell/Extensions/Omega13 \
+  org.gnome.Shell.Extensions.Omega13 \
+  ShowOSDWithState ssi "recording" "Recording..." 0
 ```
 
 **Focus a Specific Window:**

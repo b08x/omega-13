@@ -30,7 +30,7 @@ from .notifications import DesktopNotifier
 try:
     from .ui.osd import osd_manager
     OSD_AVAILABLE = True
-except Exception as e:
+except (ImportError, Exception) as e:
     logger.error(f"Failed to load OSD: {e}")
     import traceback
     logger.error(traceback.format_exc())
@@ -44,7 +44,8 @@ try:
         GroqTranscriptionProvider,
     )
     TRANSCRIPTION_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+    logger.exception(f"Transcription module import failed: {e}")
     TRANSCRIPTION_AVAILABLE = False
 
 # D-Bus constants
@@ -123,7 +124,7 @@ class HeadlessRecorderInterface(ServiceInterface):
             return is_recording
         except DBusError:
             raise
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             raise DBusError("org.omega13.Recorder.ToggleError", str(e))
 
     @method()
@@ -135,7 +136,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         """
         try:
             return self.recording_event_handler.retry_last_failed_transcription()
-        except Exception as e:
+        except (RuntimeError, ValueError, FileNotFoundError) as e:
             raise DBusError("org.omega13.Recorder.RetryError", str(e))
 
     @method()
@@ -147,7 +148,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         """
         try:
             return self.recording_event_handler.retry_failed_transcriptions()
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             raise DBusError("org.omega13.Recorder.RetryError", str(e))
 
     @method()
@@ -159,7 +160,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         """
         try:
             return len(self.session_manager.get_failed_transcriptions())
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             raise DBusError("org.omega13.Recorder.Error", str(e))
 
     @method()
@@ -201,7 +202,7 @@ class HeadlessRecorderInterface(ServiceInterface):
         try:
             state = self.recording_controller.get_state()
             return state.value
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             raise DBusError("org.omega13.Recorder.StateError", str(e))
 
     def _get_health_data(self) -> dict:
@@ -230,7 +231,7 @@ class HeadlessRecorderInterface(ServiceInterface):
                 }),
             }
             return health
-        except Exception as e:
+        except (RuntimeError, KeyError, ValueError) as e:
             raise DBusError("org.omega13.Recorder.HealthError", str(e))
 
     @method()
@@ -251,6 +252,17 @@ class HeadlessRecorderInterface(ServiceInterface):
         
         Args:
             is_recording: True if now recording, False if stopped
+        """
+        pass
+
+    @dbus_signal()
+    def OSDStateChanged(self, state_type: "s", text: "s", timeout_ms: "i") -> None:  # type: ignore
+        """Signal emitted when OSD state changes.
+        
+        Args:
+            state_type: Visual state type (recording, processing, success, error, idle)
+            text: Text to display
+            timeout_ms: Timeout in milliseconds (0 for no timeout)
         """
         pass
 
@@ -317,8 +329,8 @@ class HeadlessDBusService:
                 self.bus.unexport(self.OBJECT_PATH)
                 self._is_registered = False
                 logger.info("Headless D-Bus service unregistered")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"D-Bus unregister failed: {e}")
 
     def is_registered(self) -> bool:
         return self._is_registered
@@ -346,6 +358,14 @@ class HeadlessOmega13:
         self._recording_event_handler: Optional[RecordingEventHandler] = None
         self.transcription_service: Optional[TranscriptionService] = None
         self._shutdown_initiated = False
+
+    def _emit_osd_state(self, state_type: str, text: str, timeout_ms: int = 0) -> None:
+        """Helper to emit OSD state change signal if D-Bus is connected."""
+        if self.dbus_service and self.dbus_service.interface:
+            try:
+                self.dbus_service.interface.OSDStateChanged(state_type, text, timeout_ms)
+            except Exception as e:
+                logger.warning(f"Failed to emit OSDStateChanged signal: {e}")
 
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -399,8 +419,8 @@ class HeadlessOmega13:
                 if desc:
                     available = self.audio_engine.get_available_output_ports()
                     default_ports = [p.name for p in available if p.name.startswith(f"{desc}:capture")]
-            except Exception as e:
-                logger.debug(f"Failed to resolve default PipeWire source via pactl: {e}")
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"pactl failed: {e}")
                 
             if not default_ports:
                 # Fallback to older logic if pactl fails
@@ -446,15 +466,38 @@ class HeadlessOmega13:
         
         if OSD_AVAILABLE and osd_manager:
             osd_manager.set_audio_engine(self.audio_engine)
-            osd_manager.run_in_background()
+            osd_manager.set_event_loop(asyncio.get_running_loop())
+            osd_manager.start_subprocess()
             self._recording_event_handler.set_callbacks(
                 RecordingEventCallbacks(
-                    on_recording_started=lambda path, mode: osd_manager.update(f"Recording ({path.name if path else 'auto'})", state_type="recording"),
-                    on_silence_countdown=lambda rem: osd_manager.update(f"Auto-stop in {rem:.1f}s", state_type="recording"),
-                    on_recording_stopped=lambda path: osd_manager.update(f"Processing ({path.name if path else ''})", state_type="processing"),
-                    on_transcription_started=lambda path: osd_manager.update("Transcribing...", state_type="processing"),
-                    on_transcription_progress=lambda p: osd_manager.update(f"Transcribing {int(p*100)}%", state_type="processing"),
-                    on_transcription_complete=lambda result, path: osd_manager.update(f"Copied: {result.text[:25]}...", state_type="success", timeout_ms=4000) if hasattr(result, "text") else osd_manager.update("Transcription Done", state_type="success", timeout_ms=4000),
+                    on_recording_started=lambda path, mode: (
+                        osd_manager.update(f"Recording ({path.name if path else 'auto'})", state_type="recording"),
+                        self._emit_osd_state("recording", f"Recording ({path.name if path else 'auto'})")
+                    ),
+                    on_silence_countdown=lambda rem: (
+                        osd_manager.update(f"Auto-stop in {rem:.1f}s", state_type="recording"),
+                        self._emit_osd_state("recording", f"Auto-stop in {rem:.1f}s")
+                    ),
+                    on_recording_stopped=lambda path: (
+                        osd_manager.update(f"Processing ({path.name if path else ''})", state_type="processing"),
+                        self._emit_osd_state("processing", f"Processing ({path.name if path else ''})")
+                    ),
+                    on_transcription_started=lambda path: (
+                        osd_manager.update("Transcribing...", state_type="processing"),
+                        self._emit_osd_state("processing", "Transcribing...")
+                    ),
+                    on_transcription_progress=lambda p: (
+                        osd_manager.update(f"Transcribing {int(p*100)}%", state_type="processing"),
+                        self._emit_osd_state("processing", f"Transcribing {int(p*100)}%")
+                    ),
+                    on_transcription_complete=lambda result, path: (
+                        osd_manager.update(f"Copied: {result.text[:25]}...", state_type="success", timeout_ms=4000) if hasattr(result, "text") else osd_manager.update("Transcription Done", state_type="success", timeout_ms=4000),
+                        self._emit_osd_state("success", f"Copied: {result.text[:25]}..." if hasattr(result, "text") else "Transcription Done", 4000)
+                    ),
+                    on_transcription_error=lambda path, err: (
+                        osd_manager.update("Transcription Failed", state_type="error", timeout_ms=5000),
+                        self._emit_osd_state("error", "Transcription Failed", 5000)
+                    )
                 )
             )
 
@@ -511,9 +554,8 @@ class HeadlessOmega13:
                 # Set transcription service on event handler
                 self._recording_event_handler.set_transcription_service(self.transcription_service)
                 logger.info(f"Transcription service initialized with {provider_type} provider")
-            except Exception as e:
-                import traceback
-                logger.warning(f"Failed to initialize transcription service: {e}\n{traceback.format_exc()}")
+            except (ImportError, RuntimeError, ValueError) as e:
+                logger.exception(f"Failed to initialize transcription service: {e}")
                 self.transcription_service = None
 
         # Enable auto-record if configured
@@ -561,7 +603,7 @@ class HeadlessOmega13:
         logger.info("Shutting down headless Omega-13...")
         
         if OSD_AVAILABLE and osd_manager:
-            osd_manager.quit()
+            osd_manager.stop_subprocess()
 
         # Stop hotkey listener
         if self.hotkey_listener:

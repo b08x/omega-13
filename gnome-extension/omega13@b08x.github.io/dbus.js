@@ -10,6 +10,11 @@ const DBUS_INTERFACE = `
     </method>
     <method name="ShowOSD" />
     <method name="HideOSD" />
+    <method name="ShowOSDWithState">
+      <arg type="s" name="state_type" direction="in"/>
+      <arg type="s" name="text" direction="in"/>
+      <arg type="i" name="timeout_ms" direction="in"/>
+    </method>
     <method name="UpdateWaveform">
       <arg type="ad" name="rms_data" direction="in"/>
     </method>
@@ -53,6 +58,10 @@ export class Omega13DBusService {
 
     HideOSD() {
         this._osd.hide();
+    }
+
+    ShowOSDWithState(state_type, text, timeout_ms) {
+        this._osd.showState(state_type, text, timeout_ms);
     }
 
     UpdateWaveform(rms_data) {
