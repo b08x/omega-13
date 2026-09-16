@@ -1,6 +1,6 @@
 [project]
 name = "omega13"
-version = "2.5.0"
+version = "2.6.0"
 description = "Retroactive audio recorder and transcription daemon with GTK4 OSD"
 readme = "README.md"
 requires-python = ">=3.12"
