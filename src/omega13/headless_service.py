@@ -480,8 +480,8 @@ class HeadlessOmega13:
                             import transcribe_cpp
                             from omega13.transcription import GgufTranscriptionProvider
                             providers.append(GgufTranscriptionProvider(str(full_model_path), threads))
-                        except ImportError:
-                            logger.error("transcribe-cpp is not installed. Run `just install` with CUDA enabled, or use a different provider.")
+                        except ImportError as e:
+                            logger.error(f"transcribe-cpp is not installed (or omega13.transcription failed to import). Detail: {e}")
                 
                 # 2. Whisper-Server (Local Network REST API)
                 elif provider_type == "whisper-server" or (provider_type == "network"):

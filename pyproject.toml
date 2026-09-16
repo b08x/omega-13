@@ -15,6 +15,7 @@ dependencies = [
     "pygobject>=3.56.3",
     "pycairo>=1.29.1",
     "rich>=15.0.0",
+    "transcribe-cpp",
 ]
 [project.scripts]
 omega13 = "omega13.app:main"

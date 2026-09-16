@@ -279,7 +279,7 @@ wheels = [
 
 [[package]]
 name = "omega13"
-version = "2.5.0"
+version = "2.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "dbus-next" },
@@ -292,6 +292,7 @@ dependencies = [
     { name = "requests" },
     { name = "rich" },
     { name = "soundfile" },
+    { name = "transcribe-cpp" },
 ]
 
 [package.dev-dependencies]
@@ -312,6 +313,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "soundfile", specifier = ">=0.12.0" },
+    { name = "transcribe-cpp" },
 ]
 
 [package.metadata.requires-dev]
@@ -591,6 +593,31 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/57/5e/70bdd9579b35003a489fc850b5047beeda26328053ebadc1fb60f320f7db/soundfile-0.13.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:03267c4e493315294834a0870f31dbb3b28a95561b80b134f0bd3cf2d5f0e618", size = 1313646, upload-time = "2025-01-25T09:16:54.872Z" },
     { url = "https://files.pythonhosted.org/packages/fe/df/8c11dc4dfceda14e3003bb81a0d0edcaaf0796dd7b4f826ea3e532146bba/soundfile-0.13.1-py2.py3-none-win32.whl", hash = "sha256:c734564fab7c5ddf8e9be5bf70bab68042cd17e9c214c06e365e20d64f9a69d5", size = 899881, upload-time = "2025-01-25T09:16:56.663Z" },
     { url = "https://files.pythonhosted.org/packages/14/e9/6b761de83277f2f02ded7e7ea6f07828ec78e4b229b80e4ca55dd205b9dc/soundfile-0.13.1-py2.py3-none-win_amd64.whl", hash = "sha256:1e70a05a0626524a69e9f0f4dd2ec174b4e9567f4d8b6c11d38b5c289be36ee9", size = 1019162, upload-time = "2025-01-25T09:16:59.573Z" },
+]
+
+[[package]]
+name = "transcribe-cpp"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "transcribe-cpp-native" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/0d/5fb5d9aa2cd54ff6995958d887e429a624353684914e8aef1ba00b9519d6/transcribe_cpp-0.2.3.tar.gz", hash = "sha256:b4458cbad6ba2945c6f3be39065ccef80c96f73c0a78731e2ac92495270c1137", size = 92255, upload-time = "2026-08-30T10:54:15.342Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/39/832282b7d27e29ee48f2c89c243b431078dfc235ca48b59b35c74431ce55/transcribe_cpp-0.2.3-py3-none-any.whl", hash = "sha256:be4ec773c3e48993301f5b4256781ee5ef96ff075e904fc495c0effd096f1a03", size = 34910, upload-time = "2026-08-30T10:54:00.76Z" },
+]
+
+[[package]]
+name = "transcribe-cpp-native"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/1e/200a13bfbf3393312379a7699c789cbdb6db8ee53d61797ed27d00f06738/transcribe_cpp_native-0.2.3.tar.gz", hash = "sha256:ed0ac5608a218497a0c80f9ee05a67667ebf70e7165e700953df3fe2249e2d4e", size = 8045834, upload-time = "2026-08-30T10:54:16.717Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/1a/56654e0ce2790f2a2823f49ade369e7b8e36107f9e6acb7e64e7b3e57bff/transcribe_cpp_native-0.2.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3d2407d4f6da9b4237f211dda1932926e52c0eb05d5b124b6b4a22df936ca845", size = 1521417, upload-time = "2026-08-30T10:54:02.31Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/57/28195a1fbfe130e5780bfd1ec1032bbf8a8118ce53b99cdbd5da5c35f902/transcribe_cpp_native-0.2.3-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:54604a575d188fc3c4f23ed3f2a519359473e761b908a86ee57a35690ac1cdd6", size = 1454698, upload-time = "2026-08-30T10:54:04.308Z" },
+    { url = "https://files.pythonhosted.org/packages/88/77/c5b6889fce483ab2620089ab19cdf36cc5e8421b2e2376ad67ba020c9e3e/transcribe_cpp_native-0.2.3-py3-none-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f6ac3af103fe53c51c96dc4762b3c5e42d420680eafec8728cfd983e141b8953", size = 20623926, upload-time = "2026-08-30T10:54:06.604Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/c9/6955026364f22db0c278629dd51478e03bc896dedba8ea04965b3c9833cd/transcribe_cpp_native-0.2.3-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8e4c36f8fe2e3c596c829c3b9c5d571e71c02e0cf7c1276c720c56dd0b809ece", size = 24329742, upload-time = "2026-08-30T10:54:10.067Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/55/3875745fbf7194eafccc1303f317d793bb0d67f8fb4a0b259615c5cd0c5b/transcribe_cpp_native-0.2.3-py3-none-win_amd64.whl", hash = "sha256:f29cf0e5659f4e135a0c2918a8de2141298797b921702c757e7a4c44737c9c77", size = 20388111, upload-time = "2026-08-30T10:54:12.935Z" },
 ]
 
 [[package]]
