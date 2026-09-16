@@ -279,7 +279,7 @@ wheels = [
 
 [[package]]
 name = "omega13"
-version = "2.6.0"
+version = "2.7.1"
 source = { editable = "." }
 dependencies = [
     { name = "dbus-next" },
