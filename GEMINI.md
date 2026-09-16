@@ -25,8 +25,9 @@ The project follows a modular, event-driven architecture designed to run as a he
 
 - **`omega13.app`**: Main entry point handling CLI arguments.
 - **`omega13.headless_service`**: The primary background daemon coordinating the `RecordingController`, `AudioEngine`, and `osd_manager`.
-- **`gnome-extension/`**: GNOME Shell extension providing native OSD via public D-Bus interface (`org.gnome.Shell.Extensions.Omega13`).
-- **`omega13.ui.osd`**: 3-Tier OSD Manager coordinating fallbacks (GNOME native, GTK4 Layer Shell, Notifications).
+- **`gnome-extension/`**: GNOME Shell extension providing native OSD. Subscribes to the `OSDStateChanged` signal from the `org.omega13.Recorder` interface.
+- **`omega13.ui.osd`**: 3-Tier OSD Manager coordinating fallbacks (GNOME native, GTK4 Layer Shell via `osd_process.py`, Notifications).
+- **`omega13.osd_process`**: Separate GTK4 application process for rendering the Layer Shell OSD without blocking the main event loop.
 - **`omega13.audio`**: The `AudioEngine` manages the JACK client, the 13s ring buffer, and real-time recording.
 - **`omega13.recording_controller`**: Orchestrates state transitions (ARMED, RECORDING, IDLE) and handles VAD triggers.
 - **`omega13.audio_processor`**: Pipeline for post-processing audio (trimming silence, resampling to 16kHz mono) using FFmpeg/SoX.

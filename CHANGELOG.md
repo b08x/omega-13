@@ -1,3 +1,10 @@
+## [2.7.1] - 2026-09-15
+
+### ✨ Features
+- Rewrite extension OSD and introduce GTK4 Layer Shell in a separate subprocess (`osd_process.py`) to prevent GLib event loop blocking.
+- Add tally-light visual cues for active recording state.
+- Expose `org.omega13.Recorder` public D-Bus interface with `OSDStateChanged` signals and `RetryTranscription` method.
+
 ## [2.6.0] - 2026-09-15
 
 ### ✨ Features

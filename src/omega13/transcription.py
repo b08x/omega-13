@@ -67,6 +67,10 @@ class TranscriptionProvider:
         """Process an audio chunk and return transcription (if supported)."""
         raise NotImplementedError("Streaming not supported by this provider")
 
+    def shutdown(self) -> None:
+        """Release resources before shutdown."""
+        pass
+
 class StubStreamingProvider(TranscriptionProvider):
     """Stub provider for real-time streaming mode."""
 
@@ -192,6 +196,20 @@ class GgufTranscriptionProvider(TranscriptionProvider):
     def __init__(self, model_path: str, threads: int = 4):
         self.model_path = model_path
         self.threads = threads
+        self._executor = None
+
+    def _get_executor(self):
+        if self._executor is None:
+            import multiprocessing as mp
+            import concurrent.futures
+            ctx = mp.get_context('spawn')
+            self._executor = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=ctx)
+        return self._executor
+
+    def shutdown(self) -> None:
+        if self._executor is not None:
+            self._executor.shutdown(wait=False)
+            self._executor = None
 
     def check_health(self) -> tuple[bool, Optional[str]]:
         if not Path(self.model_path).exists():
@@ -221,11 +239,11 @@ class GgufTranscriptionProvider(TranscriptionProvider):
                 data = data.mean(axis=1) # mix down to mono
             data = data.astype(np.float32)
             
-            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-                # We submit to the process pool and wait with timeout
-                future = executor.submit(_run_transcribe_worker_process, self.model_path, data, self.threads)
-                text, lang = future.result(timeout=timeout)
-                return text, lang
+            executor = self._get_executor()
+            # We submit to the process pool and wait with timeout
+            future = executor.submit(_run_transcribe_worker_process, self.model_path, data, self.threads)
+            text, lang = future.result(timeout=timeout)
+            return text, lang
                 
         except concurrent.futures.TimeoutError:
             logger.error(f"GGUF Transcription timed out after {timeout}s")
@@ -526,6 +544,13 @@ class TranscriptionService:
                 logger.warning(
                     f"Thread {thread.name} still alive after {thread_timeout:.1f}s timeout"
                 )
+
+        for p in self.providers:
+            if hasattr(p, "shutdown"):
+                try:
+                    p.shutdown()
+                except Exception as e:
+                    logger.error(f"Error shutting down provider {type(p).__name__}: {e}")
 
         logger.info("=== Transcription Shutdown Complete ===")
 

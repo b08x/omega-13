@@ -309,7 +309,14 @@ class RecordingEventHandler:
                 self.last_failed_recording_path = None
                 
         # Notify UI if callback exists
-        if self._callbacks.on_transcription_complete:
+        if getattr(result, "status", None) and (
+            getattr(result.status, "name", "") == "ERROR" or
+            getattr(result.status, "value", result.status) == "error" or
+            result.status == "error"
+        ):
+            if self._callbacks.on_transcription_error:
+                self._callbacks.on_transcription_error(path, getattr(result, "error", "Unknown error"))
+        elif self._callbacks.on_transcription_complete:
             self._callbacks.on_transcription_complete(result, path)
 
     def retry_last_failed_transcription(self) -> bool:

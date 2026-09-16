@@ -15,7 +15,7 @@
 ```
 app.py / __main__.py          ← entry points
   └─ HeadlessOmega13          ← headless/daemon mode, D-Bus service, Systemd primary
-       ├─ OSDManager          ← 3-Tier OSD Architecture (GNOME native, wlroots GTK4, transient notifications)
+       ├─ OSDManager          ← 3-Tier OSD Architecture, spawns `osd_process.py:OSDProcess` via subprocess
        ├─ RecordingController ← state machine (IDLE→ARMED→RECORDING→STOPPING)
        ├─ RecordingEventHandler ← business logic, dispatches events to UI/OSD callbacks
        ├─ SessionManager      ← session lifecycle, recording metadata
@@ -38,7 +38,8 @@ app.py / __main__.py          ← entry points
 | `audio_processor.py:AudioProcessor` | ffmpeg/sox pipeline, trim/downsample | None (subprocess wrapper) |
 | `transcription.py:TranscriptionService` | Groq/local whisper backends | ConfigManager |
 | `headless_service.py:HeadlessOmega13` | Daemon mode, Systemd, D-Bus, hotkey | RecordingController, AudioEngine, SessionManager, OSDManager |
-| `ui/osd.py:OSDManager` | 3-Tier OSD Architecture (GNOME native, wlroots GTK4 layer shell, transient notifications) | PyGObject, Gtk4LayerShell, cairo, D-Bus |
+| `ui/osd.py:OSDManager` | 3-Tier OSD Architecture (GNOME native, wlroots GTK4 layer shell via `subprocess`, transient notifications) | PyGObject, Gtk4LayerShell, cairo, D-Bus, `subprocess` |
+| `osd_process.py:OSDProcess` | Separate GTK4 process to prevent GLib event loop blocking | PyGObject, Gtk4LayerShell |
 | `gnome-extension/` | GNOME Shell Extension for native OSD | D-Bus (`org.gnome.Shell.Extensions.Omega13`) |
 | `pidfile.py` | PID file management, stale detection | None |
 | `signals.py` | Unix signal handling (shutdown, reload, status) | None |
