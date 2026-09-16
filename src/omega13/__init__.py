@@ -17,6 +17,6 @@ def __getattr__(name: str):
     raise AttributeError(f"module 'omega13' has no attribute '{name}'")
 
 
-__version__ = "2.3.0"
+__version__ = "2.7.1"
 
 __all__ = ["Omega13App", "TranscriptionService", "main"]
