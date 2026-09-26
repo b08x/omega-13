@@ -1,3 +1,15 @@
+## [2.7.4] - 2026-09-26
+
+### 🐛 Bug Fixes
+- Fix startup crash caused by missing `on_transcription_error` field in `RecordingEventCallbacks` dataclass.
+- Fix D-Bus `@dbus_signal()` decorators in `HeadlessRecorderInterface` (`OSDStateChanged`, `RecordingToggled`, `HealthStatus`) to return arguments with proper type signatures, resolving empty signal payload delivery.
+- Fix signal delivery to GNOME Shell extension by setting `sender` to `null` in `Gio.DBus.session.signal_subscribe` so unique bus senders match.
+- Fix `TypeError` in D-Bus `UpdateWaveform` proxy call by passing native float lists without `Variant('ad')` wrapper.
+- Fix GNOME OSD Wayland allocation and actor disposal crashes by anchoring to `Main.uiGroup` and toggling `visible`.
+- Fix OSD auto-hide timeout and idle dismissal so the OSD properly closes after injection/completion or discarded captures.
+- Fix OSD audio visualizer rendering using linear RMS scaling and rounded vertical bars instead of overflowing polygon fills.
+- Fix unhandled `EOFError` and `BrokenPipeError` asyncio exceptions on daemon shutdown by explicitly calling `bus.disconnect()`.
+
 ## [2.7.3] - 2026-09-26
 
 ### 🐛 Bug Fixes
