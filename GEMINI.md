@@ -46,7 +46,7 @@ The project follows a modular, event-driven architecture designed to run as a he
 - `ffmpeg` and `sox` installed in system PATH.
 
 ### Commands
-- **Local User Installation:** `just install`
+- **Local User Installation:** `./install.sh`
 - **Download Models:** `just model dl`
 - **Verify Dependencies:** `just check`
 - **Run Tests:** `just test`
