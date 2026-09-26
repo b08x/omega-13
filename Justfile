@@ -4,6 +4,11 @@ model_dir := "$HOME/.local/share/omega13/models"
 # To install: ./install.sh
 # To uninstall: ./uninstall.sh
 
+install:
+    @echo "The installation process has moved."
+    @echo "Please run: ./install.sh"
+    @exit 1
+
 # Run test suite
 test:
     pytest
