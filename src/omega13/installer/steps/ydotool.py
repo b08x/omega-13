@@ -21,20 +21,6 @@ from omega13.installer.ui import (
 from omega13.installer.theme import COLORS
 
 
-def _has_ydotool() -> bool:
-    """Check if ydotool is installed and ydotoold service is enabled."""
-    if not shutil.which("ydotool"):
-        return False
-    try:
-        result = subprocess.run(
-            ["systemctl", "--user", "is-enabled", "ydotoold"],
-            capture_output=True, text=True, timeout=10,
-        )
-        return result.returncode == 0
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return False
-
-
 def _resource_limited_available() -> bool:
     """Check if resource-limiting tools are available."""
     return all(shutil.which(cmd) for cmd in ("nice", "ionice", "taskset", "cpulimit"))
@@ -69,9 +55,29 @@ def build_ydotool(force: bool = False, step_num: int = 2, total_steps: int = 7) 
     """
     step_header(step_num, "Build ydotool (text injection)", total_steps)
 
-    if _has_ydotool() and not force:
-        ydotool_path = shutil.which("ydotool")
+    ydotool_path = shutil.which("ydotool")
+    if ydotool_path and not force:
         status_skip(f"ydotool already installed at {ydotool_path}")
+        
+        # Ensure service is enabled
+        try:
+            check_result = subprocess.run(
+                ["systemctl", "--user", "is-enabled", "ydotoold"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if check_result.returncode != 0:
+                status_info("Enabling ydotoold service...")
+                enable_result = subprocess.run(
+                    ["systemctl", "--user", "enable", "--now", "ydotoold"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if enable_result.returncode != 0:
+                    status_warn(f"Could not enable ydotoold service: {enable_result.stderr.strip()}")
+                else:
+                    status_done("ydotoold service enabled")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+            
         return True
 
     # Source directory
