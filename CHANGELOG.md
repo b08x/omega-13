@@ -1,3 +1,11 @@
+## [2.7.2] - 2026-09-26
+
+### ✨ Features
+- Skip ydotool compilation during installation if it is already installed on the host system.
+
+### 📝 Documentation
+- Update `just install` references to use the standalone `./install.sh` bootstrap script.
+
 ## [2.7.1] - 2026-09-15
 
 ### ✨ Features
