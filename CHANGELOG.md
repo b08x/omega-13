@@ -1,3 +1,8 @@
+## [2.7.3] - 2026-09-26
+
+### 🐛 Bug Fixes
+- Fix `SyntaxError` caused by redundant `global` declaration in `osd.py`.
+
 ## [2.7.2] - 2026-09-26
 
 ### ✨ Features
