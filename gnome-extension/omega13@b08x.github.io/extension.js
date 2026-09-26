@@ -70,7 +70,7 @@ export default class Omega13Extension extends Extension {
 
         // Subscribe to OSDStateChanged
         this._signalSubId = Gio.DBus.session.signal_subscribe(
-            'org.omega13.Recorder',
+            null,
             'org.omega13.Recorder',
             'OSDStateChanged',
             '/org/omega13/Recorder',

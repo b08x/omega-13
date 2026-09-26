@@ -9,7 +9,8 @@ export class Omega13OSD {
         this._actor = new St.DrawingArea({
             width: 400,
             height: 100,
-            style_class: 'omega13-osd-container'
+            style_class: 'omega13-osd-container',
+            visible: false
         });
         
         this._actor.set_position(
@@ -17,9 +18,10 @@ export class Omega13OSD {
             global.stage.height - 150
         );
         
+        Main.uiGroup.add_child(this._actor);
         this._actor.connect('repaint', this._onRepaint.bind(this));
         
-        this._data = [];
+        this._history = [];
         this._visible = false;
         
         // State tracking
@@ -32,17 +34,18 @@ export class Omega13OSD {
 
     show() {
         if (!this._visible) {
-            Main.layoutManager.addTopChrome(this._actor, {
-                affectsInputRegion: false,
-                trackFullscreen: true
-            });
+            this._actor.set_position(
+                (global.stage.width / 2) - (this._actor.width / 2),
+                global.stage.height - this._actor.height - 50
+            );
+            this._actor.visible = true;
             this._visible = true;
         }
     }
 
     hide() {
         if (this._visible) {
-            Main.layoutManager.removeChrome(this._actor);
+            this._actor.visible = false;
             this._visible = false;
         }
         if (this._animTimerId) {
@@ -55,7 +58,20 @@ export class Omega13OSD {
         }
     }
 
+    destroy() {
+        this.hide();
+        Main.uiGroup.remove_child(this._actor);
+        this._actor.destroy();
+    }
+
     showState(stateType, text, timeoutMs) {
+        if (stateType === "idle" || stateType === "hidden") {
+            this.hide();
+            return;
+        }
+        if (stateType === "recording" && this._stateType !== "recording") {
+            this._history = new Array(25).fill(0.0);
+        }
         this._stateType = stateType;
         this._stateText = text;
         this.show();
@@ -83,16 +99,19 @@ export class Omega13OSD {
     }
 
     update(data) {
-        this._data = data || [];
+        let currentRms = 0.0;
+        if (data && data.length > 0) {
+            currentRms = Math.max(...data);
+        }
+        this._history.push(currentRms);
+        if (this._history.length > 25) {
+            this._history.shift();
+        }
         if (this._visible) {
             this._actor.queue_repaint();
         }
     }
 
-    destroy() {
-        this.hide();
-        this._actor.destroy();
-    }
 
     _onRepaint(area) {
         let cr = area.get_context();
@@ -138,23 +157,25 @@ export class Omega13OSD {
         cr.selectFontFace("Sans", Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
         cr.setFontSize(14);
         cr.moveTo(indicatorX + 20, indicatorY + 5);
-        cr.showText(this._stateText);
+        if (this._stateText) { cr.showText(this._stateText.toString()); }
 
-        if (!this._data || this._data.length === 0) return;
+        if (!this._history || this._history.length === 0) return;
 
         // Draw waveform
-        cr.setSourceRGBA(0.0, 0.9, 0.4, 1.0); // Vibrant green
-        cr.setLineWidth(2.0);
-        cr.setLineJoin(Cairo.LineJoin.ROUND);
+        cr.setSourceRGBA(0.0, 0.9, 0.4, 0.9); // Vibrant green
+        cr.setLineWidth(2.5);
+        cr.setLineCap(Cairo.LineCap.ROUND);
 
         let centerY = height / 2;
         let meterWidth = 100; // right side
-        let startX = width - meterWidth - 20;
-        let step = meterWidth / (this._data.length > 1 ? this._data.length - 1 : 1);
+        let startX = width - meterWidth - 25;
+        let step = meterWidth / (this._history.length > 1 ? this._history.length - 1 : 1);
+        let maxAmp = (height / 2) - 15;
 
-        cr.moveTo(startX, centerY);
-        for (let i = 0; i < this._data.length; i++) {
-            let val = Math.min(this._data[i] * height * 1.5, (height / 2) - 10);
+        for (let i = 0; i < this._history.length; i++) {
+            let rms = this._history[i];
+            let amplitude = Math.min(1.0, Math.pow(Math.max(0.0, rms) * 4.0, 0.7));
+            let val = Math.max(2.0, amplitude * maxAmp);
             let x = startX + (i * step);
             cr.moveTo(x, centerY - val);
             cr.lineTo(x, centerY + val);

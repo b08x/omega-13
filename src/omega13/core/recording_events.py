@@ -38,6 +38,7 @@ class RecordingEventCallbacks:
     on_transcription_started: Optional[Callable[[Path], None]] = None
     on_transcription_progress: Optional[Callable[[float], None]] = None
     on_transcription_complete: Optional[Callable[["TranscriptionResult", Path], None]] = None
+    on_transcription_error: Optional[Callable[[Optional[Path], str], None]] = None
 
 
 class RecordingEventHandler:

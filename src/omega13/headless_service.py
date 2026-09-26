@@ -247,16 +247,16 @@ class HeadlessRecorderInterface(ServiceInterface):
         return self._get_health_data()
 
     @dbus_signal()
-    def RecordingToggled(self, is_recording: "b") -> None:  # type: ignore
+    def RecordingToggled(self, is_recording: bool) -> "b":  # type: ignore
         """Signal emitted when recording state changes.
         
         Args:
             is_recording: True if now recording, False if stopped
         """
-        pass
+        return is_recording
 
     @dbus_signal()
-    def OSDStateChanged(self, state_type: "s", text: "s", timeout_ms: "i") -> None:  # type: ignore
+    def OSDStateChanged(self, state_type: str, text: str, timeout_ms: int) -> "ssi":  # type: ignore
         """Signal emitted when OSD state changes.
         
         Args:
@@ -264,16 +264,16 @@ class HeadlessRecorderInterface(ServiceInterface):
             text: Text to display
             timeout_ms: Timeout in milliseconds (0 for no timeout)
         """
-        pass
+        return [state_type, text, timeout_ms]
 
     @dbus_signal()
-    def HealthStatus(self, status: "a{sv}") -> None:  # type: ignore
+    def HealthStatus(self, status: dict) -> "a{sv}":  # type: ignore
         """Signal emitted for periodic health status updates.
         
         Args:
             status: Dictionary with health status information
         """
-        pass
+        return status
 
 
 class HeadlessDBusService:
@@ -327,6 +327,7 @@ class HeadlessDBusService:
             if self.bus and self._is_registered:
                 await self.bus.release_name(self.SERVICE_NAME)
                 self.bus.unexport(self.OBJECT_PATH)
+                self.bus.disconnect()
                 self._is_registered = False
                 logger.info("Headless D-Bus service unregistered")
         except Exception as e:
@@ -497,6 +498,10 @@ class HeadlessOmega13:
                     on_transcription_error=lambda path, err: (
                         osd_manager.update("Transcription Failed", state_type="error", timeout_ms=5000),
                         self._emit_osd_state("error", "Transcription Failed", 5000)
+                    ),
+                    on_state_changed=lambda old_s, new_s: (
+                        (osd_manager.update("", state_type="idle"), self._emit_osd_state("idle", "", 0))
+                        if new_s in ("idle", "armed") and old_s == "stopping" else None
                     )
                 )
             )
