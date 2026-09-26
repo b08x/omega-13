@@ -271,6 +271,7 @@ class OSDManager:
         self._loop = None
         self._waveform_task = None
         self._dbus_proxy = None
+        self._dbus_bus = None
 
     def set_audio_engine(self, engine):
         self.audio_engine = engine
@@ -285,6 +286,11 @@ class OSDManager:
             has_display = bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))
             if not has_display:
                 logger.warning("No display found. OSD will be disabled (fallback to notify-send).")
+                return
+
+            is_gnome = "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+            if is_gnome:
+                logger.info("GNOME detected. Skipping GTK4 Layer Shell subprocess (unsupported).")
                 return
 
             logger.info("Starting OSD subprocess...")
@@ -303,6 +309,14 @@ class OSDManager:
             self._waveform_task.cancel()
             self._waveform_task = None
 
+        if self._dbus_bus:
+            try:
+                self._dbus_bus.disconnect()
+            except Exception as e:
+                logger.debug(f"Error disconnecting OSD DBus: {e}")
+            self._dbus_bus = None
+            self._dbus_proxy = None
+
         if self._subprocess:
             logger.info("Stopping OSD subprocess...")
             self._subprocess.terminate()
@@ -317,13 +331,14 @@ class OSDManager:
         if self._dbus_proxy is None:
             try:
                 from dbus_next.aio import MessageBus
-                bus = await MessageBus().connect()
-                introspection = await bus.introspect("org.gnome.Shell", "/org/gnome/Shell/Extensions/Omega13")
-                obj = bus.get_proxy_object("org.gnome.Shell", "/org/gnome/Shell/Extensions/Omega13", introspection)
+                self._dbus_bus = await MessageBus().connect()
+                introspection = await self._dbus_bus.introspect("org.gnome.Shell", "/org/gnome/Shell/Extensions/Omega13")
+                obj = self._dbus_bus.get_proxy_object("org.gnome.Shell", "/org/gnome/Shell/Extensions/Omega13", introspection)
                 self._dbus_proxy = obj.get_interface("org.gnome.Shell.Extensions.Omega13")
             except Exception as e:
                 logger.debug(f"Failed to get GNOME extension DBus proxy: {e}")
                 self._dbus_proxy = False
+                self._dbus_bus = None
         return self._dbus_proxy
 
     async def _stream_waveform(self):
@@ -337,9 +352,7 @@ class OSDManager:
                     import numpy as np
                     rms = self.audio_engine.signal_detector.rms_levels
                     if len(rms) > 0:
-                        from dbus_next.signature import Variant
-                        variant = Variant('ad', rms.tolist())
-                        await proxy.call_update_waveform(variant)
+                        await proxy.call_update_waveform(rms.tolist())
             except Exception as e:
                 logger.debug(f"Waveform streaming error: {e}")
             await asyncio.sleep(0.1)

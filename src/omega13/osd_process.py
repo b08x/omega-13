@@ -29,8 +29,16 @@ class OSDProcess:
         
         # Connect to D-Bus
         try:
+            from dbus_next.message import Message
             self.bus = MessageBus().connect_sync()
-            self.bus.add_match_string_sync("type='signal',interface='org.omega13.Recorder',member='OSDStateChanged'")
+            self.bus.call_sync(Message(
+                destination='org.freedesktop.DBus',
+                path='/org/freedesktop/DBus',
+                interface='org.freedesktop.DBus',
+                member='AddMatch',
+                signature='s',
+                body=["type='signal',interface='org.omega13.Recorder',member='OSDStateChanged'"]
+            ))
             self.bus.add_message_handler(self._on_message)
             logger.info("Connected to D-Bus and listening for OSDStateChanged signals")
         except Exception as e:
