@@ -259,7 +259,6 @@ def _lazy_init():
             self._stop_animation()
             return False
             
-    global Omega13OSD
     Omega13OSD = _Omega13OSD
 
 
