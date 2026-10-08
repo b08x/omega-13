@@ -1,0 +1,14 @@
+[Unit]
+Description=Omega-13 Retroactive Audio Recorder
+Documentation=https://github.com/b08x/omega-13
+After=sound.target pipewire.service jack.service graphical-session.target
+Wants=sound.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/omega13 --no-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

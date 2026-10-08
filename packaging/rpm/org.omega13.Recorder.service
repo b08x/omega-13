@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.omega13.Recorder
+Exec=/usr/bin/omega13 --no-daemon
+SystemdService=omega13.service
