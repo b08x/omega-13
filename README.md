@@ -83,6 +83,21 @@ To verify your environment has all the necessary dependencies installed (includi
 just check
 ```
 
+### RPM Packaging (Fedora & EPEL)
+
+Production RPM spec files and automation tooling are provided in `packaging/rpm/`:
+
+```bash
+# Validate all spec files
+just rpm-lint
+
+# Build Source RPMs (SRPMs)
+just rpm-srpm
+
+# Build binary RPM packages
+just rpm-build
+```
+
 ---
 
 ## Running It
