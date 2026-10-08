@@ -78,7 +78,7 @@ get_omega13_version() {
     if [[ -f "$spec" ]]; then
         rpm --specfile "$spec" --qf "%{version}\n" 2>/dev/null | head -n 1
     else
-        echo "2.7.4"
+        echo "2.7.5"
     fi
 }
 

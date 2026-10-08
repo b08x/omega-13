@@ -1,3 +1,16 @@
+## [2.7.5] - 2026-10-07
+
+### ✨ Features
+- Add production-ready RPM packaging for Fedora 40+ and EPEL 9/10 under `packaging/rpm/`.
+- Modern `%pyproject_*` spec file for `omega13` with dedicated `gnome-shell-extension-omega13` subpackage.
+- System integration assets: systemd user service (`omega13.service`) and D-Bus session activation (`org.omega13.Recorder.service`).
+- Standalone spec files for dependencies: `python-transcribe-cpp` (with optional CUDA/Vulkan bcond flags), `python-JACK-Client`, `python-dbus-next`, and `ydotool` (with `ydotoold.service` user unit).
+- Introduce `packaging/rpm/build.sh` automation script with `--prep`, `--lint`, `--srpm`, and `--rpm` workflows.
+- Add Justfile recipes `rpm-lint`, `rpm-srpm`, and `rpm-build`.
+
+### 🔧 Tooling & Tests
+- Isolate test runner execution inside `dbus-run-session` in `Justfile` to prevent conflicts with active desktop daemon instances.
+
 ## [2.7.4] - 2026-09-26
 
 ### 🐛 Bug Fixes

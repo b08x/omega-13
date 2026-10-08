@@ -2,7 +2,7 @@
 %global uuid      omega13@b08x.github.io
 
 Name:           %{pypi_name}
-Version:        2.7.4
+Version:        2.7.5
 Release:        1%{?dist}
 Summary:        Retroactive audio recorder and transcription daemon with GTK4 OSD
 
@@ -102,6 +102,10 @@ rm -f %{buildroot}%{_datadir}/gnome-shell/extensions/%{uuid}/*.zip
 %{_datadir}/gnome-shell/extensions/%{uuid}/*
 
 %changelog
+* Wed Oct 07 2026 b08x <b08x@users.noreply.github.com> - 2.7.5-1
+- Release version 2.7.5
+- Add RPM spec files, system integration units, and automation tooling
+
 * Wed Oct 07 2026 b08x <b08x@users.noreply.github.com> - 2.7.4-1
 - Initial RPM packaging for Fedora and EPEL
 - Add gnome-shell-extension-omega13 subpackage
