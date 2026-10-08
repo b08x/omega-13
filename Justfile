@@ -11,7 +11,11 @@ install:
 
 # Run test suite
 test:
-    pytest
+    @if command -v dbus-run-session >/dev/null 2>&1; then \
+        dbus-run-session pytest; \
+    else \
+        pytest; \
+    fi
 
 # Run omega13 in foreground (dev mode)
 dev:
@@ -66,3 +70,16 @@ model ACTION="dl":
             gum style --foreground 76 "✅ Saved default model ($DEFAULT_MODEL) and thread settings to config.json"
         fi
     fi
+
+# Validate RPM spec files with rpmlint
+rpm-lint:
+    ./packaging/rpm/build.sh --lint
+
+# Build Source RPMs (SRPMs)
+rpm-srpm *PKGS:
+    ./packaging/rpm/build.sh --srpm {{PKGS}}
+
+# Build binary RPM packages
+rpm-build *PKGS:
+    ./packaging/rpm/build.sh --rpm {{PKGS}}
+

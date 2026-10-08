@@ -1,0 +1,135 @@
+{
+  "stage": "interview",
+  "title": "Build RPM Spec Files for Omega-13 and Dependencies",
+  "goalSlug": "rpm-specs",
+  "questions": [
+    {
+      "id": "target_distro",
+      "prompt": "Which RPM distribution and macro standards should the spec files primarily target?",
+      "description": "Fedora uses modern %pyproject_* macros and pyproject-rpm-macros. Enterprise Linux (RHEL/EPEL 9/10) may use slightly different macro versions.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Fedora (Rawhide / 40+ using modern %pyproject_* guidelines)",
+      "recommendedOptionIds": [
+        "fedora"
+      ],
+      "options": [
+        {
+          "id": "fedora",
+          "label": "Fedora (Rawhide / 40+ using modern %pyproject_* guidelines)"
+        },
+        {
+          "id": "fedora_epel",
+          "label": "Dual Fedora & EPEL 9/10 compatibility"
+        },
+        {
+          "id": "opensuse",
+          "label": "openSUSE (Tumbleweed / Leap)"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "deps_scope",
+      "prompt": "Which dependencies should have standalone RPM spec files created?",
+      "description": "Omega-13 depends on Python libraries and transcribe-cpp (C++ Whisper binding). While standard Python packages like requests or soundfile are in Fedora, specialized or C++ packages may need their own specs.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "transcribe-cpp (with Vulkan/CUDA bconds), plus any unpackaged Python dependencies (e.g. JACK-Client, dbus-next if needed) and systemd/D-Bus integration files.",
+      "recommendedOptionIds": [
+        "transcribe_cpp",
+        "python_deps",
+        "system_extras"
+      ],
+      "options": [
+        {
+          "id": "transcribe_cpp",
+          "label": "transcribe-cpp (C++ Whisper binding with CPU/Vulkan/CUDA bcond flags)"
+        },
+        {
+          "id": "python_deps",
+          "label": "Unpackaged/specialized Python dependencies (e.g. python-JACK-Client, dbus-next)"
+        },
+        {
+          "id": "system_extras",
+          "label": "System integration assets (Systemd user units, D-Bus service declarations)"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "spec_directory",
+      "prompt": "Where in the repository should the RPM spec files and packaging assets be stored?",
+      "description": "Determines the organization for spec files, source tarball helpers, and local patches.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "packaging/rpm/ (e.g. packaging/rpm/omega13.spec, packaging/rpm/transcribe-cpp.spec)",
+      "recommendedOptionIds": [
+        "packaging_rpm"
+      ],
+      "options": [
+        {
+          "id": "packaging_rpm",
+          "label": "packaging/rpm/ (dedicated folder for all specs, patches, and build assets)"
+        },
+        {
+          "id": "rpm_dir",
+          "label": "rpm/ at the project root"
+        },
+        {
+          "id": "root",
+          "label": "Project root (omega13.spec at root, dependencies in packaging/)"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "subpackages",
+      "prompt": "How should the GNOME Shell extension and daemon integration be packaged?",
+      "description": "Omega-13 includes a GNOME extension in gnome-extension/ and can run as a background systemd user daemon.",
+      "answerMode": "single-custom",
+      "recommendedAnswer": "Split into subpackages: omega13 (core daemon + CLI), gnome-shell-extension-omega13, with systemd user unit included",
+      "recommendedOptionIds": [
+        "subpackage"
+      ],
+      "options": [
+        {
+          "id": "subpackage",
+          "label": "Split into subpackages: omega13 (core) and gnome-shell-extension-omega13"
+        },
+        {
+          "id": "monolithic",
+          "label": "Monolithic package (omega13 installs daemon, CLI, systemd units, and GNOME extension)"
+        },
+        {
+          "id": "core_only",
+          "label": "Core package only (exclude GNOME extension from RPM build)"
+        }
+      ],
+      "required": true
+    },
+    {
+      "id": "build_tooling",
+      "prompt": "What build and validation automation should be provided in the project?",
+      "description": "Tools and shortcuts to build RPMs, create source archives, and run rpmlint.",
+      "answerMode": "multi-custom",
+      "recommendedAnswer": "Justfile recipes (just rpm-build, just rpm-lint) and a standalone packaging/rpm/build.sh script",
+      "recommendedOptionIds": [
+        "justfile",
+        "build_script"
+      ],
+      "options": [
+        {
+          "id": "justfile",
+          "label": "Justfile recipes (e.g. just rpm-build, just rpm-srpm, just rpm-lint)"
+        },
+        {
+          "id": "build_script",
+          "label": "Standalone helper script (e.g. packaging/rpm/build.sh)"
+        },
+        {
+          "id": "mock_config",
+          "label": "Mock / clean chroot build instructions and config"
+        }
+      ],
+      "required": true
+    }
+  ]
+}
